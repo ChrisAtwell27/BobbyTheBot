@@ -1,13 +1,19 @@
-const { Client, GatewayIntentBits, Partials } = require("discord.js");
+const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMessageReactions,
-  ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction], // Enable partials
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildModeration
+    ],
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
+
+const loggingChannelId = '1276266582234103808'; // Replace with your logging channel ID
+const alertKeywords = ['ban', 'kick', 'trouble']; // Replace with the keywords you want to monitor
+const alertChannelId = '1276267465227108455'; // Replace with your alert channel ID
 
 const roleMessageIds = {
   matchmaking: "1276256865092636784",
@@ -83,6 +89,75 @@ client.on("messageReactionRemove", async (reaction, user) => {
     } catch (error) {
       console.error("Failed to remove role:", error);
     }
+  }
+});
+
+// Logging deleted messages
+client.on('messageDelete', message => {
+  if (!message.partial) { // Check if the message is not a partial
+      const logChannel = client.channels.cache.get(loggingChannelId);
+      if (logChannel) {
+          logChannel.send(`# 🗑️ A message by ${message.author.tag} was deleted in ${message.channel.name}: "${message.content}"`);
+      }
+  }
+});
+
+// Logging edited messages
+client.on('messageUpdate', (oldMessage, newMessage) => {
+  if (!oldMessage.partial && !newMessage.partial && oldMessage.content !== newMessage.content) {
+      const logChannel = client.channels.cache.get(loggingChannelId);
+      if (logChannel) {
+          logChannel.send(`# ✏️ A message by ${oldMessage.author.tag} was edited in ${oldMessage.channel.name}:\n**Before:** ${oldMessage.content}\n**After:** ${newMessage.content}`);
+      }
+  }
+});
+
+// Logging user bans
+client.on('guildBanAdd', ban => {
+  const logChannel = client.channels.cache.get(loggingChannelId);
+  if (logChannel) {
+      logChannel.send(`# ⛔ User ${ban.user.tag} was banned.`);
+  }
+});
+
+// Logging user unbans
+client.on('guildBanRemove', ban => {
+  const logChannel = client.channels.cache.get(loggingChannelId);
+  if (logChannel) {
+      logChannel.send(`# ✅ User ${ban.user.tag} was unbanned.`);
+  }
+});
+
+//Alerts
+client.on('messageCreate', message => {
+  if (message.author.bot) return; // Ignore bot messages
+
+  const logChannel = client.channels.cache.get(loggingChannelId);
+  const alertChannel = client.channels.cache.get(alertChannelId);
+
+  // Check if the message contains any of the keywords
+  const foundKeyword = alertKeywords.find(keyword => message.content.toLowerCase().includes(keyword.toLowerCase()));
+
+  if (foundKeyword) {
+      if (alertChannel) {
+          alertChannel.send(`# 🚨 Alert: The keyword "${foundKeyword}" was mentioned by ${message.author.tag} in ${message.channel.name}:\n"${message.content}"`);
+      }
+  }
+});
+
+//Alerts
+client.on('messageCreate', message => {
+  if (message.author.bot) return; // Ignore bot messages
+
+  const logChannel = client.channels.cache.get(loggingChannelId);
+  const alertChannel = client.channels.cache.get(alertChannelId);
+  const greets = ["Hi Bobby", "Hi Bobby!", "Hi Bobby.", "Hi Bobby?", "Hello Bobby"];
+
+  // Check if the message contains any of the keywords
+  const foundKeyword = greets.find(keyword => message.content.toLowerCase().includes(keyword.toLowerCase()));
+
+  if (foundKeyword) {
+    message.channel.send(`Hi ${message.author.tag} :D"`);
   }
 });
 
