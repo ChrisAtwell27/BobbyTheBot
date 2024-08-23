@@ -35,7 +35,7 @@ module.exports = async (client) => {
                 } else {
                     // Fourth offense and above: Timeout for 10 minutes
                     await message.channel.send(`${member}, you continue to break the ice. Timeout for 10 minutes.`);
-                    await member.timeout(600000, 'Broke thin ice multiple times');
+                    await member.timeout(600000, 'Broke thin ice multiple times. Im behind your mom with a knife');
                     updateUserWarnings(member.id, thinIceFilePath, warnings + 1);
                 }
             } catch (error) {
