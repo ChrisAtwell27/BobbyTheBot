@@ -44,6 +44,28 @@ module.exports = async (client) => {
         }
     });
 
+    client.on('guildMemberUpdate', async (oldMember, newMember) => {
+        const hadThinIceRole = oldMember.roles.cache.has(thinIceRoleId);
+        const hasThinIceRoleNow = newMember.roles.cache.has(thinIceRoleId);
+
+        // Check if the Thin Ice role was removed
+        if (hadThinIceRole && !hasThinIceRoleNow) {
+            try {
+                const warnings = getUserWarnings(newMember.id, thinIceFilePath);
+
+                if (warnings > 0) {
+                    // If the user has warnings, reassign the Thin Ice role
+                    await newMember.roles.add(thinIceRoleId);
+                    console.log(`Reassigned Thin Ice role to ${newMember.user.tag} because they have ${warnings} warnings.`);
+                }
+            } catch (error) {
+                console.error('Failed to reassign Thin Ice role:', error);
+            }
+        }
+    });
+
+
+
     function getUserWarnings(userId, filePath) {
         if (!fs.existsSync(filePath)) {
             fs.writeFileSync(filePath, '', 'utf-8');
