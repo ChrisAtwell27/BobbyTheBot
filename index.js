@@ -31,4 +31,4 @@ client.once("ready", () => {
   console.log("Role bot is online!");
 });
 
-client.login("YOUR_BOT_TOKEN"); // Replace with your bot token
+client.login("MTI3NjI0Nzg3NTA2MzUxMzA5OA.GZo-h9.o5p-dcWqjLyGsfz4Vhx6BFhSzKT9F_6LcXJEEM"); // Replace with your bot token
