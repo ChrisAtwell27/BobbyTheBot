@@ -1,4 +1,6 @@
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
+const axios = require('axios');
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -14,16 +16,27 @@ const client = new Client({
 const loggingChannelId = '1276266582234103808'; // Replace with your logging channel ID
 const alertKeywords = ['ban', 'kick', 'trouble']; // Replace with the keywords you want to monitor
 const alertChannelId = '1276267465227108455'; // Replace with your alert channel ID
+const TRN_API_KEY = '61daadcd-0a0f-4002-bc32-208f055e12ad'; // Replace with your Tracker.gg API key
 
 const roleMessageIds = {
   matchmaking: "1276256865092636784",
   smashBros: "1276256865092636784",
+  valorant: "1276293355399151760",
+  minecraft: "1276294247108182016",
+  lethalcompany: "1276296159564005416",
+  miscgames: "1276296976182411335",
+  updates: "1276298066789535765"
 };
 
 const roleMappings = {
     'EggGold': '818839698306236487',
-    'dancin': '768666021178638396', // Standard Emoji
-    '<:dancin:757956869271584838>': '768666021178638396', // Custom Emoji
+    'dancin': '768666021178638396',
+    'jettCool': '1058201257338228757',
+    'steveChairSpin': '701465918634459146',
+    'diamond': '818840981293891675',
+    'Bracken': '1190377213342777474',
+    '🔥': '1021080456223019108',
+    'pingsock': '701465164716703808'
   };
   
 
@@ -91,6 +104,37 @@ client.on("messageReactionRemove", async (reaction, user) => {
     }
   }
 });
+
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+
+  // Check if the message starts with "!rank"
+  if (message.content.startsWith('!rank')) {
+      const args = message.content.split(' ');
+      const valorantUsername = args[1];
+
+      if (!valorantUsername) {
+          return message.channel.send('Please provide a Valorant username. Usage: !rank {username#tag}');
+      }
+
+      try {
+          const encodedUsername = encodeURIComponent(valorantUsername.replace('#', '%23'));
+          const response = await axios.get(`https://api.tracker.gg/api/v2/valorant/standard/profile/riot/${encodedUsername}`, {
+              headers: {
+                  'TRN-Api-Key': TRN_API_KEY,
+              },
+          });
+
+          const data = response.data.data;
+          const rank = data.segments[0]?.stats?.rank?.metadata?.tierName || 'Rank not found';
+          message.channel.send(`${valorantUsername}'s rank is: ${rank}`);
+      } catch (error) {
+          console.error('Error fetching rank:', error);
+          message.channel.send(`Couldn't fetch rank for ${valorantUsername}. Make sure the username is correct and try again.`);
+      }
+  }
+});
+
 
 // Logging deleted messages
 client.on('messageDelete', message => {
