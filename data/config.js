@@ -19,6 +19,7 @@ module.exports = {
         '🔥': '1021080456223019108',
         'pingsock': '701465164716703808'
     },
+    topEggRoleId: '701309444562092113',
     thinIceRoleId: '1210273721705693217', // Replace with your Thin Ice role ID
     loggingChannelId: '1276266582234103808', // Replace with your logging channel ID
     alertChannelId: '1276267465227108455', // Replace with your alert channel ID

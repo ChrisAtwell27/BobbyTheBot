@@ -2,6 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const { thinIceRoleId } = require('../data/config'); // Import thinIceRoleId from config.js
 
+// Load bad words from the formatted_badwords.txt file
+const badWordsFilePath = path.join(__dirname, '../data/formatted_badwords.txt');
+const badWordsContent = fs.readFileSync(badWordsFilePath, 'utf-8');
+const badWords = badWordsContent.split(',').map(word => word.trim().replace(/['"]+/g, ''));
+const topEggRoleId = '701309444562092113';
+
 module.exports = async (client) => {
     const thinIceFilePath = path.join(__dirname, '../data/thin_ice.txt');
 
@@ -63,6 +69,50 @@ module.exports = async (client) => {
             }
         }
     });
+
+    client.on('messageCreate', async (message) => {
+        if (message.author.bot) return; // Ignore bot messages
+
+        // Command structure: !Reset Thinice @User
+        if (message.content.startsWith('!Reset Thinice')) {
+            // Check if the author has the Top Egg role
+            if (!message.member.roles.cache.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command.");
+            }
+
+            // Extract the mentioned user
+            const mentionedUser = message.mentions.users.first();
+            if (!mentionedUser) {
+                return message.reply('Please mention a valid user to reset Thin Ice.');
+            }
+
+            const member = message.guild.members.cache.get(mentionedUser.id);
+
+            // Remove the Thin Ice role from the mentioned user
+            if (member.roles.cache.has(thinIceRoleId)) {
+                await member.roles.remove(thinIceRoleId);
+                message.channel.send(`${member}, your Thin Ice status has been reset.`);
+            } else {
+                message.channel.send(`${member} does not have the Thin Ice role.`);
+            }
+
+            // Clear the warnings for the user in thin_ice.txt
+            clearUserWarnings(member.id, thinIceFilePath);
+        }
+    });
+
+    function clearUserWarnings(userId, filePath) {
+        if (fs.existsSync(filePath)) {
+            let data = fs.readFileSync(filePath, 'utf-8');
+            const userRecord = data.split('\n').find(line => line.startsWith(userId));
+
+            if (userRecord) {
+                data = data.replace(userRecord, ''); // Remove the user record
+                data = data.trim(); // Remove any extra whitespace
+                fs.writeFileSync(filePath, data, 'utf-8');
+            }
+        }
+    }
 
     function getUserWarnings(userId, filePath) {
         if (!fs.existsSync(filePath)) {
