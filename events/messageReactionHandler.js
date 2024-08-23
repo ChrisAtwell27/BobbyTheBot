@@ -1,12 +1,21 @@
-const { roleMessageIds, roleMappings } = require('../config');
+const { roleMessageIds, roleMappings } = require('../data/config');
 
 module.exports = (client) => {
   client.on("messageReactionAdd", async (reaction, user) => {
     if (user.bot) return;
 
+    console.log("Added");
+
+    // Log the emoji name to debug
+    console.log(`Emoji used: ${reaction.emoji.name}`);
+
     const messageId = reaction.message.id;
     const emoji = reaction.emoji.name;
     const roleId = roleMappings[emoji];
+
+    // Log both the roleMappings key and the matched roleId
+    console.log(`Emoji Key: ${emoji}`);
+    console.log(`Role ID found: ${roleId}`);
 
     if (roleId && Object.values(roleMessageIds).includes(messageId)) {
       try {
@@ -22,11 +31,16 @@ module.exports = (client) => {
       } catch (error) {
         console.error("Failed to add role:", error);
       }
+    } else if (!roleId) {
+      console.log("No role ID found for emoji:", emoji);
+    } else if (!Object.values(roleMessageIds).includes(messageId)) {
+      console.log("No message ID found");
     }
   });
 
   client.on("messageReactionRemove", async (reaction, user) => {
     if (user.bot) return;
+    console.log("Remove");
 
     const messageId = reaction.message.id;
     const emoji = reaction.emoji.name;

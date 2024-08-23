@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+const { thinIceRoleId } = require('../data/config'); // Import thinIceRoleId from config.js
 
 module.exports = async (client) => {
-    const thinIceRoleId = '1210273721705693217'; // Replace with your Thin Ice role ID
     const thinIceFilePath = path.join(__dirname, '../data/thin_ice.txt');
 
     client.on('messageCreate', async message => {
@@ -35,7 +35,7 @@ module.exports = async (client) => {
                 } else {
                     // Fourth offense and above: Timeout for 10 minutes
                     await message.channel.send(`${member}, you continue to break the ice. Timeout for 10 minutes.`);
-                    await member.timeout(600000, 'Broke thin ice multiple times. Im behind your mom with a knife');
+                    await member.timeout(600000, 'Broke thin ice multiple times');
                     updateUserWarnings(member.id, thinIceFilePath, warnings + 1);
                 }
             } catch (error) {
@@ -63,8 +63,6 @@ module.exports = async (client) => {
             }
         }
     });
-
-
 
     function getUserWarnings(userId, filePath) {
         if (!fs.existsSync(filePath)) {
