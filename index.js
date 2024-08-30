@@ -2,6 +2,9 @@ const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const path = require('path');
 const fs = require('fs');
 
+// Load configuration values
+const { loggingChannelId, alertChannelId, alertKeywords } = require('./data/config');
+
 // Create the client
 const client = new Client({
   intents: [
@@ -15,11 +18,6 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
-// Load configuration values
-const loggingChannelId = '1276266582234103808'; // Replace with your logging channel ID
-const alertKeywords = ['ban', 'kick', 'trouble']; // Replace with the keywords you want to monitor
-const alertChannelId = '1276267465227108455'; // Replace with your alert channel ID
-
 // Import and initialize event handlers
 require('./events/messageReactionHandler')(client);
 require('./events/loggingHandler')(client, loggingChannelId);
@@ -31,4 +29,5 @@ client.once("ready", () => {
   console.log("Role bot is online!");
 });
 
-client.login("MTI3NjI0Nzg3NTA2MzUxMzA5OA.GZo-h9.o5p-dcWqjLyGsfz4Vhx6BFhSzKT9F_6LcXJEEM"); // Replace with your bot token
+client.login("MTI3NjI0Nzg3NTA2MzUxMzA5OA.GZNqnp.35UImMB1mi2D119PYwUD8sxZmhG1t-DBoJOxmw"); // Replace with your bot token
+//DONT DELETE MTI3NjI0Nzg3NTA2MzUxMzA5OA.GZNqnp.35UImMB1mi2D119PYwUD8sxZmhG1t-DBoJOxmw
