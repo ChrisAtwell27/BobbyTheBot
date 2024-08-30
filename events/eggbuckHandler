@@ -1,0 +1,144 @@
+const fs = require('fs');
+const path = require('path');
+const { topEggRoleId } = require('../data/config');
+
+const eggBucksFilePath = path.join(__dirname, '../data/egg_bucks.txt');
+const houseFilePath = path.join(__dirname, '../data/house.txt');
+
+module.exports = (client) => {
+    client.on('messageCreate', async (message) => {
+        if (message.author.bot) return;
+
+        const args = message.content.split(' ');
+        const userRoles = message.member.roles.cache;
+
+        // Command to check Egg Bucks balance
+        if (args[0] === '!balance') {
+            const userId = message.author.id;
+            const balance = getEggBucks(userId);
+            return message.channel.send(`${message.author.username}, you have E$${balance}`);
+        }
+
+        // Command to award Egg Bucks
+        if (args[0] === '!award' && args[1] && args[2]) {
+            if (!userRoles.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command.");
+            }
+
+            const mentionedUser = message.mentions.users.first() || message.guild.members.cache.find(member => member.user.username === args[1]).user;
+            const userId = mentionedUser ? mentionedUser.id : null;
+            const amount = parseInt(args[2], 10);
+
+            if (!userId || isNaN(amount) || amount <= 0) {
+                return message.channel.send('Invalid user or amount specified.');
+            }
+
+            updateEggBucks(userId, amount);
+            return message.channel.send(`${mentionedUser.username} has been awarded E$${amount}`);
+        }
+
+        // Command to spend Egg Bucks
+        if (args[0] === '!spend' && args[1]) {
+            const userId = message.author.id;
+            const amount = parseInt(args[1], 10);
+            const balance = getEggBucks(userId);
+
+            if (isNaN(amount) || amount <= 0) {
+                return message.channel.send('Invalid amount specified.');
+            }
+
+            if (balance >= amount) {
+                updateEggBucks(userId, -amount);
+                return message.channel.send(`${message.author.username}, you spent E$${amount}. Remaining balance: E$${balance - amount}`);
+            } else {
+                return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks.`);
+            }
+        }
+
+        // Command to give all users in the server a specific amount of Egg Bucks
+        if (args[0] === '!awardall' && args[1]) {
+            if (!userRoles.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command.");
+            }
+
+            const amount = parseInt(args[1], 10);
+
+            if (isNaN(amount) || amount <= 0) {
+                return message.channel.send('Invalid amount specified.');
+            }
+
+            message.guild.members.cache.forEach(member => {
+                if (!member.user.bot) {
+                    updateEggBucks(member.id, amount);
+                }
+            });
+
+            return message.channel.send(`All members have been awarded E$${amount}.`);
+        }
+    });
+
+    // Function to get a user's Egg Bucks balance
+    function getEggBucks(userId) {
+        if (!fs.existsSync(eggBucksFilePath)) {
+            fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
+        }
+        const data = fs.readFileSync(eggBucksFilePath, 'utf-8');
+        const userRecord = data.split('\n').find(line => line.startsWith(userId));
+        return userRecord ? parseInt(userRecord.split(':')[1], 10) : 0;
+    }
+
+    // Function to update a user's Egg Bucks balance
+    function updateEggBucks(userId, amount) {
+        if (!fs.existsSync(eggBucksFilePath)) {
+            fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
+        }
+
+        let data = fs.readFileSync(eggBucksFilePath, 'utf-8').trim();
+        const userRecord = data.split('\n').find(line => line.startsWith(userId));
+        let newBalance;
+
+        if (userRecord) {
+            const currentBalance = parseInt(userRecord.split(':')[1], 10);
+            newBalance = currentBalance + amount;
+            data = data.replace(userRecord, `${userId}:${newBalance}`);
+        } else {
+            newBalance = amount;
+            data += `\n${userId}:${newBalance}`;
+        }
+
+        fs.writeFileSync(eggBucksFilePath, data.trim(), 'utf-8');
+        return newBalance;
+    }
+
+    // Function to set a user's Egg Bucks balance directly
+    function setEggBucks(userId, amount) {
+        if (!fs.existsSync(eggBucksFilePath)) {
+            fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
+        }
+
+        let data = fs.readFileSync(eggBucksFilePath, 'utf-8').trim();
+        const userRecord = data.split('\n').find(line => line.startsWith(userId));
+
+        if (userRecord) {
+            data = data.replace(userRecord, `${userId}:${amount}`);
+        } else {
+            data += `\n${userId}:${amount}`;
+        }
+
+        fs.writeFileSync(eggBucksFilePath, data.trim(), 'utf-8');
+    }
+
+    // Functions to handle the House balance
+    function getHouseBalance() {
+        if (!fs.existsSync(houseFilePath)) {
+            fs.writeFileSync(houseFilePath, '0', 'utf-8');
+        }
+        return parseInt(fs.readFileSync(houseFilePath, 'utf-8'), 10);
+    }
+
+    function updateHouse(amount) {
+        const houseBalance = getHouseBalance();
+        const newBalance = houseBalance + amount;
+        fs.writeFileSync(houseFilePath, newBalance.toString(), 'utf-8');
+    }
+};
