@@ -35,20 +35,5 @@ module.exports = (client, alertKeywords, alertChannelId) => {
         console.error('Error sending alert message:', error);
       }
     }
-
-    /** Greeting Bobby **/
-    const greetings = ['hi bobby', 'hello bobby', 'hey bobby'];
-    const foundGreet = greetings.find((greet) =>
-      messageContentLower.includes(greet)
-    );
-
-    if (foundGreet) {
-      try {
-        await message.channel.send(`Hi ${message.author}! 👋`);
-        console.log(`Greeted ${message.author.tag}.`);
-      } catch (error) {
-        console.error('Error sending greeting message:', error);
-      }
-    }
   });
 };
