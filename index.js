@@ -26,6 +26,8 @@ require('./events/thinIceHandler')(client); // Include thin ice handler instead 
 require('./events/eggbuckHandler')(client);
 require('./events/gamblingHandler')(client);
 require('./events/blackjackHandler')(client);
+require('./events/interactionHandler')(client);
+
 // Start the bot
 client.once("ready", () => {
   console.log("Role bot is online!");
