@@ -24,9 +24,9 @@ require('./events/loggingHandler')(client, loggingChannelId);
 require('./events/alertHandler')(client, alertKeywords, alertChannelId);
 require('./events/thinIceHandler')(client); // Include thin ice handler instead of insult handler
 require('./events/eggbuckHandler')(client);
-require('./events/gamblingHandler')(client);
-require('./events/blackjackHandler')(client);
-require('./events/interactionHandler')(client);
+//require('./events/gamblingHandler')(client);
+//require('./events/blackjackHandler')(client);
+//require('./events/interactionHandler')(client);
 
 // Start the bot
 client.once("ready", () => {
