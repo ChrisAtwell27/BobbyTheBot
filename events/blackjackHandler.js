@@ -3,7 +3,7 @@ const { createCanvas, loadImage } = require('canvas');
 const fs = require('fs');
 const path = require('path');
 
-const eggBucksFilePath = path.join(__dirname, '../data/egg_bucks.txt');
+const eggBucksFilePath = path.join(__dirname, '../data/bobby_bucks.txt');
 const houseFilePath = path.join(__dirname, '../data/house.txt');
 
 // Card and game visual constants
