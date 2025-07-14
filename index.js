@@ -11,6 +11,7 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.DirectMessages,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildModeration
@@ -29,6 +30,7 @@ require('./events/blackjackHandler')(client);
 require('./events/interactionHandler')(client);
 require('./events/clipHandler')(client);
 require('./events/valorantTeamHandler')(client);
+require('./events/activityAwardsHandler')(client);
 // Start the bot
 client.once("ready", () => {
   console.log("Role bot is online!");

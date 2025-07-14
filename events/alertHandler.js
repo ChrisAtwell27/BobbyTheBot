@@ -19,9 +19,10 @@ module.exports = (client, alertKeywords, alertChannelId) => {
     const messageContentLower = message.content.toLowerCase();
 
     /** Alert for specific keywords **/
-    const foundKeyword = alertKeywords.find((keyword) =>
-      messageContentLower.includes(keyword.toLowerCase())
-    );
+    const foundKeyword = alertKeywords.find((keyword) => {
+      const regex = new RegExp(`\\b${keyword}\\b`, 'i'); // 'i' for case-insensitive
+      return regex.test(message.content);
+    });
 
     if (foundKeyword) {
       try {

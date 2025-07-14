@@ -30,6 +30,9 @@ module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
 
+        // Skip DM messages for this handler since it's for guild-only commands
+        if (!message.guild) return;
+
         const args = message.content.split(' ');
         const userRoles = message.member.roles.cache;
 
@@ -65,7 +68,7 @@ module.exports = (client) => {
                 .addFields(
                     { name: '💰 Current Balance', value: `**B${balance.toLocaleString()}**`, inline: true },
                     { name: '🏛️ Account Status', value: balance > 1000 ? '🌟 **Premium**' : '📋 **Standard**', inline: true },
-                    { name: '📊 Rank', value: `#${getUserRank(userId, message.guild)}`, inline: true }
+                    { name: '📊 Rank', value: `#${getCachedRank(userId, message.guild)}`, inline: true }
                 )
                 .setFooter({ text: 'Bobby Bucks Bank - Your trusted financial partner' })
                 .setTimestamp();
@@ -75,7 +78,7 @@ module.exports = (client) => {
 
         // Enhanced leaderboard command
         if (args[0] === '!baltop') {
-            const topBalances = getTopBalances(message.guild, 10);
+            const topBalances = await getTopBalances(message.guild, 10);
             
             if (topBalances.length === 0) {
                 return message.channel.send('No balances found.');
@@ -724,40 +727,71 @@ module.exports = (client) => {
         fs.writeFileSync(houseFilePath, newBalance.toString(), 'utf-8');
     }
 
-    // Function to get top balances for leaderboard
-    function getTopBalances(guild, limit = 10) {
+    // Function to get top balances for leaderboard (fetches usernames for top N)
+    async function getTopBalances(guild, limit = 10) {
         if (!fs.existsSync(bobbyBucksFilePath)) {
             return [];
         }
-
         const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
         if (!data) return [];
-
         const balances = [];
         const lines = data.split('\n').filter(line => line.includes(':'));
-
-        lines.forEach(line => {
+        for (const line of lines) {
             const [userId, balance] = line.split(':');
-            const member = guild.members.cache.get(userId);
-            
-            if (member && !member.user.bot) {
-                balances.push({
-                    userId: userId,
-                    username: member.user.username,
-                    balance: parseInt(balance, 10)
-                });
+            balances.push({
+                userId: userId,
+                balance: parseInt(balance, 10)
+            });
+        }
+        // Sort by balance descending
+        balances.sort((a, b) => b.balance - a.balance);
+        // Fetch usernames for top N
+        for (let i = 0; i < Math.min(limit, balances.length); i++) {
+            let member = guild.members.cache.get(balances[i].userId);
+            if (!member) {
+                try {
+                    member = await guild.members.fetch(balances[i].userId);
+                } catch (e) {
+                    member = null;
+                }
             }
-        });
+            balances[i].username = member ? member.user.username : `Unknown (${balances[i].userId})`;
+            balances[i].isBot = member ? member.user.bot : false;
+        }
+        // For others, use cache only
+        for (let i = limit; i < balances.length; i++) {
+            let member = guild.members.cache.get(balances[i].userId);
+            balances[i].username = member ? member.user.username : `Unknown (${balances[i].userId})`;
+            balances[i].isBot = member ? member.user.bot : false;
+        }
+        // Only show non-bots
+        return balances.filter(b => !b.isBot).slice(0, limit);
+    }
 
-        // Sort by balance descending and return top entries
-        return balances
-            .sort((a, b) => b.balance - a.balance)
-            .slice(0, limit);
+    // Fast rank lookup using cache only
+    function getCachedRank(userId, guild) {
+        if (!fs.existsSync(bobbyBucksFilePath)) {
+            return 1;
+        }
+        const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
+        if (!data) return 1;
+        const balances = [];
+        const lines = data.split('\n').filter(line => line.includes(':'));
+        for (const line of lines) {
+            const [uid, balance] = line.split(':');
+            const member = guild.members.cache.get(uid);
+            if (member && !member.user.bot) {
+                balances.push({ userId: uid, balance: parseInt(balance, 10) });
+            }
+        }
+        balances.sort((a, b) => b.balance - a.balance);
+        const userIndex = balances.findIndex(user => user.userId === userId);
+        return userIndex === -1 ? balances.length + 1 : userIndex + 1;
     }
 
     // Get user rank
-    function getUserRank(userId, guild) {
-        const allBalances = getTopBalances(guild, 1000);
+    async function getUserRank(userId, guild) {
+        const allBalances = await getTopBalances(guild, 1000);
         const userIndex = allBalances.findIndex(user => user.userId === userId);
         return userIndex === -1 ? allBalances.length + 1 : userIndex + 1;
     }

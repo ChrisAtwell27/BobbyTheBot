@@ -408,6 +408,7 @@ module.exports = (client) => {
                     gameState = 'tie';
                 } else {
                     // Dealer wins
+                    updateEggBucks(userId, -actualBet); // Deduct from player
                     updateHouse(actualBet);
                     resultMessage = `😢 You lost E$${actualBet}. Better luck next time!`;
                     resultColor = '#ff0000';
