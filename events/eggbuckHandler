@@ -14,9 +14,24 @@ module.exports = (client) => {
 
         // Command to check Egg Bucks balance
         if (args[0] === '!balance') {
-            const userId = message.author.id;
+            let userId, username;
+            
+            if (args[1]) {
+                // Check someone else's balance
+                const mentionedUser = message.mentions.users.first() || message.guild.members.cache.find(member => member.user.username === args[1])?.user;
+                if (!mentionedUser) {
+                    return message.channel.send('User not found.');
+                }
+                userId = mentionedUser.id;
+                username = mentionedUser.username;
+            } else {
+                // Check own balance
+                userId = message.author.id;
+                username = message.author.username;
+            }
+            
             const balance = getEggBucks(userId);
-            return message.channel.send(`${message.author.username}, you have E$${balance}`);
+            return message.channel.send(`${username} has E${balance}`);
         }
 
         // Command to award Egg Bucks
@@ -73,7 +88,24 @@ module.exports = (client) => {
                 }
             });
 
-            return message.channel.send(`All members have been awarded E$${amount}.`);
+            return message.channel.send(`All members have been awarded E${amount}.`);
+        }
+
+        // Command to show top balances
+        if (args[0] === '!baltop') {
+            const topBalances = getTopBalances(message.guild, 10);
+            
+            if (topBalances.length === 0) {
+                return message.channel.send('No balances found.');
+            }
+            
+            let leaderboard = '🏆 **Egg Bucks Leaderboard** 🏆\n\n';
+            topBalances.forEach((entry, index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+                leaderboard += `${medal} **${entry.username}** - E${entry.balance}\n`;
+            });
+            
+            return message.channel.send(leaderboard);
         }
     });
 
@@ -140,5 +172,36 @@ module.exports = (client) => {
         const houseBalance = getHouseBalance();
         const newBalance = houseBalance + amount;
         fs.writeFileSync(houseFilePath, newBalance.toString(), 'utf-8');
+    }
+
+    // Function to get top balances for leaderboard
+    function getTopBalances(guild, limit = 10) {
+        if (!fs.existsSync(eggBucksFilePath)) {
+            return [];
+        }
+
+        const data = fs.readFileSync(eggBucksFilePath, 'utf-8').trim();
+        if (!data) return [];
+
+        const balances = [];
+        const lines = data.split('\n').filter(line => line.includes(':'));
+
+        lines.forEach(line => {
+            const [userId, balance] = line.split(':');
+            const member = guild.members.cache.get(userId);
+            
+            if (member && !member.user.bot) {
+                balances.push({
+                    userId: userId,
+                    username: member.user.username,
+                    balance: parseInt(balance, 10)
+                });
+            }
+        });
+
+        // Sort by balance descending and return top entries
+        return balances
+            .sort((a, b) => b.balance - a.balance)
+            .slice(0, limit);
     }
 };

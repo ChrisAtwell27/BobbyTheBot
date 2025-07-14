@@ -15,14 +15,6 @@ module.exports = (client) => {
         const command = args[0].toLowerCase();
         const userId = message.author.id;
 
-        // Cooldown check
-        if (cooldowns.has(userId)) {
-            const expirationTime = cooldowns.get(userId) + COOLDOWN_SECONDS * 1000;
-            if (Date.now() < expirationTime) {
-                const timeLeft = Math.ceil((expirationTime - Date.now()) / 1000);
-                return message.channel.send(`Please wait ${timeLeft} more second(s) before using the game again.`);
-            }
-        }
 
         // Reset cooldown
         cooldowns.set(userId, Date.now());
