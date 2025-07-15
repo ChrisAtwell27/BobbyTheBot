@@ -24,6 +24,9 @@ function findValorantRole(message) {
 // Store active teams (in production, consider using a database)
 const activeTeams = new Map();
 
+// Resend interval in milliseconds (10 minutes)
+const RESEND_INTERVAL = 10 * 60 * 1000;
+
 // Function to load image from URL
 async function loadImageFromURL(url) {
     return new Promise((resolve, reject) => {
@@ -148,6 +151,52 @@ async function createTeamVisualization(team) {
 }
 
 module.exports = (client) => {
+    // Function to resend team message to keep it at the bottom of chat
+    async function resendTeamMessage(teamId) {
+        const team = activeTeams.get(teamId);
+        if (!team) return; // Team no longer exists
+        
+        try {
+            // Get the channel
+            const channel = await client.channels.fetch(team.channelId);
+            if (!channel) return;
+            
+            // Create updated embed and components
+            const isFull = getTotalMembers(team) >= 5;
+            const updatedEmbed = await createTeamEmbed(team);
+            const updatedComponents = createTeamButtons(teamId, isFull);
+            
+            // Delete the old message if it exists
+            try {
+                const oldMessage = await channel.messages.fetch(team.messageId);
+                if (oldMessage) await oldMessage.delete();
+            } catch (error) {
+                console.log(`Couldn't delete old team message: ${error.message}`);
+            }
+            
+            // Send a new message
+            const newMessage = await channel.send({
+                embeds: [updatedEmbed.embed],
+                files: updatedEmbed.files,
+                components: [updatedComponents]
+            });
+            
+            // Update the team with the new message ID
+            team.messageId = newMessage.id;
+            
+            // Set up the next resend timer if team isn't full
+            if (!isFull) {
+                // Clear any existing timer
+                if (team.resendTimer) clearTimeout(team.resendTimer);
+                
+                // Set new timer
+                team.resendTimer = setTimeout(() => resendTeamMessage(teamId), RESEND_INTERVAL);
+            }
+        } catch (error) {
+            console.error(`Error resending team message: ${error}`);
+        }
+    }
+
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
 
@@ -165,12 +214,15 @@ module.exports = (client) => {
             });
         }
 
-        // Check if message mentions the Valorant role
+        // Check if message mentions the Valorant role or uses the !Valorant command
         const valorantRoleMention = `<@&${VALORANT_ROLE_ID}>`;
-
+        const isValorantCommand = message.content.toLowerCase() === '!valorant';
         
-        if (message.content.includes(valorantRoleMention) || message.mentions.roles.has(VALORANT_ROLE_ID)) {
-            console.log('Valorant role mentioned! Creating team...');
+        if (message.content.includes(valorantRoleMention) || 
+            message.mentions.roles.has(VALORANT_ROLE_ID) || 
+            isValorantCommand) {
+            
+            console.log('Valorant team creation triggered!');
             
             // Create new team with the message author as leader
             const teamId = `team_${message.id}`;
@@ -184,7 +236,8 @@ module.exports = (client) => {
                 },
                 members: [],
                 channelId: message.channel.id,
-                messageId: null
+                messageId: null,
+                resendTimer: null
             };
 
             // Create the team embed and buttons
@@ -204,12 +257,26 @@ module.exports = (client) => {
 
                 console.log('Team created successfully:', teamId);
 
+                // Set up the resend timer to keep message at bottom of chat
+                team.resendTimer = setTimeout(() => resendTeamMessage(teamId), RESEND_INTERVAL);
+
                 // Delete after 30 minutes if team isn't full
                 setTimeout(() => {
                     const currentTeam = activeTeams.get(teamId);
                     if (currentTeam && getTotalMembers(currentTeam) < 5) {
+                        // Clear the resend timer before removing
+                        if (currentTeam.resendTimer) {
+                            clearTimeout(currentTeam.resendTimer);
+                        }
+                        
                         activeTeams.delete(teamId);
-                        teamMessage.delete().catch(() => {}); // Ignore errors if message already deleted
+                        
+                        // Attempt to delete the most recent message
+                        client.channels.fetch(currentTeam.channelId).then(channel => {
+                            channel.messages.fetch(currentTeam.messageId).then(msg => {
+                                msg.delete().catch(() => {});
+                            }).catch(() => {});
+                        }).catch(() => {});
                     }
                 }, 30 * 60 * 1000); // 30 minutes
 
@@ -285,6 +352,12 @@ module.exports = (client) => {
 
             // If team is full, celebrate!
             if (isFull) {
+                // Clear the resend timer since team is full
+                if (team.resendTimer) {
+                    clearTimeout(team.resendTimer);
+                    team.resendTimer = null;
+                }
+                
                 const celebrationEmbed = new EmbedBuilder()
                     .setColor('#00ff00')
                     .setTitle('🎉 TEAM COMPLETE!')
@@ -341,6 +414,11 @@ module.exports = (client) => {
                     content: '❌ Only the team leader can disband the team!',
                     ephemeral: true
                 });
+            }
+
+            // Clear the resend timer before disbanding
+            if (team.resendTimer) {
+                clearTimeout(team.resendTimer);
             }
 
             // Remove team and delete message

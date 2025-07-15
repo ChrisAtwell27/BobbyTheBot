@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
+const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 const { topEggRoleId } = require('../data/config');
@@ -240,9 +240,117 @@ module.exports = (client) => {
             }
         }
 
+        // Command to pay another user Bobby Bucks
+        if (args[0] === '!pay' && args[1] && args[2]) {
+            const senderId = message.author.id;
+            const mentionedUser = message.mentions.users.first() || message.guild.members.cache.find(member => member.user.username === args[1])?.user;
+            const amount = parseInt(args[2], 10);
+
+            if (!mentionedUser) {
+                return message.channel.send('❌ User not found. Please mention a valid user.');
+            }
+
+            if (mentionedUser.bot) {
+                return message.channel.send('❌ You cannot pay bots!');
+            }
+
+            if (mentionedUser.id === senderId) {
+                return message.channel.send('❌ You cannot pay yourself!');
+            }
+
+            if (isNaN(amount) || amount <= 0) {
+                return message.channel.send('❌ Invalid amount specified. Amount must be a positive number.');
+            }
+
+            const senderBalance = getBobbyBucks(senderId);
+
+            if (senderBalance < amount) {
+                const insufficientFunds = await createInsufficientFundsCard(message.author, senderBalance, amount);
+                const attachment = new AttachmentBuilder(insufficientFunds.toBuffer(), { name: 'insufficient-funds.png' });
+
+                const embed = new EmbedBuilder()
+                    .setTitle('❌ Payment Failed - Insufficient Funds')
+                    .setColor('#ff0000')
+                    .setDescription('**You don\'t have enough Bobby Bucks for this transfer**')
+                    .setImage('attachment://insufficient-funds.png')
+                    .addFields(
+                        { name: '💳 Your Balance', value: `B${senderBalance.toLocaleString()}`, inline: true },
+                        { name: '💸 Attempted Transfer', value: `B${amount.toLocaleString()}`, inline: true },
+                        { name: '💰 Amount Needed', value: `B${(amount - senderBalance).toLocaleString()}`, inline: true }
+                    )
+                    .setFooter({ text: 'Earn more Bobby Bucks through games and activities!' })
+                    .setTimestamp();
+
+                return message.channel.send({ embeds: [embed], files: [attachment] });
+            }
+
+            // Process the transfer
+            const senderOldBalance = senderBalance;
+            const recipientOldBalance = getBobbyBucks(mentionedUser.id);
+            
+            updateBobbyBucks(senderId, -amount); // Deduct from sender
+            updateBobbyBucks(mentionedUser.id, amount); // Add to recipient
+            
+            const senderNewBalance = getBobbyBucks(senderId);
+            const recipientNewBalance = getBobbyBucks(mentionedUser.id);
+
+            // Create payment receipt
+            const paymentReceipt = await createPaymentReceipt(message.author, mentionedUser, amount, senderOldBalance, senderNewBalance, recipientOldBalance, recipientNewBalance);
+            const attachment = new AttachmentBuilder(paymentReceipt.toBuffer(), { name: 'payment-receipt.png' });
+
+            const embed = new EmbedBuilder()
+                .setTitle('💸 Payment Successful - Transfer Complete')
+                .setColor('#00ff00')
+                .setDescription(`**${message.author.username}** paid **${mentionedUser.username}**`)
+                .setImage('attachment://payment-receipt.png')
+                .addFields(
+                    { name: '💰 Amount Transferred', value: `**B${amount.toLocaleString()}**`, inline: true },
+                    { name: '💳 Sender Balance', value: `B${senderNewBalance.toLocaleString()}`, inline: true },
+                    { name: '💳 Recipient Balance', value: `B${recipientNewBalance.toLocaleString()}`, inline: true }
+                )
+                .setFooter({ text: 'Transaction processed by Bobby Bucks Bank' })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [embed], files: [attachment] });
+        }
+
+        // Command to beg for Bobby Bucks with interactive tip jar
+        if (args[0] === '!beg') {
+            const userId = message.author.id;
+            const balance = getBobbyBucks(userId);
+            
+            // Create tip jar visualization
+            const tipJarImage = await createTipJarCard(message.author, balance);
+            const attachment = new AttachmentBuilder(tipJarImage.toBuffer(), { name: 'tip-jar.png' });
+
+            // Create donate button
+            const donateButton = new ButtonBuilder()
+                .setCustomId(`donate_${userId}_${message.id}`)
+                .setLabel('💰 Donate (1-10 BB)')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🪙');
+
+            const row = new ActionRowBuilder().addComponents(donateButton);
+
+            const embed = new EmbedBuilder()
+                .setTitle('🥺 Please Help - Tip Jar')
+                .setColor('#ff9500')
+                .setDescription(`**${message.author.username}** is asking for your kindness!`)
+                .setImage('attachment://tip-jar.png')
+                .addFields(
+                    { name: '💳 Current Balance', value: `B${balance.toLocaleString()}`, inline: true },
+                    { name: '🎲 Donation Range', value: '1-10 Bobby Bucks', inline: true },
+                    { name: '🕐 Status', value: 'Accepting donations', inline: true }
+                )
+                .setFooter({ text: 'Click the button below to make a random donation!' })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [embed], files: [attachment], components: [row] });
+        }
+
         // Economy stats command
         if (args[0] === '!economy') {
-            const stats = getEconomyStats(message.guild);
+            const stats = await getEconomyStats(message.guild);
             const economyChart = await createEconomyChart(stats);
             const attachment = new AttachmentBuilder(economyChart.toBuffer(), { name: 'economy-stats.png' });
 
@@ -266,34 +374,261 @@ module.exports = (client) => {
         }
     });
 
+    // Handle button interactions for donations
+    client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isButton()) return;
+
+        // Handle donation button clicks
+        if (interaction.customId.startsWith('donate_')) {
+            const parts = interaction.customId.split('_');
+            const beggarId = parts[1];
+            const messageId = parts[2];
+            const donorId = interaction.user.id;
+
+            // Prevent self-donation
+            if (donorId === beggarId) {
+                return interaction.reply({
+                    content: '❌ You cannot donate to yourself!',
+                    ephemeral: true
+                });
+            }
+
+            // Check if donor has enough money (at least 1 Bobby Buck)
+            const donorBalance = getBobbyBucks(donorId);
+            if (donorBalance < 1) {
+                return interaction.reply({
+                    content: '❌ You need at least 1 Bobby Buck to donate!',
+                    ephemeral: true
+                });
+            }
+
+            // Generate random donation amount (1-10)
+            const donationAmount = Math.floor(Math.random() * 10) + 1;
+            
+            // Check if donor has enough for the random amount
+            const actualDonation = Math.min(donationAmount, donorBalance);
+            
+            // Process the donation
+            const donorOldBalance = donorBalance;
+            const beggarOldBalance = getBobbyBucks(beggarId);
+            
+            updateBobbyBucks(donorId, -actualDonation);
+            updateBobbyBucks(beggarId, actualDonation);
+            
+            const donorNewBalance = getBobbyBucks(donorId);
+            const beggarNewBalance = getBobbyBucks(beggarId);
+
+            // Get user objects
+            const beggar = await interaction.guild.members.fetch(beggarId);
+            const donor = interaction.user;
+
+            // Create donation receipt
+            const donationReceipt = await createDonationReceipt(donor, beggar.user, actualDonation, donorOldBalance, donorNewBalance, beggarOldBalance, beggarNewBalance);
+            const attachment = new AttachmentBuilder(donationReceipt.toBuffer(), { name: 'donation-receipt.png' });
+
+            const embed = new EmbedBuilder()
+                .setTitle('💝 Donation Successful - Good Karma!')
+                .setColor('#00ff00')
+                .setDescription(`**${donor.username}** donated to **${beggar.user.username}**!`)
+                .setImage('attachment://donation-receipt.png')
+                .addFields(
+                    { name: '💰 Amount Donated', value: `**B${actualDonation.toLocaleString()}**`, inline: true },
+                    { name: '💳 Your Balance', value: `B${donorNewBalance.toLocaleString()}`, inline: true },
+                    { name: '🎯 Random Roll', value: `Rolled: ${donationAmount}`, inline: true }
+                )
+                .setFooter({ text: 'Thank you for your generosity! ❤️' })
+                .setTimestamp();
+
+            await interaction.reply({ embeds: [embed], files: [attachment] });
+
+            // Update the original tip jar message to show latest donation
+            try {
+                const originalMessage = await interaction.channel.messages.fetch(messageId);
+                const updatedTipJar = await createTipJarCard(beggar.user, beggarNewBalance, donor.username, actualDonation);
+                const updatedAttachment = new AttachmentBuilder(updatedTipJar.toBuffer(), { name: 'tip-jar-updated.png' });
+
+                const updatedEmbed = new EmbedBuilder()
+                    .setTitle('🥺 Please Help - Tip Jar')
+                    .setColor('#ff9500')
+                    .setDescription(`**${beggar.user.username}** is asking for your kindness!`)
+                    .setImage('attachment://tip-jar-updated.png')
+                    .addFields(
+                        { name: '💳 Current Balance', value: `B${beggarNewBalance.toLocaleString()}`, inline: true },
+                        { name: '🎲 Donation Range', value: '1-10 Bobby Bucks', inline: true },
+                        { name: '🕐 Status', value: 'Accepting donations', inline: true }
+                    )
+                    .setFooter({ text: `Latest: ${donor.username} donated B${actualDonation}!` })
+                    .setTimestamp();
+
+                await originalMessage.edit({ embeds: [updatedEmbed], files: [updatedAttachment] });
+            } catch (error) {
+                console.error('Error updating tip jar:', error);
+            }
+        }
+    });
+
     // Create balance card visualization
     async function createBalanceCard(user, balance) {
         const canvas = createCanvas(500, 300);
         const ctx = canvas.getContext('2d');
         
-        // Card background gradient
+        // Determine card tier
+        const cardTier = balance > 10000 ? 'PLATINUM' : balance > 5000 ? 'GOLD' : balance > 1000 ? 'SILVER' : 'BRONZE';
+        
+        // Card background gradient with tier-specific colors
         const gradient = ctx.createLinearGradient(0, 0, 500, 300);
-        gradient.addColorStop(0, '#1a1a2e');
-        gradient.addColorStop(0.5, '#16213e');
-        gradient.addColorStop(1, '#0f0f23');
+        if (cardTier === 'PLATINUM') {
+            gradient.addColorStop(0, '#e8e8e8');
+            gradient.addColorStop(0.5, '#c0c0c0');
+            gradient.addColorStop(1, '#a8a8a8');
+        } else if (cardTier === 'GOLD') {
+            gradient.addColorStop(0, '#ffd700');
+            gradient.addColorStop(0.5, '#ffb347');
+            gradient.addColorStop(1, '#ff8c00');
+        } else if (cardTier === 'SILVER') {
+            gradient.addColorStop(0, '#c0c0c0');
+            gradient.addColorStop(0.5, '#a0a0a0');
+            gradient.addColorStop(1, '#808080');
+        } else {
+            gradient.addColorStop(0, '#cd7f32');
+            gradient.addColorStop(0.5, '#a0522d');
+            gradient.addColorStop(1, '#8b4513');
+        }
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, 500, 300);
         
-        // Card border
-        ctx.strokeStyle = '#ffd700';
-        ctx.lineWidth = 3;
+        // Add special patterns based on tier
+        if (cardTier === 'PLATINUM') {
+            // Diamond pattern for Platinum
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            for (let x = 0; x < 500; x += 40) {
+                for (let y = 0; y < 300; y += 40) {
+                    ctx.save();
+                    ctx.translate(x + 20, y + 20);
+                    ctx.rotate(Math.PI / 4);
+                    ctx.fillRect(-8, -8, 16, 16);
+                    ctx.restore();
+                }
+            }
+            
+            // Sparkle effect
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            for (let i = 0; i < 20; i++) {
+                const x = Math.random() * 500;
+                const y = Math.random() * 300;
+                ctx.beginPath();
+                ctx.arc(x, y, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        } else if (cardTier === 'GOLD') {
+            // Radial burst pattern for Gold
+            ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
+            ctx.lineWidth = 2;
+            const centerX = 250;
+            const centerY = 150;
+            for (let i = 0; i < 12; i++) {
+                const angle = (i * Math.PI * 2) / 12;
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(centerX + Math.cos(angle) * 120, centerY + Math.sin(angle) * 80);
+                ctx.stroke();
+            }
+            
+            // Golden particles
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
+            for (let i = 0; i < 15; i++) {
+                const x = Math.random() * 500;
+                const y = Math.random() * 300;
+                ctx.beginPath();
+                ctx.arc(x, y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        } else if (cardTier === 'SILVER') {
+            // Crosshatch pattern for Silver
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 500; i += 30) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i + 150, 300);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(i, 300);
+                ctx.lineTo(i + 150, 0);
+                ctx.stroke();
+            }
+        } else {
+            // Simple dots pattern for Bronze
+            ctx.fillStyle = 'rgba(139, 69, 19, 0.3)';
+            for (let x = 20; x < 500; x += 60) {
+                for (let y = 20; y < 300; y += 60) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+        
+        // Card border with tier-specific styling
+        let borderColor, borderWidth;
+        if (cardTier === 'PLATINUM') {
+            borderColor = '#e5e5e5';
+            borderWidth = 4;
+            // Double border for platinum
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(8, 8, 484, 284);
+        } else if (cardTier === 'GOLD') {
+            borderColor = '#ffd700';
+            borderWidth = 4;
+        } else if (cardTier === 'SILVER') {
+            borderColor = '#c0c0c0';
+            borderWidth = 3;
+        } else {
+            borderColor = '#8b4513';
+            borderWidth = 2;
+        }
+        
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = borderWidth;
         ctx.strokeRect(10, 10, 480, 280);
         
-        // Bank logo area
-        ctx.fillStyle = '#ffd700';
+        // Bank logo area with tier-specific colors
+        const logoColor = cardTier === 'PLATINUM' ? '#333333' : 
+                         cardTier === 'GOLD' ? '#8b4513' : 
+                         cardTier === 'SILVER' ? '#2c2c2c' : '#ffffff';
+        ctx.fillStyle = logoColor;
         ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'left';
         ctx.fillText('🏦 BOBBY BUCKS BANK', 30, 45);
         
+        // Tier indicator with special styling
+        if (cardTier === 'PLATINUM') {
+            ctx.fillStyle = '#333333';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText('💎 PLATINUM ELITE 💎', 30, 65);
+        } else if (cardTier === 'GOLD') {
+            ctx.fillStyle = '#8b4513';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText('⭐ GOLD PREMIUM ⭐', 30, 65);
+        }
+        
         try {
-            // User avatar
+            // User avatar with tier-specific border effects
             const avatarURL = user.displayAvatarURL({ extension: 'png', size: 128 });
             const avatar = await loadImageFromURL(avatarURL);
+            
+            // Special avatar effects for higher tiers
+            if (cardTier === 'PLATINUM') {
+                // Glowing effect for platinum
+                ctx.shadowColor = '#ffffff';
+                ctx.shadowBlur = 20;
+            } else if (cardTier === 'GOLD') {
+                // Golden glow
+                ctx.shadowColor = '#ffd700';
+                ctx.shadowBlur = 15;
+            }
             
             // Circular avatar
             ctx.save();
@@ -303,15 +638,36 @@ module.exports = (client) => {
             ctx.drawImage(avatar, 380, 40, 80, 80);
             ctx.restore();
             
-            // Avatar border
-            ctx.strokeStyle = '#ffd700';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(420, 80, 40, 0, Math.PI * 2);
-            ctx.stroke();
+            // Reset shadow
+            ctx.shadowBlur = 0;
+            
+            // Avatar border with tier styling
+            if (cardTier === 'PLATINUM') {
+                // Triple border for platinum
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(420, 80, 42, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                ctx.strokeStyle = '#e5e5e5';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(420, 80, 38, 0, Math.PI * 2);
+                ctx.stroke();
+            } else {
+                ctx.strokeStyle = borderColor;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(420, 80, 40, 0, Math.PI * 2);
+                ctx.stroke();
+            }
         } catch (error) {
-            // Fallback avatar
-            ctx.fillStyle = '#7289da';
+            // Fallback avatar with tier colors
+            const avatarColor = cardTier === 'PLATINUM' ? '#e5e5e5' :
+                              cardTier === 'GOLD' ? '#ffd700' :
+                              cardTier === 'SILVER' ? '#c0c0c0' : '#7289da';
+            ctx.fillStyle = avatarColor;
             ctx.beginPath();
             ctx.arc(420, 80, 40, 0, Math.PI * 2);
             ctx.fill();
@@ -321,32 +677,57 @@ module.exports = (client) => {
             ctx.fillText('👤', 420, 90);
         }
         
-        // Account holder name
-        ctx.fillStyle = '#ffffff';
+        // Account holder name with tier-appropriate colors
+        const textColor = cardTier === 'PLATINUM' ? '#333333' :
+                         cardTier === 'GOLD' ? '#8b4513' :
+                         cardTier === 'SILVER' ? '#2c2c2c' : '#ffffff';
+        ctx.fillStyle = textColor;
         ctx.font = 'bold 24px Arial';
         ctx.textAlign = 'left';
         ctx.fillText('ACCOUNT HOLDER', 30, 90);
         ctx.font = '20px Arial';
         ctx.fillText(user.username.toUpperCase(), 30, 115);
         
-        // Account number (fake)
+        // Account number (fake) with appropriate contrast
         ctx.font = '14px Arial';
-        ctx.fillStyle = '#cccccc';
+        ctx.fillStyle = cardTier === 'BRONZE' ? '#cccccc' : 'rgba(0,0,0,0.6)';
         ctx.fillText(`ACCOUNT: **** **** **** ${user.id.slice(-4)}`, 30, 140);
         
-        // Balance
-        ctx.fillStyle = '#ffd700';
+        // Balance with tier-specific styling
+        const balanceColor = cardTier === 'PLATINUM' ? '#333333' :
+                           cardTier === 'GOLD' ? '#8b4513' :
+                           cardTier === 'SILVER' ? '#2c2c2c' : '#ffd700';
+        ctx.fillStyle = balanceColor;
         ctx.font = 'bold 18px Arial';
         ctx.fillText('CURRENT BALANCE', 30, 180);
-        ctx.font = 'bold 36px Arial';
-        ctx.fillText(`B${balance.toLocaleString()}`, 30, 220);
         
-        // Card type
-        const cardType = balance > 10000 ? 'PLATINUM' : balance > 5000 ? 'GOLD' : balance > 1000 ? 'SILVER' : 'BRONZE';
-        ctx.fillStyle = '#ffffff';
+        // Special balance display for Platinum
+        if (cardTier === 'PLATINUM') {
+            ctx.font = 'bold 40px Arial';
+            ctx.fillStyle = '#333333';
+            ctx.fillText(`B${balance.toLocaleString()}`, 30, 220);
+            // Add subtle glow effect
+            ctx.shadowColor = '#ffffff';
+            ctx.shadowBlur = 5;
+            ctx.fillText(`B${balance.toLocaleString()}`, 30, 220);
+            ctx.shadowBlur = 0;
+        } else {
+            ctx.font = 'bold 36px Arial';
+            ctx.fillText(`B${balance.toLocaleString()}`, 30, 220);
+        }
+        
+        // Card type with special symbols
+        const tierSymbols = {
+            'PLATINUM': '💎',
+            'GOLD': '⭐',
+            'SILVER': '🥈',
+            'BRONZE': '🥉'
+        };
+        
+        ctx.fillStyle = textColor;
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'right';
-        ctx.fillText(`${cardType} MEMBER`, 470, 250);
+        ctx.fillText(`${tierSymbols[cardTier]} ${cardTier} MEMBER`, 470, 250);
         
         // Valid thru (fake)
         ctx.font = '12px Arial';
@@ -813,8 +1194,8 @@ module.exports = (client) => {
     }
 
     // Get economy statistics
-    function getEconomyStats(guild) {
-        const balances = getTopBalances(guild, 1000);
+    async function getEconomyStats(guild) {
+        const balances = await getTopBalances(guild, 1000);
         const totalEconomy = getTotalEconomy();
         const houseBalance = getHouseBalance();
         
@@ -827,5 +1208,224 @@ module.exports = (client) => {
             millionaires: balances.filter(b => b.balance >= 1000000).length,
             poorUsers: balances.filter(b => b.balance < 100).length
         };
+    }
+
+    // Create tip jar visualization
+    async function createTipJarCard(user, balance, lastDonor = null, lastAmount = null) {
+        const canvas = createCanvas(500, 400);
+        const ctx = canvas.getContext('2d');
+        
+        // Background gradient
+        const gradient = ctx.createLinearGradient(0, 0, 500, 400);
+        gradient.addColorStop(0, '#2c3e50');
+        gradient.addColorStop(1, '#34495e');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 500, 400);
+        
+        // Title
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('🥺 TIP JAR 🥺', 250, 40);
+        
+        try {
+            // User avatar (larger for tip jar)
+            const avatarURL = user.displayAvatarURL({ extension: 'png', size: 256 });
+            const avatar = await loadImageFromURL(avatarURL);
+            
+            // Draw circular avatar
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(150, 120, 60, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(avatar, 90, 60, 120, 120);
+            ctx.restore();
+            
+            // Avatar border
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(150, 120, 60, 0, Math.PI * 2);
+            ctx.stroke();
+        } catch (error) {
+            // Fallback avatar
+            ctx.fillStyle = '#7289da';
+            ctx.beginPath();
+            ctx.arc(150, 120, 60, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '40px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('👤', 150, 135);
+        }
+        
+        // Tip jar (simple jar shape)
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(300, 80, 120, 140);
+        ctx.fillStyle = '#a0522d';
+        ctx.fillRect(310, 90, 100, 120);
+        
+        // Jar label
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('TIPS', 360, 130);
+        ctx.font = '12px Arial';
+        ctx.fillText('💰', 360, 150);
+        
+        // Coins in jar (visual representation of balance)
+        const coinCount = Math.min(Math.floor(balance / 100), 10);
+        ctx.fillStyle = '#ffd700';
+        for (let i = 0; i < coinCount; i++) {
+            const x = 320 + (i % 4) * 20;
+            const y = 200 - Math.floor(i / 4) * 15;
+            ctx.beginPath();
+            ctx.arc(x, y, 8, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // User info
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(user.username, 50, 250);
+        
+        ctx.font = '16px Arial';
+        ctx.fillText(`Current Balance: B${balance.toLocaleString()}`, 50, 280);
+        
+        // Pleading message
+        ctx.font = 'italic 14px Arial';
+        ctx.fillText('Please spare some Bobby Bucks... 🥺', 50, 310);
+        
+        // Last donation info (if any)
+        if (lastDonor && lastAmount) {
+            ctx.fillStyle = '#00ff00';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText(`💚 ${lastDonor} just donated B${lastAmount}!`, 50, 340);
+        }
+        
+        // Instructions
+        ctx.fillStyle = '#cccccc';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Click the donate button to give 1-10 Bobby Bucks!', 250, 380);
+        
+        return canvas;
+    }
+
+    // Create donation receipt
+    async function createDonationReceipt(donor, beggar, amount, donorOldBalance, donorNewBalance, beggarOldBalance, beggarNewBalance) {
+        const canvas = createCanvas(450, 400);
+        const ctx = canvas.getContext('2d');
+        
+        // Receipt background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 450, 400);
+        
+        // Header
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('💝 DONATION RECEIPT', 225, 30);
+        ctx.font = '16px Arial';
+        ctx.fillText('Bobby Bucks Charity Foundation', 225, 55);
+        
+        // Dashed line
+        ctx.strokeStyle = '#cccccc';
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(20, 75);
+        ctx.lineTo(430, 75);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Donation details
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('DONATION DETAILS', 20, 105);
+        
+        ctx.font = '14px Arial';
+        ctx.fillText(`Donor: ${donor.username}`, 20, 130);
+        ctx.fillText(`Recipient: ${beggar.username}`, 20, 150);
+        ctx.fillText(`Amount: B${amount.toLocaleString()}`, 20, 170);
+        ctx.fillText(`Type: Random Charity Donation`, 20, 190);
+        
+        // Balance changes
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('BALANCE CHANGES', 20, 220);
+        
+        ctx.font = '14px Arial';
+        ctx.fillText(`${donor.username}'s Balance:`, 20, 245);
+        ctx.fillText(`  Before: B${donorOldBalance.toLocaleString()}`, 30, 265);
+        ctx.fillText(`  After: B${donorNewBalance.toLocaleString()}`, 30, 285);
+        
+        ctx.fillText(`${beggar.username}'s Balance:`, 20, 315);
+        ctx.fillText(`  Before: B${beggarOldBalance.toLocaleString()}`, 30, 335);
+        ctx.fillText(`  After: B${beggarNewBalance.toLocaleString()}`, 30, 355);
+        
+        // Footer
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Thank you for your generous donation! ❤️', 225, 385);
+        
+        return canvas;
+    }
+
+    // Create payment receipt
+    async function createPaymentReceipt(sender, recipient, amount, senderOldBalance, senderNewBalance, recipientOldBalance, recipientNewBalance) {
+        const canvas = createCanvas(450, 300);
+        const ctx = canvas.getContext('2d');
+        
+        // Receipt background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 450, 300);
+        
+        // Header
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('💸 PAYMENT RECEIPT', 225, 30);
+        ctx.font = '16px Arial';
+        ctx.fillText('Bobby Bucks Transaction', 225, 55);
+        
+        // Dashed line
+        ctx.strokeStyle = '#cccccc';
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(20, 75);
+        ctx.lineTo(430, 75);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Payment details
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('PAYMENT DETAILS', 20, 105);
+        
+        ctx.font = '14px Arial';
+        ctx.fillText(`Sender: ${sender.username}`, 20, 130);
+        ctx.fillText(`Recipient: ${recipient.username}`, 20, 150);
+        ctx.fillText(`Amount: B${amount.toLocaleString()}`, 20, 170);
+        ctx.fillText(`Type: Direct Transfer`, 20, 190);
+        
+        // Balance changes
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('BALANCE CHANGES', 20, 220);
+        
+        ctx.font = '14px Arial';
+        ctx.fillText(`${sender.username}'s Balance:`, 20, 245);
+        ctx.fillText(`  Before: B${senderOldBalance.toLocaleString()}`, 30, 265);
+        ctx.fillText(`  After: B${senderNewBalance.toLocaleString()}`, 30, 285);
+        
+        ctx.fillText(`${recipient.username}'s Balance:`, 20, 315);
+        ctx.fillText(`  Before: B${recipientOldBalance.toLocaleString()}`, 30, 335);
+        ctx.fillText(`  After: B${recipientNewBalance.toLocaleString()}`, 30, 355);
+        
+        // Footer
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Thank you for using Bobby Bucks Bank!', 225, 385);
+        
+        return canvas;
     }
 };

@@ -31,6 +31,10 @@ require('./events/interactionHandler')(client);
 require('./events/clipHandler')(client);
 require('./events/valorantTeamHandler')(client);
 require('./events/activityAwardsHandler')(client);
+require('./events/russianRouletteHandler')(client);
+require('./events/gladiatorHandler')(client);
+require('./events/pokerHandler')(client);
+
 // Start the bot
 client.once("ready", () => {
   console.log("Role bot is online!");
