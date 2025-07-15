@@ -467,6 +467,18 @@ module.exports = (client) => {
         }
     });
 
+    // Award 1000 Bobby Bucks to new members on join
+    client.on('guildMemberAdd', async (member) => {
+        if (member.user.bot) return; // Don't award bots
+        updateBobbyBucks(member.id, 1000);
+        // Optionally, send a welcome message
+        try {
+            await member.send('Welcome to the server! You have been awarded 1000 Bobby Bucks. Type !balance to check your account.');
+        } catch (e) {
+            // Ignore DM errors (user may have DMs off)
+        }
+    });
+
     // Create balance card visualization
     async function createBalanceCard(user, balance) {
         const canvas = createCanvas(500, 300);

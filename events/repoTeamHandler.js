@@ -2,22 +2,22 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBu
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 
-// Configuration - Update this with your actual Valorant role ID
-const VALORANT_ROLE_ID = '1058201257338228757'; // Replace with actual @Valorant role ID
+// Configuration - Update this with your actual REPO role ID
+const REPO_ROLE_ID = '1349166787526397982'; // Replace with actual @REPO role ID
 
 // Debug function to help find your role ID
-function findValorantRole(message) {
-    const valorantRoles = message.guild.roles.cache.filter(role => 
-        role.name.toLowerCase().includes('valorant')
+function findRepoRole(message) {
+    const repoRoles = message.guild.roles.cache.filter(role => 
+        role.name.toLowerCase().includes('repo')
     );
     
-    if (valorantRoles.size > 0) {
-        console.log('Found Valorant-related roles:');
-        valorantRoles.forEach(role => {
+    if (repoRoles.size > 0) {
+        console.log('Found REPO-related roles:');
+        repoRoles.forEach(role => {
             console.log(`- Role: "${role.name}" | ID: ${role.id}`);
         });
     } else {
-        console.log('No Valorant-related roles found');
+        console.log('No REPO-related roles found');
     }
 }
 
@@ -26,6 +26,9 @@ const activeTeams = new Map();
 
 // Resend interval in milliseconds (10 minutes)
 const RESEND_INTERVAL = 10 * 60 * 1000;
+
+// Change team size to 6
+const TEAM_SIZE = 6; // 1 leader + 5 members
 
 // Function to load image from URL
 async function loadImageFromURL(url) {
@@ -50,15 +53,15 @@ async function createTeamVisualization(team) {
     const canvas = createCanvas(600, 180);
     const ctx = canvas.getContext('2d');
     
-    // Background gradient
+    // Background gradient (dark horror theme)
     const gradient = ctx.createLinearGradient(0, 0, 600, 180);
-    gradient.addColorStop(0, '#0f1419');
-    gradient.addColorStop(1, '#1e2328');
+    gradient.addColorStop(0, '#0a0a0a');
+    gradient.addColorStop(1, '#1a1a1a');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 600, 180);
     
-    // Valorant-style accent
-    ctx.fillStyle = '#ff4654';
+    // Horror-style accent (blood red)
+    ctx.fillStyle = '#8b0000';
     ctx.fillRect(0, 0, 600, 4);
     ctx.fillRect(0, 176, 600, 4);
     
@@ -66,26 +69,26 @@ async function createTeamVisualization(team) {
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 24px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('🎯 VALORANT TEAM', 300, 35);
+    ctx.fillText('👻 REPO SQUAD', 300, 35);
     
     // Team member slots
     const slotWidth = 100;
     const slotHeight = 100;
-    const startX = 50;
+    const startX = 20;
     const startY = 50;
     const spacing = 110;
     
     const allMembers = [team.leader, ...team.members];
     
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < TEAM_SIZE; i++) {
         const x = startX + (i * spacing);
         const y = startY;
         
         // Slot background
-        ctx.fillStyle = allMembers[i] ? '#ff4654' : '#2c3e50';
+        ctx.fillStyle = allMembers[i] ? '#8b0000' : '#333333';
         ctx.fillRect(x - 2, y - 2, slotWidth + 4, slotHeight + 4);
         
-        ctx.fillStyle = allMembers[i] ? '#1e2328' : '#34495e';
+        ctx.fillStyle = allMembers[i] ? '#1a1a1a' : '#2a2a2a';
         ctx.fillRect(x, y, slotWidth, slotHeight);
         
         if (allMembers[i]) {
@@ -104,12 +107,12 @@ async function createTeamVisualization(team) {
                 ctx.drawImage(avatar, x + 5, y + 5, slotWidth - 10, slotWidth - 10);
                 ctx.restore();
                 
-                // Leader crown
+                // Leader badge
                 if (i === 0) {
                     ctx.font = '20px Arial';
-                    ctx.fillStyle = '#ffd700';
+                    ctx.fillStyle = '#ff6b6b';
                     ctx.textAlign = 'center';
-                    ctx.fillText('👑', x + slotWidth/2, y - 5);
+                    ctx.fillText('💀', x + slotWidth/2, y - 5);
                 }
                 
                 // Username
@@ -124,7 +127,7 @@ async function createTeamVisualization(team) {
             } catch (error) {
                 console.error('Error loading avatar:', error);
                 // Fallback: draw default avatar
-                ctx.fillStyle = '#7289da';
+                ctx.fillStyle = '#8b0000';
                 ctx.fillRect(x + 5, y + 5, slotWidth - 10, slotWidth - 10);
                 ctx.fillStyle = '#ffffff';
                 ctx.font = '40px Arial';
@@ -133,7 +136,7 @@ async function createTeamVisualization(team) {
             }
         } else {
             // Empty slot
-            ctx.fillStyle = '#7f8c8d';
+            ctx.fillStyle = '#666666';
             ctx.font = '14px Arial';
             ctx.textAlign = 'center';
             ctx.fillText('EMPTY', x + slotWidth/2, y + slotWidth/2 - 10);
@@ -141,7 +144,7 @@ async function createTeamVisualization(team) {
         }
         
         // Slot number
-        ctx.fillStyle = '#bdc3c7';
+        ctx.fillStyle = '#aaaaaa';
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
         ctx.fillText(`${i + 1}`, x + slotWidth/2, y + slotHeight + 30);
@@ -162,7 +165,7 @@ module.exports = (client) => {
             if (!channel) return;
             
             // Create updated embed and components
-            const isFull = getTotalMembers(team) >= 5;
+            const isFull = getTotalMembers(team) >= TEAM_SIZE;
             const updatedEmbed = await createTeamEmbed(team);
             const updatedComponents = createTeamButtons(teamId, isFull);
             
@@ -200,10 +203,10 @@ module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
 
-        // Debug command to find Valorant role ID
-        if (message.content === '!findrole') {
-            findValorantRole(message);
-            return message.reply('Check your console for Valorant role information!');
+        // Debug command to find REPO role ID
+        if (message.content === '!findreporole') {
+            findRepoRole(message);
+            return message.reply('Check your console for REPO role information!');
         }
 
         // Debug: Log all role mentions in the message
@@ -214,15 +217,15 @@ module.exports = (client) => {
             });
         }
 
-        // Check if message mentions the Valorant role or uses the !Valorant command
-        const valorantRoleMention = `<@&${VALORANT_ROLE_ID}>`;
-        const isValorantCommand = message.content.toLowerCase() === '!valorant';
-        if (message.content.includes(valorantRoleMention) || 
-            message.mentions.roles.has(VALORANT_ROLE_ID) || 
-            isValorantCommand) {
-            console.log('Valorant team creation triggered!');
+        // Check if message mentions the REPO role or uses the !repo command
+        const repoRoleMention = `<@&${REPO_ROLE_ID}>`;
+        const isRepoCommand = message.content.toLowerCase() === '!repo';
+        if (message.content.includes(repoRoleMention) || 
+            message.mentions.roles.has(REPO_ROLE_ID) || 
+            isRepoCommand) {
+            console.log('REPO team creation triggered!');
             // Always use a unique and consistent teamId
-            const teamId = `valorant_team_${message.id}`;
+            const teamId = `repo_team_${message.id}`;
             // Create new team with the message author as leader
             const team = {
                 id: teamId,
@@ -250,14 +253,14 @@ module.exports = (client) => {
                 // Store the team with message ID immediately after sending
                 team.messageId = teamMessage.id;
                 activeTeams.set(teamId, team);
-                console.log('Team created successfully:', teamId);
+                console.log('REPO team created successfully:', teamId);
                 // Set up the resend timer to keep message at bottom of chat
                 team.resendTimer = setTimeout(() => resendTeamMessage(teamId), RESEND_INTERVAL);
 
                 // Delete after 30 minutes if team isn't full
                 setTimeout(() => {
                     const currentTeam = activeTeams.get(teamId);
-                    if (currentTeam && getTotalMembers(currentTeam) < 5) {
+                    if (currentTeam && getTotalMembers(currentTeam) < TEAM_SIZE) {
                         // Clear the resend timer before removing
                         if (currentTeam.resendTimer) {
                             clearTimeout(currentTeam.resendTimer);
@@ -275,7 +278,7 @@ module.exports = (client) => {
                 }, 30 * 60 * 1000); // 30 minutes
 
             } catch (error) {
-                console.error('Error creating team message:', error);
+                console.error('Error creating REPO team message:', error);
             }
         }
     });
@@ -283,11 +286,14 @@ module.exports = (client) => {
     // Handle button interactions (only for team builder)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton()) return;
-        // Only handle team builder interactions
+        // Only handle REPO team builder interactions
         const parts = interaction.customId.split('_');
         const action = parts[0];
-        // Always reconstruct teamId with valorant_team_ prefix
+        // Always reconstruct teamId with repo_team_ prefix
         const teamId = parts.slice(1).join('_');
+        const teamActions = ['join', 'leave', 'disband'];
+        if (!teamActions.includes(action)) return;
+        
         const team = activeTeams.get(teamId);
         
         console.log('Button interaction:', interaction.customId);
@@ -296,10 +302,18 @@ module.exports = (client) => {
         console.log('Active teams:', Array.from(activeTeams.keys()));
 
         if (!team) {
-            return interaction.reply({
-                content: '❌ This team is no longer active.',
-                ephemeral: true
-            });
+            // Team not found, reply with error and do not crash
+            if (!interaction.replied && !interaction.deferred) {
+                try {
+                    await interaction.reply({
+                        content: '❌ This REPO squad is no longer active or has expired. Please create a new squad!',
+                        ephemeral: true
+                    });
+                } catch (err) {
+                    console.error('Error replying to interaction (team missing):', err);
+                }
+            }
+            return;
         }
 
         const userId = interaction.user.id;
@@ -310,121 +324,163 @@ module.exports = (client) => {
             avatarURL: interaction.user.displayAvatarURL({ extension: 'png', size: 128 })
         };
 
-        if (action === 'join') {
-            // Check if user is already in team
-            if (userId === team.leader.id || team.members.some(member => member.id === userId)) {
-                return interaction.reply({
-                    content: '❌ You are already in this team!',
-                    ephemeral: true
+        try {
+            if (action === 'join') {
+                // Check if user is already in team
+                if (userId === team.leader.id || team.members.some(member => member.id === userId)) {
+                    return await interaction.reply({
+                        content: '❌ You are already in this REPO squad!',
+                        ephemeral: true
+                    });
+                }
+
+                // Check if team is full
+                if (getTotalMembers(team) >= TEAM_SIZE) {
+                    return await interaction.reply({
+                        content: '❌ This REPO squad is already full!',
+                        ephemeral: true
+                    });
+                }
+
+                // Add user to team
+                team.members.push(userInfo);
+
+                // Update the team display first
+                const isFull = getTotalMembers(team) >= TEAM_SIZE;
+                const updatedEmbed = await createTeamEmbed(team);
+                const updatedComponents = createTeamButtons(teamId, isFull);
+
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.update({
+                        embeds: [updatedEmbed.embed],
+                        files: updatedEmbed.files,
+                        components: [updatedComponents]
+                    });
+
+                    if (isFull) {
+                        const celebrationEmbed = new EmbedBuilder()
+                            .setColor('#32cd32')
+                            .setTitle('🎉 REPO SQUAD COMPLETE!')
+                            .setDescription('Your horror squad is ready to face the darkness! Stay together and survive!')
+                            .setTimestamp();
+
+                        await interaction.followUp({
+                            embeds: [celebrationEmbed]
+                        });
+                    }
+                }
+
+                // If team is full, celebrate!
+                if (isFull) {
+                    // Clear the resend timer since team is full
+                    if (team.resendTimer) {
+                        clearTimeout(team.resendTimer);
+                        team.resendTimer = null;
+                    }
+                    
+                    const celebrationEmbed = new EmbedBuilder()
+                        .setColor('#32cd32')
+                        .setTitle('🎉 REPO SQUAD COMPLETE!')
+                        .setDescription('Your horror squad is ready to face the darkness! Stay together and survive!')
+                        .setTimestamp();
+
+                    await interaction.followUp({
+                        embeds: [celebrationEmbed]
+                    });
+
+                    // Auto-delete team after 5 minutes when full
+                    setTimeout(() => {
+                        activeTeams.delete(teamId);
+                        interaction.message.delete().catch(() => {});
+                    }, 5 * 60 * 1000);
+                }
+
+            } else if (action === 'leave') {
+                // Check if user is the leader
+                if (userId === team.leader.id) {
+                    return await interaction.reply({
+                        content: '❌ Squad leaders cannot abandon their team! The squad will auto-delete after 30 minutes if not full.',
+                        ephemeral: true
+                    });
+                }
+
+                // Check if user is in team
+                const memberIndex = team.members.findIndex(member => member.id === userId);
+                if (memberIndex === -1) {
+                    return await interaction.reply({
+                        content: '❌ You are not in this REPO squad!',
+                        ephemeral: true
+                    });
+                }
+
+                // Remove user from team
+                team.members.splice(memberIndex, 1);
+
+                // Update the team display
+                const isFull = getTotalMembers(team) >= TEAM_SIZE;
+                const updatedEmbed = await createTeamEmbed(team);
+                const updatedComponents = createTeamButtons(teamId, isFull);
+
+                await interaction.update({
+                    embeds: [updatedEmbed.embed],
+                    files: updatedEmbed.files,
+                    components: [updatedComponents]
                 });
-            }
 
-            // Check if team is full
-            if (getTotalMembers(team) >= 5) {
-                return interaction.reply({
-                    content: '❌ This team is already full!',
-                    ephemeral: true
-                });
-            }
+            } else if (action === 'disband') {
+                // Only leader can disband
+                if (userId !== team.leader.id) {
+                    return await interaction.reply({
+                        content: '❌ Only the squad leader can disband the team!',
+                        ephemeral: true
+                    });
+                }
 
-            // Add user to team
-            team.members.push(userInfo);
-
-            // Update the team display first
-            const isFull = getTotalMembers(team) >= 5;
-            const updatedEmbed = await createTeamEmbed(team);
-            const updatedComponents = createTeamButtons(teamId, isFull);
-
-            await interaction.update({
-                embeds: [updatedEmbed.embed],
-                files: updatedEmbed.files,
-                components: [updatedComponents]
-            });
-
-            // If team is full, celebrate!
-            if (isFull) {
-                // Clear the resend timer since team is full
+                // Clear the resend timer before disbanding
                 if (team.resendTimer) {
                     clearTimeout(team.resendTimer);
-                    team.resendTimer = null;
                 }
+
+                // Remove team from active teams first
+                activeTeams.delete(teamId);
                 
-                const celebrationEmbed = new EmbedBuilder()
-                    .setColor('#00ff00')
-                    .setTitle('🎉 TEAM COMPLETE!')
-                    .setDescription('Your Valorant team is ready to play! Good luck and have fun!')
-                    .setTimestamp();
+                // Try to update the interaction to show disbanded message
+                try {
+                    await interaction.update({
+                        embeds: [createDisbandedEmbed()],
+                        components: []
+                    });
 
-                await interaction.followUp({
-                    embeds: [celebrationEmbed]
-                });
+                    // Delete the message after 5 seconds
+                    setTimeout(() => {
+                        interaction.message.delete().catch(() => {});
+                    }, 5000);
+                } catch (updateError) {
+                    console.error('Error updating interaction for disband:', updateError);
+                    // If update fails, try to delete the message directly
+                    try {
+                        await interaction.message.delete();
+                    } catch (deleteError) {
+                        console.error('Error deleting message after failed update:', deleteError);
+                    }
+                }
 
-                // Auto-delete team after 5 minutes when full
-                setTimeout(() => {
-                    activeTeams.delete(teamId);
-                    interaction.message.delete().catch(() => {});
-                }, 5 * 60 * 1000);
+                return;
             }
-
-        } else if (action === 'leave') {
-            // Check if user is the leader
-            if (userId === team.leader.id) {
-                return interaction.reply({
-                    content: '❌ Team leaders cannot leave their own team! The team will auto-delete after 30 minutes if not full.',
-                    ephemeral: true
-                });
+        } catch (error) {
+            console.error('Error handling button interaction:', error);
+            
+            // Try to respond with an error message if we haven't responded yet
+            try {
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.reply({
+                        content: '❌ An error occurred processing your request. Please try again.',
+                        ephemeral: true
+                    });
+                }
+            } catch (replyError) {
+                console.error('Error sending error reply:', replyError);
             }
-
-            // Check if user is in team
-            const memberIndex = team.members.findIndex(member => member.id === userId);
-            if (memberIndex === -1) {
-                return interaction.reply({
-                    content: '❌ You are not in this team!',
-                    ephemeral: true
-                });
-            }
-
-            // Remove user from team
-            team.members.splice(memberIndex, 1);
-
-            // Update the team display
-            const isFull = getTotalMembers(team) >= 5;
-            const updatedEmbed = await createTeamEmbed(team);
-            const updatedComponents = createTeamButtons(teamId, isFull);
-
-            await interaction.update({
-                embeds: [updatedEmbed.embed],
-                files: updatedEmbed.files,
-                components: [updatedComponents]
-            });
-
-        } else if (action === 'disband') {
-            // Only leader can disband
-            if (userId !== team.leader.id) {
-                return interaction.reply({
-                    content: '❌ Only the team leader can disband the team!',
-                    ephemeral: true
-                });
-            }
-
-            // Clear the resend timer before disbanding
-            if (team.resendTimer) {
-                clearTimeout(team.resendTimer);
-            }
-
-            // Remove team and delete message
-            activeTeams.delete(teamId);
-            await interaction.update({
-                embeds: [createDisbandedEmbed()],
-                components: []
-            });
-
-            // Delete the message after 5 seconds
-            setTimeout(() => {
-                interaction.message.delete().catch(() => {});
-            }, 5000);
-
-            return;
         }
     });
 
@@ -434,20 +490,20 @@ module.exports = (client) => {
         
         // Create the visual team display
         const teamImageBuffer = await createTeamVisualization(team);
-        const attachment = new AttachmentBuilder(teamImageBuffer, { name: 'team-display.png' });
+        const attachment = new AttachmentBuilder(teamImageBuffer, { name: 'repo-squad-display.png' });
         
         const embed = new EmbedBuilder()
-            .setColor(totalMembers >= 5 ? '#00ff00' : '#ff4654')
-            .setTitle('🎯 Valorant Team Builder')
-            .setDescription(`**Team Leader:** ${team.leader.displayName}\n**Team Status:** ${totalMembers}/5 Players`)
-            .setImage('attachment://team-display.png')
+            .setColor(totalMembers >= TEAM_SIZE ? '#32cd32' : '#8b0000')
+            .setTitle('👻 REPO Squad Builder')
+            .setDescription(`**Squad Leader:** ${team.leader.displayName}\n**Squad Status:** ${totalMembers}/${TEAM_SIZE} Survivors`)
+            .setImage('attachment://repo-squad-display.png')
             .addFields({
-                name: '📋 Team Members',
+                name: '🔦 Horror Squad',
                 value: formatTeamMembersList(team),
                 inline: false
             })
             .setFooter({ 
-                text: totalMembers < 5 ? 'Click the buttons below to join or leave the team!' : 'Team is full! Ready to play!'
+                text: totalMembers < TEAM_SIZE ? 'Click the buttons below to join or leave the squad!' : 'Squad is ready! Time to face the horrors!'
             })
             .setTimestamp();
 
@@ -462,20 +518,20 @@ module.exports = (client) => {
         // Always use the full teamId in customId
         const joinButton = new ButtonBuilder()
             .setCustomId(`join_${teamId}`)
-            .setLabel('Join Team')
+            .setLabel('Join Squad')
             .setStyle(ButtonStyle.Success)
             .setEmoji('➕')
             .setDisabled(isFull);
 
         const leaveButton = new ButtonBuilder()
             .setCustomId(`leave_${teamId}`)
-            .setLabel('Leave Team')
+            .setLabel('Leave Squad')
             .setStyle(ButtonStyle.Danger)
             .setEmoji('➖');
 
         const disbandButton = new ButtonBuilder()
             .setCustomId(`disband_${teamId}`)
-            .setLabel('Disband Team')
+            .setLabel('Disband Squad')
             .setStyle(ButtonStyle.Secondary)
             .setEmoji('🗑️');
 
@@ -487,7 +543,7 @@ module.exports = (client) => {
         const members = [];
         
         // Add leader
-        members.push(`👑 **${team.leader.displayName}** (Leader)`);
+        members.push(`💀 **${team.leader.displayName}** (Squad Leader)`);
         
         // Add other members
         team.members.forEach((member, index) => {
@@ -495,9 +551,9 @@ module.exports = (client) => {
         });
 
         // Add empty slots count
-        const emptySlots = 5 - getTotalMembers(team);
+        const emptySlots = TEAM_SIZE - getTotalMembers(team);
         if (emptySlots > 0) {
-            members.push(`\n*${emptySlots} empty slot${emptySlots > 1 ? 's' : ''} remaining*`);
+            members.push(`\n*${emptySlots} survivor slot${emptySlots > 1 ? 's' : ''} available*`);
         }
 
         return members.join('\n');
@@ -505,21 +561,21 @@ module.exports = (client) => {
 
     // Helper function to get total team members
     function getTotalMembers(team) {
-        return 1 + team.members.length; // 1 for leader + members
+        return 1 + team.members.length;
     }
 
     // Helper function to create disbanded embed
     function createDisbandedEmbed() {
         return new EmbedBuilder()
-            .setColor('#ff0000')
-            .setTitle('❌ Team Disbanded')
-            .setDescription('This Valorant team has been disbanded by the leader.')
+            .setColor('#8b0000')
+            .setTitle('❌ REPO Squad Disbanded')
+            .setDescription('This horror squad has been disbanded by the squad leader.')
             .setTimestamp();
     }
 
     // Clean up old teams on startup (optional)
     client.once('ready', () => {
-        console.log('Valorant Team Builder with Visual Display loaded!');
+        console.log('REPO Squad Builder with Visual Display loaded!');
         // Clear any existing teams from memory on restart
         activeTeams.clear();
     });

@@ -197,6 +197,9 @@ module.exports = (client) => {
     }
 
     async function startBlackjackGame(message, userId, betAmount) {
+        // CRITICAL FIX: Deduct the initial bet from player's balance when game starts
+        updateEggBucks(userId, -betAmount);
+        
         const deck = createDeck();
         shuffle(deck);
 
@@ -235,7 +238,9 @@ module.exports = (client) => {
         // Check for natural blackjack
         if (playerScore === 21) {
             if (dealerScore === 21) {
-                // Tie
+                // Tie - return the bet
+                updateEggBucks(userId, betAmount);
+                
                 const finalCanvas = await createGameTable(playerHand, dealerHand, playerScore, dealerScore, 'tie', message.author.username, betAmount);
                 const finalAttachment = new AttachmentBuilder(finalCanvas.toBuffer(), { name: 'blackjack-result.png' });
                 
@@ -253,7 +258,7 @@ module.exports = (client) => {
                 
                 return message.channel.send({ embeds: [gameEmbed], files: [finalAttachment] });
             } else {
-                // Player blackjack wins
+                // Player blackjack wins - pay 3:2
                 const winnings = Math.floor(betAmount * 2.5);
                 updateEggBucks(userId, winnings);
                 
@@ -308,8 +313,7 @@ module.exports = (client) => {
                 playerScore = calculateHandValue(playerHand);
 
                 if (playerScore > 21) {
-                    // Player busts
-                    updateEggBucks(userId, -betAmount);
+                    // Player busts - house keeps the bet (already deducted)
                     updateHouse(betAmount);
                     
                     const finalCanvas = await createGameTable(playerHand, dealerHand, playerScore, dealerScore, 'bust', message.author.username, betAmount);
@@ -359,7 +363,7 @@ module.exports = (client) => {
                     playerScore = calculateHandValue(playerHand);
                     
                     if (playerScore > 21) {
-                        // Player busts after doubling
+                        // Player busts after doubling - house keeps both bets
                         updateHouse(actualBet);
                         
                         const finalCanvas = await createGameTable(playerHand, dealerHand, playerScore, dealerScore, 'bust', message.author.username, actualBet);
@@ -394,21 +398,20 @@ module.exports = (client) => {
                 let gameState = 'tie';
                 
                 if (dealerScore > 21 || playerScore > dealerScore) {
-                    // Player wins
+                    // Player wins - pay 2:1 (bet + winnings)
                     const winnings = actualBet * 2;
                     updateEggBucks(userId, winnings);
                     resultMessage = `🎉 You won E$${winnings}!`;
                     resultColor = '#00ff00';
                     gameState = 'win';
                 } else if (playerScore === dealerScore) {
-                    // Tie
-                    updateEggBucks(userId, actualBet); // Return the bet
+                    // Tie - return the bet
+                    updateEggBucks(userId, actualBet);
                     resultMessage = `🤝 It's a tie! You get your E$${actualBet} back.`;
                     resultColor = '#ffaa00';
                     gameState = 'tie';
                 } else {
-                    // Dealer wins
-                    updateEggBucks(userId, -actualBet); // Deduct from player
+                    // Dealer wins - house keeps the bet (already deducted)
                     updateHouse(actualBet);
                     resultMessage = `😢 You lost E$${actualBet}. Better luck next time!`;
                     resultColor = '#ff0000';

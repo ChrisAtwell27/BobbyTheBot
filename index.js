@@ -34,6 +34,12 @@ require('./events/activityAwardsHandler')(client);
 require('./events/russianRouletteHandler')(client);
 require('./events/gladiatorHandler')(client);
 require('./events/pokerHandler')(client);
+require('./events/repoTeamHandler')(client);
+require('./events/virtualPetHandler')(client);
+require('./events/helpHandler')(client);
+require('./events/kothHandler')(client);
+require('./events/moderationHandler')(client);
+require('./events/boosterRoleHandler')(client);
 
 // Start the bot
 client.once("ready", () => {
