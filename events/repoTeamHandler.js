@@ -283,22 +283,25 @@ module.exports = (client) => {
         }
     });
 
-    // Handle button interactions (only for team builder)
+    // Handle button interactions (FIXED - only handle REPO team buttons)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton()) return;
-        // Only handle REPO team builder interactions
+        
+        // CRITICAL FIX: Only handle REPO team buttons
+        if (!interaction.customId.startsWith('repo_')) {
+            return; // Not a REPO team button, ignore it
+        }
+        
         const parts = interaction.customId.split('_');
-        const action = parts[0];
-        // Always reconstruct teamId with repo_team_ prefix
-        const teamId = parts.slice(1).join('_');
-        const teamActions = ['join', 'leave', 'disband'];
-        if (!teamActions.includes(action)) return;
+        const action = parts[1]; // repo_join, repo_leave, repo_disband
+        const teamId = parts.slice(2).join('_'); // Reconstruct the team ID
+        const fullTeamId = `repo_team_${teamId}`;
         
-        const team = activeTeams.get(teamId);
+        const team = activeTeams.get(fullTeamId);
         
-        console.log('Button interaction:', interaction.customId);
-        console.log('Parsed action:', action, 'teamId:', teamId);
-        console.log('Looking for team:', teamId);
+        console.log('REPO Button interaction:', interaction.customId);
+        console.log('Parsed action:', action, 'teamId:', fullTeamId);
+        console.log('Looking for team:', fullTeamId);
         console.log('Active teams:', Array.from(activeTeams.keys()));
 
         if (!team) {
@@ -348,7 +351,7 @@ module.exports = (client) => {
                 // Update the team display first
                 const isFull = getTotalMembers(team) >= TEAM_SIZE;
                 const updatedEmbed = await createTeamEmbed(team);
-                const updatedComponents = createTeamButtons(teamId, isFull);
+                const updatedComponents = createTeamButtons(fullTeamId, isFull);
 
                 if (!interaction.replied && !interaction.deferred) {
                     await interaction.update({
@@ -390,7 +393,7 @@ module.exports = (client) => {
 
                     // Auto-delete team after 5 minutes when full
                     setTimeout(() => {
-                        activeTeams.delete(teamId);
+                        activeTeams.delete(fullTeamId);
                         interaction.message.delete().catch(() => {});
                     }, 5 * 60 * 1000);
                 }
@@ -419,7 +422,7 @@ module.exports = (client) => {
                 // Update the team display
                 const isFull = getTotalMembers(team) >= TEAM_SIZE;
                 const updatedEmbed = await createTeamEmbed(team);
-                const updatedComponents = createTeamButtons(teamId, isFull);
+                const updatedComponents = createTeamButtons(fullTeamId, isFull);
 
                 await interaction.update({
                     embeds: [updatedEmbed.embed],
@@ -442,7 +445,7 @@ module.exports = (client) => {
                 }
 
                 // Remove team from active teams first
-                activeTeams.delete(teamId);
+                activeTeams.delete(fullTeamId);
                 
                 // Try to update the interaction to show disbanded message
                 try {
@@ -513,24 +516,26 @@ module.exports = (client) => {
         };
     }
 
-    // Helper function to create team buttons
+    // Helper function to create team buttons (FIXED - use repo_ prefix)
     function createTeamButtons(teamId, isFull) {
-        // Always use the full teamId in customId
+        // Extract just the message ID from the full team ID
+        const messageId = teamId.replace('repo_team_', '');
+        
         const joinButton = new ButtonBuilder()
-            .setCustomId(`join_${teamId}`)
+            .setCustomId(`repo_join_${messageId}`)
             .setLabel('Join Squad')
             .setStyle(ButtonStyle.Success)
             .setEmoji('➕')
             .setDisabled(isFull);
 
         const leaveButton = new ButtonBuilder()
-            .setCustomId(`leave_${teamId}`)
+            .setCustomId(`repo_leave_${messageId}`)
             .setLabel('Leave Squad')
             .setStyle(ButtonStyle.Danger)
             .setEmoji('➖');
 
         const disbandButton = new ButtonBuilder()
-            .setCustomId(`disband_${teamId}`)
+            .setCustomId(`repo_disband_${messageId}`)
             .setLabel('Disband Squad')
             .setStyle(ButtonStyle.Secondary)
             .setEmoji('🗑️');
