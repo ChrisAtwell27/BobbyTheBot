@@ -7,7 +7,8 @@ module.exports = {
         minecraft: "1276294247108182016",
         lethalcompany: "1276296159564005416",
         miscgames: "1276296976182411335",
-        updates: "1276298066789535765"
+        updates: "1276298066789535765",
+        repo: "1395453341890248754"
     },
     roleMappings: {
         'EggGold': '818839698306236487',
@@ -17,7 +18,8 @@ module.exports = {
         'diamond': '818840981293891675',
         'Bracken': '1190377213342777474',
         '🔥': '1021080456223019108',
-        'pingsock': '701465164716703808'
+        'pingsock': '701465164716703808',
+        'mega_grin': '1349166787526397982'
     },
     topEggRoleId: '701309444562092113',
     thinIceRoleId: '1210273721705693217', // Replace with your Thin Ice role ID

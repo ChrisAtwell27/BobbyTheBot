@@ -556,6 +556,16 @@ module.exports = (client) => {
         return new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
     }
 
+    // Function to get a user's Bobby Bucks balance
+    function getBobbyBucks(userId) {
+        if (!fs.existsSync(bobbyBucksFilePath)) {
+            fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
+        }
+        const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8');
+        const userRecord = data.split('\n').find(line => line.startsWith(userId));
+        return userRecord ? parseInt(userRecord.split(':')[1], 10) : 0;
+    }
+
     // Function to update Bobby Bucks (same as in eggbuckHandler)
     function updateBobbyBucks(userId, amount) {
         if (!fs.existsSync(bobbyBucksFilePath)) {
@@ -606,8 +616,26 @@ module.exports = (client) => {
                         console.log(`${index + 1}. ${user.username}: ${user.score} points`);
                     });
                     
-                    // Award Bobby Bucks to the winner
-                    updateBobbyBucks(winner.userId, awardAmount);
+                    // Award Bobby Bucks to the winner with error handling and verification
+                    try {
+                        const oldBalance = getBobbyBucks(winner.userId);
+                        console.log(`${winner.username}'s balance before award: B${oldBalance}`);
+                        
+                        const newBalance = updateBobbyBucks(winner.userId, awardAmount);
+                        console.log(`${winner.username}'s balance after award: B${newBalance}`);
+                        console.log(`Successfully awarded ${awardAmount} Bobby Bucks to ${winner.username}`);
+                        
+                        // Verify the award was successful
+                        const verifyBalance = getBobbyBucks(winner.userId);
+                        if (verifyBalance !== newBalance) {
+                            console.error(`Balance verification failed! Expected: ${newBalance}, Actual: ${verifyBalance}`);
+                        } else {
+                            console.log(`Balance verification successful: B${verifyBalance}`);
+                        }
+                    } catch (error) {
+                        console.error(`Error awarding Bobby Bucks to ${winner.username}:`, error);
+                        continue; // Skip this guild if award fails
+                    }
                     
                     // Create winner announcement
                     const winnerCard = await createWinnerCard(winner.user, winner.activity, winner.score, guild);

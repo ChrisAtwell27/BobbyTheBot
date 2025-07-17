@@ -123,18 +123,19 @@ module.exports = (client) => {
         }
     });
     
-    // Admin command to test booster functionality
+    // Booster command to test booster functionality (changed from admin-only)
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
         if (!message.guild) return;
         
         const args = message.content.split(' ');
         
-        // Admin command to trigger booster welcome for testing
+        // Booster command to trigger booster welcome for testing
         if (args[0] === '!boosterrole') {
-            // Check if user has admin permissions
-            if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-                return message.reply('❌ You need Administrator permissions to use this command.');
+            // Check if user has booster role instead of admin permissions
+            const member = message.guild.members.cache.get(message.author.id);
+            if (!member || !member.roles.cache.some(role => role.name === config.boosterRoleName)) {
+                return message.reply('❌ You need the Server Booster role to use this command.');
             }
             
             let targetMember = message.member; // Default to command user
@@ -154,7 +155,7 @@ module.exports = (client) => {
             // Trigger the new booster handler
             await handleNewBooster(targetMember);
             
-            // Send confirmation to admin
+            // Send confirmation to booster
             const confirmEmbed = new EmbedBuilder()
                 .setColor(0x00FF00)
                 .setTitle('✅ Booster Welcome Triggered')
@@ -162,14 +163,14 @@ module.exports = (client) => {
                 .addFields(
                     { name: '🎯 Target User', value: `${targetMember.user.tag}`, inline: true },
                     { name: '📍 Channel', value: `#${config.boosterChannelName}`, inline: true },
-                    { name: '🔧 Admin', value: `${message.author.tag}`, inline: true }
+                    { name: '🚀 Booster', value: `${message.author.tag}`, inline: true }
                 )
                 .setFooter({ text: 'Testing Command' })
                 .setTimestamp();
             
             await message.reply({ embeds: [confirmEmbed] });
             
-            console.log(`🧪 Admin ${message.author.tag} triggered booster welcome for ${targetMember.user.tag}`);
+            console.log(`🧪 Booster ${message.author.tag} triggered booster welcome for ${targetMember.user.tag}`);
         }
     });
     
