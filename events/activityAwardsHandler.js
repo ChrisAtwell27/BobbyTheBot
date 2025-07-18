@@ -522,8 +522,18 @@ module.exports = (client) => {
             }
         }
         
-        // Sort by activity score (descending)
-        todayActivities.sort((a, b) => b.score - a.score);
+        // Sort by activity score (descending order - highest first)
+        todayActivities.sort((a, b) => {
+            const scoreA = Number(a.score);
+            const scoreB = Number(b.score);
+            return scoreB - scoreA; // This ensures highest score comes first
+        });
+        
+        // Debug logging to verify sorting
+        console.log('Top Activity Debug:');
+        todayActivities.slice(0, 5).forEach((activity, index) => {
+            console.log(`${index + 1}. ${activity.username}: ${activity.score} points`);
+        });
         
         return todayActivities.slice(0, limit);
     }
@@ -533,7 +543,12 @@ module.exports = (client) => {
         // Voice time is worth 1 point per minute, messages are worth 10 points each
         const voicePoints = Math.floor(activity.voiceTime / 60);
         const messagePoints = activity.messageCount * 10;
-        return voicePoints + messagePoints;
+        const totalScore = voicePoints + messagePoints;
+        
+        // Debug logging
+        console.log(`Activity Score Debug - Voice: ${activity.voiceTime}s (${voicePoints} pts), Messages: ${activity.messageCount} (${messagePoints} pts), Total: ${totalScore}`);
+        
+        return totalScore;
     }
 
     // Function to get current date string
@@ -571,11 +586,25 @@ module.exports = (client) => {
         // Get all guilds the bot is in
         for (const guild of client.guilds.cache.values()) {
             try {
-                const topActivity = await getTopActivity(guild, 1);
+                const topActivity = await getTopActivity(guild, 10); // Get top 10 for debugging
                 
-                if (topActivity.length > 0) {
-                    const winner = topActivity[0];
+                console.log(`Guild: ${guild.name} - Found ${topActivity.length} active users`);
+                
+                // Filter out users with 0 activity score
+                const validActivity = topActivity.filter(activity => activity.score > 0);
+                
+                if (validActivity.length > 0) {
+                    // Sort again to be absolutely sure (highest first)
+                    validActivity.sort((a, b) => Number(b.score) - Number(a.score));
+                    
+                    const winner = validActivity[0]; // Get the user with the highest score
                     const awardAmount = 5000;
+                    
+                    console.log(`Winner: ${winner.username} with ${winner.score} points`);
+                    console.log(`Top 5 users:`);
+                    validActivity.slice(0, 5).forEach((user, index) => {
+                        console.log(`${index + 1}. ${user.username}: ${user.score} points`);
+                    });
                     
                     // Award Bobby Bucks to the winner
                     updateBobbyBucks(winner.userId, awardAmount);
@@ -597,20 +626,21 @@ module.exports = (client) => {
                         .setFooter({ text: 'New day, new competition! Stay active to win!' })
                         .setTimestamp();
                     
-                    // Find a general channel to send the announcement
+                    // Find the bobby-games channel to send the announcement
                     const channel = guild.channels.cache.find(ch => 
-                        ch.name.includes('general') || 
-                        ch.name.includes('announcement') || 
-                        ch.name.includes('main')
-                    ) || guild.systemChannel;
+                        ch.name === 'bobby-games' || ch.name === 'bobby games'
+                    );
                     
                     if (channel && channel.isTextBased()) {
                         await channel.send({ embeds: [embed], files: [attachment] });
+                        console.log(`Daily winner announcement sent to #bobby-games in ${guild.name}`);
+                    } else {
+                        console.log(`Could not find #bobby-games channel in ${guild.name}`);
                     }
                     
                     console.log(`Daily winner in ${guild.name}: ${winner.username} with ${winner.score} points`);
                 } else {
-                    console.log(`No activity data found for ${guild.name}`);
+                    console.log(`No valid activity data found for ${guild.name}`);
                 }
             } catch (error) {
                 console.error(`Error processing daily reset for guild ${guild.name}:`, error);

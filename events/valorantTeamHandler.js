@@ -280,19 +280,25 @@ module.exports = (client) => {
         }
     });
 
-    // Handle button interactions (only for team builder)
+    // Handle button interactions (FIXED - only handle Valorant team buttons)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton()) return;
-        // Only handle team builder interactions
-        const parts = interaction.customId.split('_');
-        const action = parts[0];
-        // Always reconstruct teamId with valorant_team_ prefix
-        const teamId = parts.slice(1).join('_');
-        const team = activeTeams.get(teamId);
         
-        console.log('Button interaction:', interaction.customId);
-        console.log('Parsed action:', action, 'teamId:', teamId);
-        console.log('Looking for team:', teamId);
+        // CRITICAL FIX: Only handle Valorant team buttons
+        if (!interaction.customId.startsWith('valorant_')) {
+            return; // Not a Valorant team button, ignore it
+        }
+        
+        const parts = interaction.customId.split('_');
+        const action = parts[1]; // valorant_join, valorant_leave, valorant_disband
+        const teamId = parts.slice(2).join('_'); // Reconstruct the team ID
+        const fullTeamId = `valorant_team_${teamId}`;
+        
+        const team = activeTeams.get(fullTeamId);
+        
+        console.log('Valorant Button interaction:', interaction.customId);
+        console.log('Parsed action:', action, 'teamId:', fullTeamId);
+        console.log('Looking for team:', fullTeamId);
         console.log('Active teams:', Array.from(activeTeams.keys()));
 
         if (!team) {
@@ -333,7 +339,7 @@ module.exports = (client) => {
             // Update the team display first
             const isFull = getTotalMembers(team) >= 5;
             const updatedEmbed = await createTeamEmbed(team);
-            const updatedComponents = createTeamButtons(teamId, isFull);
+            const updatedComponents = createTeamButtons(fullTeamId, isFull);
 
             await interaction.update({
                 embeds: [updatedEmbed.embed],
@@ -361,7 +367,7 @@ module.exports = (client) => {
 
                 // Auto-delete team after 5 minutes when full
                 setTimeout(() => {
-                    activeTeams.delete(teamId);
+                    activeTeams.delete(fullTeamId);
                     interaction.message.delete().catch(() => {});
                 }, 5 * 60 * 1000);
             }
@@ -390,7 +396,7 @@ module.exports = (client) => {
             // Update the team display
             const isFull = getTotalMembers(team) >= 5;
             const updatedEmbed = await createTeamEmbed(team);
-            const updatedComponents = createTeamButtons(teamId, isFull);
+            const updatedComponents = createTeamButtons(fullTeamId, isFull);
 
             await interaction.update({
                 embeds: [updatedEmbed.embed],
@@ -413,7 +419,7 @@ module.exports = (client) => {
             }
 
             // Remove team and delete message
-            activeTeams.delete(teamId);
+            activeTeams.delete(fullTeamId);
             await interaction.update({
                 embeds: [createDisbandedEmbed()],
                 components: []
@@ -457,24 +463,26 @@ module.exports = (client) => {
         };
     }
 
-    // Helper function to create team buttons
+    // Helper function to create team buttons (FIXED - use valorant_ prefix)
     function createTeamButtons(teamId, isFull) {
-        // Always use the full teamId in customId
+        // Extract just the message ID from the full team ID
+        const messageId = teamId.replace('valorant_team_', '');
+        
         const joinButton = new ButtonBuilder()
-            .setCustomId(`join_${teamId}`)
+            .setCustomId(`valorant_join_${messageId}`)
             .setLabel('Join Team')
             .setStyle(ButtonStyle.Success)
             .setEmoji('➕')
             .setDisabled(isFull);
 
         const leaveButton = new ButtonBuilder()
-            .setCustomId(`leave_${teamId}`)
+            .setCustomId(`valorant_leave_${messageId}`)
             .setLabel('Leave Team')
             .setStyle(ButtonStyle.Danger)
             .setEmoji('➖');
 
         const disbandButton = new ButtonBuilder()
-            .setCustomId(`disband_${teamId}`)
+            .setCustomId(`valorant_disband_${messageId}`)
             .setLabel('Disband Team')
             .setStyle(ButtonStyle.Secondary)
             .setEmoji('🗑️');
