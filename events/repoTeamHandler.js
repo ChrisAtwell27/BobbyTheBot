@@ -374,843 +374,230 @@ module.exports = (client) => {
         }
     });
 
-    // Handle button interactions for donations
+    // Handle button interactions (only for team builder)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton()) return;
-
-        // Handle donation button clicks
-        if (interaction.customId.startsWith('donate_')) {
-            const parts = interaction.customId.split('_');
-            const beggarId = parts[1];
-            const messageId = parts[2];
-            const donorId = interaction.user.id;
-
-            // Prevent self-donation
-            if (donorId === beggarId) {
-                return interaction.reply({
-                    content: '❌ You cannot donate to yourself!',
-                    ephemeral: true
-                });
-            }
-
-            // Check if donor has enough money (at least 1 Bobby Buck)
-            const donorBalance = getBobbyBucks(donorId);
-            if (donorBalance < 1) {
-                return interaction.reply({
-                    content: '❌ You need at least 1 Bobby Buck to donate!',
-                    ephemeral: true
-                });
-            }
-
-            // Generate random donation amount (1-10)
-            const donationAmount = Math.floor(Math.random() * 10) + 1;
-            
-            // Check if donor has enough for the random amount
-            const actualDonation = Math.min(donationAmount, donorBalance);
-            
-            // Process the donation
-            const donorOldBalance = donorBalance;
-            const beggarOldBalance = getBobbyBucks(beggarId);
-            
-            updateBobbyBucks(donorId, -actualDonation);
-            updateBobbyBucks(beggarId, actualDonation);
-            
-            const donorNewBalance = getBobbyBucks(donorId);
-            const beggarNewBalance = getBobbyBucks(beggarId);
-
-            // Get user objects
-            const beggar = await interaction.guild.members.fetch(beggarId);
-            const donor = interaction.user;
-
-            // Create donation receipt
-            const donationReceipt = await createDonationReceipt(donor, beggar.user, actualDonation, donorOldBalance, donorNewBalance, beggarOldBalance, beggarNewBalance);
-            const attachment = new AttachmentBuilder(donationReceipt.toBuffer(), { name: 'donation-receipt.png' });
-
-            const embed = new EmbedBuilder()
-                .setTitle('💝 Donation Successful - Good Karma!')
-                .setColor('#00ff00')
-                .setDescription(`**${donor.username}** donated to **${beggar.user.username}**!`)
-                .setImage('attachment://donation-receipt.png')
-                .addFields(
-                    { name: '💰 Amount Donated', value: `**B${actualDonation.toLocaleString()}**`, inline: true },
-                    { name: '💳 Your Balance', value: `B${donorNewBalance.toLocaleString()}`, inline: true },
-                    { name: '🎯 Random Roll', value: `Rolled: ${donationAmount}`, inline: true }
-                )
-                .setFooter({ text: 'Thank you for your generosity! ❤️' })
-                .setTimestamp();
-
-            await interaction.reply({ embeds: [embed], files: [attachment] });
-
-            // Update the original tip jar message to show latest donation
-            try {
-                const originalMessage = await interaction.channel.messages.fetch(messageId);
-                const updatedTipJar = await createTipJarCard(beggar.user, beggarNewBalance, donor.username, actualDonation);
-                const updatedAttachment = new AttachmentBuilder(updatedTipJar.toBuffer(), { name: 'tip-jar-updated.png' });
-
-                const updatedEmbed = new EmbedBuilder()
-                    .setTitle('🥺 Please Help - Tip Jar')
-                    .setColor('#ff9500')
-                    .setDescription(`**${beggar.user.username}** is asking for your kindness!`)
-                    .setImage('attachment://tip-jar-updated.png')
-                    .addFields(
-                        { name: '💳 Current Balance', value: `B${beggarNewBalance.toLocaleString()}`, inline: true },
-                        { name: '🎲 Donation Range', value: '1-10 Bobby Bucks', inline: true },
-                        { name: '🕐 Status', value: 'Accepting donations', inline: true }
-                    )
-                    .setFooter({ text: `Latest: ${donor.username} donated B${actualDonation}!` })
-                    .setTimestamp();
-
-                await originalMessage.edit({ embeds: [updatedEmbed], files: [updatedAttachment] });
-            } catch (error) {
-                console.error('Error updating tip jar:', error);
-            }
-        }
-    });
-
-    // Award 1000 Bobby Bucks to new members on join
-    client.on('guildMemberAdd', async (member) => {
-        if (member.user.bot) return; // Don't award bots
-        updateBobbyBucks(member.id, 1000);
-        // Optionally, send a welcome message
-        try {
-            await member.send('Welcome to the server! You have been awarded 1000 Bobby Bucks. Type !balance to check your account.');
-        } catch (e) {
-            // Ignore DM errors (user may have DMs off)
-        }
-    });
-
-    // Create balance card visualization
-    async function createBalanceCard(user, balance) {
-        const canvas = createCanvas(500, 300);
-        const ctx = canvas.getContext('2d');
+        // Only handle REPO team builder interactions
+        const parts = interaction.customId.split('_');
+        const action = parts[0];
+        // Always reconstruct teamId with repo_team_ prefix
+        const teamId = parts.slice(1).join('_');
+        const teamActions = ['join', 'leave', 'disband'];
+        if (!teamActions.includes(action)) return;
         
-        // Determine card tier
-        const cardTier = balance > 10000 ? 'PLATINUM' : balance > 5000 ? 'GOLD' : balance > 1000 ? 'SILVER' : 'BRONZE';
+        const team = activeTeams.get(teamId);
         
-        // Card background gradient with tier-specific colors
-        const gradient = ctx.createLinearGradient(0, 0, 500, 300);
-        if (cardTier === 'PLATINUM') {
-            gradient.addColorStop(0, '#e8e8e8');
-            gradient.addColorStop(0.5, '#c0c0c0');
-            gradient.addColorStop(1, '#a8a8a8');
-        } else if (cardTier === 'GOLD') {
-            gradient.addColorStop(0, '#ffd700');
-            gradient.addColorStop(0.5, '#ffb347');
-            gradient.addColorStop(1, '#ff8c00');
-        } else if (cardTier === 'SILVER') {
-            gradient.addColorStop(0, '#c0c0c0');
-            gradient.addColorStop(0.5, '#a0a0a0');
-            gradient.addColorStop(1, '#808080');
-        } else {
-            gradient.addColorStop(0, '#cd7f32');
-            gradient.addColorStop(0.5, '#a0522d');
-            gradient.addColorStop(1, '#8b4513');
-        }
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 500, 300);
-        
-        // Add special patterns based on tier
-        if (cardTier === 'PLATINUM') {
-            // Diamond pattern for Platinum
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-            for (let x = 0; x < 500; x += 40) {
-                for (let y = 0; y < 300; y += 40) {
-                    ctx.save();
-                    ctx.translate(x + 20, y + 20);
-                    ctx.rotate(Math.PI / 4);
-                    ctx.fillRect(-8, -8, 16, 16);
-                    ctx.restore();
+        console.log('Button interaction:', interaction.customId);
+        console.log('Parsed action:', action, 'teamId:', teamId);
+        console.log('Looking for team:', teamId);
+        console.log('Active teams:', Array.from(activeTeams.keys()));
+
+        if (!team) {
+            // Team not found, reply with error and do not crash
+            if (!interaction.replied && !interaction.deferred) {
+                try {
+                    await interaction.reply({
+                        content: '❌ This REPO squad is no longer active or has expired. Please create a new squad!',
+                        ephemeral: true
+                    });
+                } catch (err) {
+                    console.error('Error replying to interaction (team missing):', err);
                 }
             }
-            
-            // Sparkle effect
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-            for (let i = 0; i < 20; i++) {
-                const x = Math.random() * 500;
-                const y = Math.random() * 300;
-                ctx.beginPath();
-                ctx.arc(x, y, 2, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        } else if (cardTier === 'GOLD') {
-            // Radial burst pattern for Gold
-            ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
-            ctx.lineWidth = 2;
-            const centerX = 250;
-            const centerY = 150;
-            for (let i = 0; i < 12; i++) {
-                const angle = (i * Math.PI * 2) / 12;
-                ctx.beginPath();
-                ctx.moveTo(centerX, centerY);
-                ctx.lineTo(centerX + Math.cos(angle) * 120, centerY + Math.sin(angle) * 80);
-                ctx.stroke();
-            }
-            
-            // Golden particles
-            ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
-            for (let i = 0; i < 15; i++) {
-                const x = Math.random() * 500;
-                const y = Math.random() * 300;
-                ctx.beginPath();
-                ctx.arc(x, y, 3, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        } else if (cardTier === 'SILVER') {
-            // Crosshatch pattern for Silver
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-            ctx.lineWidth = 1;
-            for (let i = 0; i < 500; i += 30) {
-                ctx.beginPath();
-                ctx.moveTo(i, 0);
-                ctx.lineTo(i + 150, 300);
-                ctx.stroke();
-                
-                ctx.beginPath();
-                ctx.moveTo(i, 300);
-                ctx.lineTo(i + 150, 0);
-                ctx.stroke();
-            }
-        } else {
-            // Simple dots pattern for Bronze
-            ctx.fillStyle = 'rgba(139, 69, 19, 0.3)';
-            for (let x = 20; x < 500; x += 60) {
-                for (let y = 20; y < 300; y += 60) {
-                    ctx.beginPath();
-                    ctx.arc(x, y, 5, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            }
+            return;
         }
-        
-        // Card border with tier-specific styling
-        let borderColor, borderWidth;
-        if (cardTier === 'PLATINUM') {
-            borderColor = '#e5e5e5';
-            borderWidth = 4;
-            // Double border for platinum
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(8, 8, 484, 284);
-        } else if (cardTier === 'GOLD') {
-            borderColor = '#ffd700';
-            borderWidth = 4;
-        } else if (cardTier === 'SILVER') {
-            borderColor = '#c0c0c0';
-            borderWidth = 3;
-        } else {
-            borderColor = '#8b4513';
-            borderWidth = 2;
-        }
-        
-        ctx.strokeStyle = borderColor;
-        ctx.lineWidth = borderWidth;
-        ctx.strokeRect(10, 10, 480, 280);
-        
-        // Bank logo area with tier-specific colors
-        const logoColor = cardTier === 'PLATINUM' ? '#333333' : 
-                         cardTier === 'GOLD' ? '#8b4513' : 
-                         cardTier === 'SILVER' ? '#2c2c2c' : '#ffffff';
-        ctx.fillStyle = logoColor;
-        ctx.font = 'bold 20px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillText('🏦 BOBBY BUCKS BANK', 30, 45);
-        
-        // Tier indicator with special styling
-        if (cardTier === 'PLATINUM') {
-            ctx.fillStyle = '#333333';
-            ctx.font = 'bold 14px Arial';
-            ctx.fillText('💎 PLATINUM ELITE 💎', 30, 65);
-        } else if (cardTier === 'GOLD') {
-            ctx.fillStyle = '#8b4513';
-            ctx.font = 'bold 14px Arial';
-            ctx.fillText('⭐ GOLD PREMIUM ⭐', 30, 65);
-        }
-        
+
+        const userId = interaction.user.id;
+        const userInfo = {
+            id: userId,
+            username: interaction.user.username,
+            displayName: interaction.user.displayName || interaction.user.username,
+            avatarURL: interaction.user.displayAvatarURL({ extension: 'png', size: 128 })
+        };
+
         try {
-            // User avatar with tier-specific border effects
-            const avatarURL = user.displayAvatarURL({ extension: 'png', size: 128 });
-            const avatar = await loadImageFromURL(avatarURL);
-            
-            // Special avatar effects for higher tiers
-            if (cardTier === 'PLATINUM') {
-                // Glowing effect for platinum
-                ctx.shadowColor = '#ffffff';
-                ctx.shadowBlur = 20;
-            } else if (cardTier === 'GOLD') {
-                // Golden glow
-                ctx.shadowColor = '#ffd700';
-                ctx.shadowBlur = 15;
-            }
-            
-            // Circular avatar
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(420, 80, 40, 0, Math.PI * 2);
-            ctx.clip();
-            ctx.drawImage(avatar, 380, 40, 80, 80);
-            ctx.restore();
-            
-            // Reset shadow
-            ctx.shadowBlur = 0;
-            
-            // Avatar border with tier styling
-            if (cardTier === 'PLATINUM') {
-                // Triple border for platinum
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.arc(420, 80, 42, 0, Math.PI * 2);
-                ctx.stroke();
+            if (action === 'join') {
+                // Check if user is already in team
+                if (userId === team.leader.id || team.members.some(member => member.id === userId)) {
+                    return await interaction.reply({
+                        content: '❌ You are already in this REPO squad!',
+                        ephemeral: true
+                    });
+                }
+
+                // Check if team is full
+                if (getTotalMembers(team) >= TEAM_SIZE) {
+                    return await interaction.reply({
+                        content: '❌ This REPO squad is already full!',
+                        ephemeral: true
+                    });
+                }
+
+                // Add user to team
+                team.members.push(userInfo);
+
+                // Update the team display first
+                const isFull = getTotalMembers(team) >= TEAM_SIZE;
+                const updatedEmbed = await createTeamEmbed(team);
+                const updatedComponents = createTeamButtons(teamId, isFull);
+
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.update({
+                        embeds: [updatedEmbed.embed],
+                        files: updatedEmbed.files,
+                        components: [updatedComponents]
+                    });
+
+                    if (isFull) {
+                        const celebrationEmbed = new EmbedBuilder()
+                            .setColor('#32cd32')
+                            .setTitle('🎉 REPO SQUAD COMPLETE!')
+                            .setDescription('Your horror squad is ready to face the darkness! Stay together and survive!')
+                            .setTimestamp();
+
+                        await interaction.followUp({
+                            embeds: [celebrationEmbed]
+                        });
+                    }
+                }
+
+                // If team is full, celebrate!
+                if (isFull) {
+                    // Clear the resend timer since team is full
+                    if (team.resendTimer) {
+                        clearTimeout(team.resendTimer);
+                        team.resendTimer = null;
+                    }
+                    
+                    const celebrationEmbed = new EmbedBuilder()
+                        .setColor('#32cd32')
+                        .setTitle('🎉 REPO SQUAD COMPLETE!')
+                        .setDescription('Your horror squad is ready to face the darkness! Stay together and survive!')
+                        .setTimestamp();
+
+                    await interaction.followUp({
+                        embeds: [celebrationEmbed]
+                    });
+
+                    // Auto-delete team after 5 minutes when full
+                    setTimeout(() => {
+                        activeTeams.delete(teamId);
+                        interaction.message.delete().catch(() => {});
+                    }, 5 * 60 * 1000);
+                }
+
+            } else if (action === 'leave') {
+                // Check if user is the leader
+                if (userId === team.leader.id) {
+                    return await interaction.reply({
+                        content: '❌ Squad leaders cannot abandon their team! The squad will auto-delete after 30 minutes if not full.',
+                        ephemeral: true
+                    });
+                }
+
+                // Check if user is in team
+                const memberIndex = team.members.findIndex(member => member.id === userId);
+                if (memberIndex === -1) {
+                    return await interaction.reply({
+                        content: '❌ You are not in this REPO squad!',
+                        ephemeral: true
+                    });
+                }
+
+                // Remove user from team
+                team.members.splice(memberIndex, 1);
+
+                // Update the team display
+                const isFull = getTotalMembers(team) >= TEAM_SIZE;
+                const updatedEmbed = await createTeamEmbed(team);
+                const updatedComponents = createTeamButtons(teamId, isFull);
+
+                await interaction.update({
+                    embeds: [updatedEmbed.embed],
+                    files: updatedEmbed.files,
+                    components: [updatedComponents]
+                });
+
+            } else if (action === 'disband') {
+                // Only leader can disband
+                if (userId !== team.leader.id) {
+                    return await interaction.reply({
+                        content: '❌ Only the squad leader can disband the team!',
+                        ephemeral: true
+                    });
+                }
+
+                // Clear the resend timer before disbanding
+                if (team.resendTimer) {
+                    clearTimeout(team.resendTimer);
+                }
+
+                // Remove team from active teams first
+                activeTeams.delete(teamId);
                 
-                ctx.strokeStyle = '#e5e5e5';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(420, 80, 38, 0, Math.PI * 2);
-                ctx.stroke();
-            } else {
-                ctx.strokeStyle = borderColor;
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.arc(420, 80, 40, 0, Math.PI * 2);
-                ctx.stroke();
+                // Try to update the interaction to show disbanded message
+                try {
+                    await interaction.update({
+                        embeds: [createDisbandedEmbed()],
+                        components: []
+                    });
+
+                    // Delete the message after 5 seconds
+                    setTimeout(() => {
+                        interaction.message.delete().catch(() => {});
+                    }, 5000);
+                } catch (updateError) {
+                    console.error('Error updating interaction for disband:', updateError);
+                    // If update fails, try to delete the message directly
+                    try {
+                        await interaction.message.delete();
+                    } catch (deleteError) {
+                        console.error('Error deleting message after failed update:', deleteError);
+                    }
+                }
+
+                return;
             }
         } catch (error) {
-            // Fallback avatar with tier colors
-            const avatarColor = cardTier === 'PLATINUM' ? '#e5e5e5' :
-                              cardTier === 'GOLD' ? '#ffd700' :
-                              cardTier === 'SILVER' ? '#c0c0c0' : '#7289da';
-            ctx.fillStyle = avatarColor;
-            ctx.beginPath();
-            ctx.arc(420, 80, 40, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '30px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('👤', 420, 90);
-        }
-        
-        // Account holder name with tier-appropriate colors
-        const textColor = cardTier === 'PLATINUM' ? '#333333' :
-                         cardTier === 'GOLD' ? '#8b4513' :
-                         cardTier === 'SILVER' ? '#2c2c2c' : '#ffffff';
-        ctx.fillStyle = textColor;
-        ctx.font = 'bold 24px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillText('ACCOUNT HOLDER', 30, 90);
-        ctx.font = '20px Arial';
-        ctx.fillText(user.username.toUpperCase(), 30, 115);
-        
-        // Account number (fake) with appropriate contrast
-        ctx.font = '14px Arial';
-        ctx.fillStyle = cardTier === 'BRONZE' ? '#cccccc' : 'rgba(0,0,0,0.6)';
-        ctx.fillText(`ACCOUNT: **** **** **** ${user.id.slice(-4)}`, 30, 140);
-        
-        // Balance with tier-specific styling
-        const balanceColor = cardTier === 'PLATINUM' ? '#333333' :
-                           cardTier === 'GOLD' ? '#8b4513' :
-                           cardTier === 'SILVER' ? '#2c2c2c' : '#ffd700';
-        ctx.fillStyle = balanceColor;
-        ctx.font = 'bold 18px Arial';
-        ctx.fillText('CURRENT BALANCE', 30, 180);
-        
-        // Special balance display for Platinum
-        if (cardTier === 'PLATINUM') {
-            ctx.font = 'bold 40px Arial';
-            ctx.fillStyle = '#333333';
-            ctx.fillText(`B${balance.toLocaleString()}`, 30, 220);
-            // Add subtle glow effect
-            ctx.shadowColor = '#ffffff';
-            ctx.shadowBlur = 5;
-            ctx.fillText(`B${balance.toLocaleString()}`, 30, 220);
-            ctx.shadowBlur = 0;
-        } else {
-            ctx.font = 'bold 36px Arial';
-            ctx.fillText(`B${balance.toLocaleString()}`, 30, 220);
-        }
-        
-        // Card type with special symbols
-        const tierSymbols = {
-            'PLATINUM': '💎',
-            'GOLD': '⭐',
-            'SILVER': '🥈',
-            'BRONZE': '🥉'
-        };
-        
-        ctx.fillStyle = textColor;
-        ctx.font = 'bold 16px Arial';
-        ctx.textAlign = 'right';
-        ctx.fillText(`${tierSymbols[cardTier]} ${cardTier} MEMBER`, 470, 250);
-        
-        // Valid thru (fake)
-        ctx.font = '12px Arial';
-        ctx.fillText('VALID THRU 12/99', 470, 270);
-        
-        return canvas;
-    }
-
-    // Create leaderboard visualization
-    async function createLeaderboard(topBalances, guild) {
-        const canvas = createCanvas(600, 400 + (topBalances.length * 35));
-        const ctx = canvas.getContext('2d');
-        
-        // Background
-        const gradient = ctx.createLinearGradient(0, 0, 600, canvas.height);
-        gradient.addColorStop(0, '#2c1810');
-        gradient.addColorStop(1, '#1a0f08');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 600, canvas.height);
-        
-        // Header
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 32px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('🏆 BOBBY BUCKS LEADERBOARD', 300, 50);
-        
-        // Server name
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '18px Arial';
-        ctx.fillText(guild.name, 300, 80);
-        
-        // Header bar
-        ctx.fillStyle = '#ffd700';
-        ctx.fillRect(20, 100, 560, 3);
-        
-        // Leaderboard entries
-        for (let i = 0; i < topBalances.length; i++) {
-            const entry = topBalances[i];
-            const y = 140 + (i * 35);
+            console.error('Error handling button interaction:', error);
             
-            // Rank background
-            let rankColor = '#4a4a4a';
-            if (i === 0) rankColor = '#ffd700'; // Gold
-            else if (i === 1) rankColor = '#c0c0c0'; // Silver
-            else if (i === 2) rankColor = '#cd7f32'; // Bronze
-            
-            ctx.fillStyle = rankColor;
-            ctx.fillRect(30, y - 20, 40, 30);
-            
-            // Rank number
-            ctx.fillStyle = '#000000';
-            ctx.font = 'bold 16px Arial';
-            ctx.textAlign = 'center';
-            const rankIcon = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`;
-            ctx.fillText(rankIcon, 50, y - 5);
-            
-            // Username
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 20px Arial';
-            ctx.textAlign = 'left';
-            ctx.fillText(entry.username, 90, y - 5);
-            
-            // Balance
-            ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 18px Arial';
-            ctx.textAlign = 'right';
-            ctx.fillText(`B${entry.balance.toLocaleString()}`, 570, y - 5);
-            
-            // Separator line
-            if (i < topBalances.length - 1) {
-                ctx.strokeStyle = '#444444';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(30, y + 10);
-                ctx.lineTo(570, y + 10);
-                ctx.stroke();
-            }
-        }
-        
-        return canvas;
-    }
-
-    // Create transaction receipt
-    async function createTransactionReceipt(user, amount, oldBalance, newBalance, type, admin) {
-        const canvas = createCanvas(400, 350);
-        const ctx = canvas.getContext('2d');
-        
-        // Receipt background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, 400, 350);
-        
-        // Receipt header
-        ctx.fillStyle = '#000000';
-        ctx.font = 'bold 24px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('🏦 BOBBY BUCKS BANK', 200, 30);
-        ctx.font = '16px Arial';
-        ctx.fillText('TRANSACTION RECEIPT', 200, 50);
-        
-        // Dashed line
-        ctx.strokeStyle = '#cccccc';
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.moveTo(20, 70);
-        ctx.lineTo(380, 70);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        
-        // Transaction details
-        ctx.font = 'bold 18px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillText('TRANSACTION DETAILS', 20, 100);
-        
-        ctx.font = '14px Arial';
-        ctx.fillText(`Type: ${type}`, 20, 130);
-        ctx.fillText(`User: ${user.username}`, 20, 150);
-        ctx.fillText(`Amount: ${type === 'SPEND' ? '-' : '+'}B${amount.toLocaleString()}`, 20, 170);
-        ctx.fillText(`Previous Balance: B${oldBalance.toLocaleString()}`, 20, 190);
-        ctx.fillText(`New Balance: B${newBalance.toLocaleString()}`, 20, 210);
-        if (admin && type === 'AWARD') {
-            ctx.fillText(`Authorized by: ${admin.username}`, 20, 230);
-        }
-        
-        // Transaction ID (fake)
-        ctx.fillText(`Transaction ID: ${Date.now().toString().slice(-8)}`, 20, 250);
-        ctx.fillText(`Date: ${new Date().toLocaleString()}`, 20, 270);
-        
-        // Footer
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Thank you for banking with Bobby Bucks Bank!', 200, 310);
-        ctx.fillText('Questions? Contact support at #help', 200, 330);
-        
-        return canvas;
-    }
-
-    // Create insufficient funds card
-    async function createInsufficientFundsCard(user, balance, attemptedAmount) {
-        const canvas = createCanvas(400, 250);
-        const ctx = canvas.getContext('2d');
-        
-        // Error background
-        const gradient = ctx.createLinearGradient(0, 0, 400, 250);
-        gradient.addColorStop(0, '#ff4444');
-        gradient.addColorStop(1, '#cc0000');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 400, 250);
-        
-        // Error icon
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 48px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('❌', 200, 70);
-        
-        // Error message
-        ctx.font = 'bold 24px Arial';
-        ctx.fillText('INSUFFICIENT FUNDS', 200, 110);
-        
-        ctx.font = '16px Arial';
-        ctx.fillText(`Your balance: B${balance.toLocaleString()}`, 200, 140);
-        ctx.fillText(`Attempted: B${attemptedAmount.toLocaleString()}`, 200, 160);
-        ctx.fillText(`Needed: B${(attemptedAmount - balance).toLocaleString()}`, 200, 180);
-        
-        ctx.font = '14px Arial';
-        ctx.fillText('Try earning more through casino games!', 200, 210);
-        
-        return canvas;
-    }
-
-    // Create mass award card
-    async function createMassAwardCard(amount, membersCount, admin) {
-        const canvas = createCanvas(500, 300);
-        const ctx = canvas.getContext('2d');
-        
-        // Celebration background
-        const gradient = ctx.createRadialGradient(250, 150, 0, 250, 150, 250);
-        gradient.addColorStop(0, '#ffd700');
-        gradient.addColorStop(1, '#ff8c00');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 500, 300);
-        
-        // Celebration effect
-        ctx.fillStyle = '#ffffff';
-        for (let i = 0; i < 50; i++) {
-            const x = Math.random() * 500;
-            const y = Math.random() * 300;
-            ctx.beginPath();
-            ctx.arc(x, y, Math.random() * 3, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        
-        // Main text
-        ctx.fillStyle = '#000000';
-        ctx.font = 'bold 32px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('🎉 ECONOMIC STIMULUS!', 250, 80);
-        
-        ctx.font = 'bold 24px Arial';
-        ctx.fillText(`B${amount.toLocaleString()} per person!`, 250, 120);
-        
-        ctx.font = '20px Arial';
-        ctx.fillText(`${membersCount} members affected`, 250, 150);
-        
-        ctx.font = '18px Arial';
-        ctx.fillText(`Total distributed: B${(amount * membersCount).toLocaleString()}`, 250, 180);
-        
-        ctx.font = '14px Arial';
-        ctx.fillText(`Authorized by: ${admin.username}`, 250, 220);
-        
-        return canvas;
-    }
-
-    // Create economy statistics chart
-    async function createEconomyChart(stats) {
-        const canvas = createCanvas(600, 400);
-        const ctx = canvas.getContext('2d');
-        
-        // Background
-        const gradient = ctx.createLinearGradient(0, 0, 600, 400);
-        gradient.addColorStop(0, '#2c3e50');
-        gradient.addColorStop(1, '#34495e');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 600, 400);
-        
-        // Title
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 24px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('📊 SERVER ECONOMY OVERVIEW', 300, 30);
-        
-        // Stats boxes
-        const boxes = [
-            { label: 'Total Economy', value: `B${stats.totalEconomy.toLocaleString()}`, color: '#3498db' },
-            { label: 'House Balance', value: `B${stats.houseBalance.toLocaleString()}`, color: '#e74c3c' },
-            { label: 'Average Balance', value: `B${stats.averageBalance.toLocaleString()}`, color: '#2ecc71' },
-            { label: 'Active Users', value: stats.activeUsers.toString(), color: '#f39c12' }
-        ];
-        
-        boxes.forEach((box, index) => {
-            const x = 50 + (index % 2) * 250;
-            const y = 80 + Math.floor(index / 2) * 120;
-            
-            // Box background
-            ctx.fillStyle = box.color;
-            ctx.fillRect(x, y, 200, 80);
-            
-            // Box border
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(x, y, 200, 80);
-            
-            // Label
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(box.label, x + 100, y + 25);
-            
-            // Value
-            ctx.font = 'bold 18px Arial';
-            ctx.fillText(box.value, x + 100, y + 50);
-        });
-        
-        // Simple pie chart for wealth distribution
-        const centerX = 450;
-        const centerY = 320;
-        const radius = 60;
-        
-        // Wealth categories
-        const wealthy = stats.millionaires;
-        const middle = Math.max(0, stats.activeUsers - wealthy - stats.poorUsers);
-        const poor = stats.poorUsers;
-        const total = wealthy + middle + poor;
-        
-        if (total > 0) {
-            let currentAngle = 0;
-            
-            // Wealthy slice
-            const wealthyAngle = (wealthy / total) * 2 * Math.PI;
-            ctx.fillStyle = '#f1c40f';
-            ctx.beginPath();
-            ctx.moveTo(centerX, centerY);
-            ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + wealthyAngle);
-            ctx.closePath();
-            ctx.fill();
-            currentAngle += wealthyAngle;
-            
-            // Middle class slice
-            const middleAngle = (middle / total) * 2 * Math.PI;
-            ctx.fillStyle = '#3498db';
-            ctx.beginPath();
-            ctx.moveTo(centerX, centerY);
-            ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + middleAngle);
-            ctx.closePath();
-            ctx.fill();
-            currentAngle += middleAngle;
-            
-            // Poor slice
-            const poorAngle = (poor / total) * 2 * Math.PI;
-            ctx.fillStyle = '#e74c3c';
-            ctx.beginPath();
-            ctx.moveTo(centerX, centerY);
-            ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + poorAngle);
-            ctx.closePath();
-            ctx.fill();
-        }
-        
-        // Chart title
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Wealth Distribution', centerX, centerY + radius + 20);
-        
-        return canvas;
-    }
-
-    // Function to get a user's Bobby Bucks balance
-    function getBobbyBucks(userId) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
-        }
-        const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        return userRecord ? parseInt(userRecord.split(':')[1], 10) : 0;
-    }
-
-    // Function to update a user's Bobby Bucks balance
-    function updateBobbyBucks(userId, amount) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
-        }
-
-        let data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        let newBalance;
-
-        if (userRecord) {
-            const currentBalance = parseInt(userRecord.split(':')[1], 10);
-            newBalance = currentBalance + amount;
-            data = data.replace(userRecord, `${userId}:${newBalance}`);
-        } else {
-            newBalance = amount;
-            data += `\n${userId}:${newBalance}`;
-        }
-
-        fs.writeFileSync(bobbyBucksFilePath, data.trim(), 'utf-8');
-        return newBalance;
-    }
-
-    // Function to set a user's Bobby Bucks balance directly
-    function setBobbyBucks(userId, amount) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
-        }
-
-        let data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-
-        if (userRecord) {
-            data = data.replace(userRecord, `${userId}:${amount}`);
-        } else {
-            data += `\n${userId}:${amount}`;
-        }
-
-        fs.writeFileSync(bobbyBucksFilePath, data.trim(), 'utf-8');
-    }
-
-    // Functions to handle the House balance
-    function getHouseBalance() {
-        if (!fs.existsSync(houseFilePath)) {
-            fs.writeFileSync(houseFilePath, '0', 'utf-8');
-        }
-        return parseInt(fs.readFileSync(houseFilePath, 'utf-8'), 10);
-    }
-
-    function updateHouse(amount) {
-        const houseBalance = getHouseBalance();
-        const newBalance = houseBalance + amount;
-        fs.writeFileSync(houseFilePath, newBalance.toString(), 'utf-8');
-    }
-
-    // Function to get top balances for leaderboard (fetches usernames for top N)
-    async function getTopBalances(guild, limit = 10) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            return [];
-        }
-        const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
-        if (!data) return [];
-        const balances = [];
-        const lines = data.split('\n').filter(line => line.includes(':'));
-        for (const line of lines) {
-            const [userId, balance] = line.split(':');
-            balances.push({
-                userId: userId,
-                balance: parseInt(balance, 10)
-            });
-        }
-        // Sort by balance descending
-        balances.sort((a, b) => b.balance - a.balance);
-        // Fetch usernames for top N
-        for (let i = 0; i < Math.min(limit, balances.length); i++) {
-            let member = guild.members.cache.get(balances[i].userId);
-            if (!member) {
-                try {
-                    member = await guild.members.fetch(balances[i].userId);
-                } catch (e) {
-                    member = null;
+            // Try to respond with an error message if we haven't responded yet
+            try {
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.reply({
+                        content: '❌ An error occurred processing your request. Please try again.',
+                        ephemeral: true
+                    });
                 }
-            }
-            balances[i].username = member ? member.user.username : `Unknown (${balances[i].userId})`;
-            balances[i].isBot = member ? member.user.bot : false;
-        }
-        // For others, use cache only
-        for (let i = limit; i < balances.length; i++) {
-            let member = guild.members.cache.get(balances[i].userId);
-            balances[i].username = member ? member.user.username : `Unknown (${balances[i].userId})`;
-            balances[i].isBot = member ? member.user.bot : false;
-        }
-        // Only show non-bots
-        return balances.filter(b => !b.isBot).slice(0, limit);
-    }
-
-    // Fast rank lookup using cache only
-    function getCachedRank(userId, guild) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            return 1;
-        }
-        const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
-        if (!data) return 1;
-        const balances = [];
-        const lines = data.split('\n').filter(line => line.includes(':'));
-        for (const line of lines) {
-            const [uid, balance] = line.split(':');
-            const member = guild.members.cache.get(uid);
-            if (member && !member.user.bot) {
-                balances.push({ userId: uid, balance: parseInt(balance, 10) });
+            } catch (replyError) {
+                console.error('Error sending error reply:', replyError);
             }
         }
-        balances.sort((a, b) => b.balance - a.balance);
-        const userIndex = balances.findIndex(user => user.userId === userId);
-        return userIndex === -1 ? balances.length + 1 : userIndex + 1;
-    }
+    });
 
-    // Get user rank
-    async function getUserRank(userId, guild) {
-        const allBalances = await getTopBalances(guild, 1000);
-        const userIndex = allBalances.findIndex(user => user.userId === userId);
-        return userIndex === -1 ? allBalances.length + 1 : userIndex + 1;
-    }
-
-    // Get total economy value
-    function getTotalEconomy() {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            return 0;
-        }
-
-        const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
-        if (!data) return 0;
-
-        const lines = data.split('\n').filter(line => line.includes(':'));
-        return lines.reduce((total, line) => {
-            const [, balance] = line.split(':');
-            return total + parseInt(balance, 10);
-        }, 0);
-    }
-
-    // Get economy statistics
-    async function getEconomyStats(guild) {
-        const balances = await getTopBalances(guild, 1000);
-        const totalEconomy = getTotalEconomy();
-        const houseBalance = getHouseBalance();
+    // Helper function to create team embed with visual display
+    async function createTeamEmbed(team) {
+        const totalMembers = getTotalMembers(team);
         
+        // Create the visual team display
+        const teamImageBuffer = await createTeamVisualization(team);
+        const attachment = new AttachmentBuilder(teamImageBuffer, { name: 'repo-squad-display.png' });
+        
+        const embed = new EmbedBuilder()
+            .setColor(totalMembers >= TEAM_SIZE ? '#32cd32' : '#8b0000')
+            .setTitle('👻 REPO Squad Builder')
+            .setDescription(`**Squad Leader:** ${team.leader.displayName}\n**Squad Status:** ${totalMembers}/${TEAM_SIZE} Survivors`)
+            .setImage('attachment://repo-squad-display.png')
+            .addFields({
+                name: '🔦 Horror Squad',
+                value: formatTeamMembersList(team),
+                inline: false
+            })
+            .setFooter({ 
+                text: totalMembers < TEAM_SIZE ? 'Click the buttons below to join or leave the squad!' : 'Squad is ready! Time to face the horrors!'
+            })
+            .setTimestamp();
+
         return {
             totalEconomy,
             houseBalance,
@@ -1222,113 +609,34 @@ module.exports = (client) => {
         };
     }
 
-    // Create tip jar visualization
-    async function createTipJarCard(user, balance, lastDonor = null, lastAmount = null) {
-        const canvas = createCanvas(500, 400);
-        const ctx = canvas.getContext('2d');
-        
-        // Background gradient
-        const gradient = ctx.createLinearGradient(0, 0, 500, 400);
-        gradient.addColorStop(0, '#2c3e50');
-        gradient.addColorStop(1, '#34495e');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 500, 400);
-        
-        // Title
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 24px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('🥺 TIP JAR 🥺', 250, 40);
-        
-        try {
-            // User avatar (larger for tip jar)
-            const avatarURL = user.displayAvatarURL({ extension: 'png', size: 256 });
-            const avatar = await loadImageFromURL(avatarURL);
-            
-            // Draw circular avatar
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(150, 120, 60, 0, Math.PI * 2);
-            ctx.clip();
-            ctx.drawImage(avatar, 90, 60, 120, 120);
-            ctx.restore();
-            
-            // Avatar border
-            ctx.strokeStyle = '#ffd700';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.arc(150, 120, 60, 0, Math.PI * 2);
-            ctx.stroke();
-        } catch (error) {
-            // Fallback avatar
-            ctx.fillStyle = '#7289da';
-            ctx.beginPath();
-            ctx.arc(150, 120, 60, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '40px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('👤', 150, 135);
-        }
-        
-        // Tip jar (simple jar shape)
-        ctx.fillStyle = '#8b4513';
-        ctx.fillRect(300, 80, 120, 140);
-        ctx.fillStyle = '#a0522d';
-        ctx.fillRect(310, 90, 100, 120);
-        
-        // Jar label
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 16px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('TIPS', 360, 130);
-        ctx.font = '12px Arial';
-        ctx.fillText('💰', 360, 150);
-        
-        // Coins in jar (visual representation of balance)
-        const coinCount = Math.min(Math.floor(balance / 100), 10);
-        ctx.fillStyle = '#ffd700';
-        for (let i = 0; i < coinCount; i++) {
-            const x = 320 + (i % 4) * 20;
-            const y = 200 - Math.floor(i / 4) * 15;
-            ctx.beginPath();
-            ctx.arc(x, y, 8, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        
-        // User info
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 20px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillText(user.username, 50, 250);
-        
-        ctx.font = '16px Arial';
-        ctx.fillText(`Current Balance: B${balance.toLocaleString()}`, 50, 280);
-        
-        // Pleading message
-        ctx.font = 'italic 14px Arial';
-        ctx.fillText('Please spare some Bobby Bucks... 🥺', 50, 310);
-        
-        // Last donation info (if any)
-        if (lastDonor && lastAmount) {
-            ctx.fillStyle = '#00ff00';
-            ctx.font = 'bold 14px Arial';
-            ctx.fillText(`💚 ${lastDonor} just donated B${lastAmount}!`, 50, 340);
-        }
-        
-        // Instructions
-        ctx.fillStyle = '#cccccc';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Click the donate button to give 1-10 Bobby Bucks!', 250, 380);
-        
-        return canvas;
+    // Helper function to create team buttons
+    function createTeamButtons(teamId, isFull) {
+        // Always use the full teamId in customId
+        const joinButton = new ButtonBuilder()
+            .setCustomId(`join_${teamId}`)
+            .setLabel('Join Squad')
+            .setStyle(ButtonStyle.Success)
+            .setEmoji('➕')
+            .setDisabled(isFull);
+
+        const leaveButton = new ButtonBuilder()
+            .setCustomId(`leave_${teamId}`)
+            .setLabel('Leave Squad')
+            .setStyle(ButtonStyle.Danger)
+            .setEmoji('➖');
+
+        const disbandButton = new ButtonBuilder()
+            .setCustomId(`disband_${teamId}`)
+            .setLabel('Disband Squad')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('🗑️');
+
+        return new ActionRowBuilder().addComponents(joinButton, leaveButton, disbandButton);
     }
 
-    // Create donation receipt
-    async function createDonationReceipt(donor, beggar, amount, donorOldBalance, donorNewBalance, beggarOldBalance, beggarNewBalance) {
-        const canvas = createCanvas(450, 400);
-        const ctx = canvas.getContext('2d');
+    // Helper function to format team members list (simplified for visual display)
+    function formatTeamMembersList(team) {
+        const members = [];
         
         // Receipt background
         ctx.fillStyle = '#ffffff';
