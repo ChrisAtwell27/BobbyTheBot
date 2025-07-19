@@ -6,6 +6,9 @@ module.exports = (client) => {
 
         const userMessage = message.content.toLowerCase();
 
+        // Skip interactions if the message is a command (starts with !)
+        if (message.content.startsWith('!')) return;
+
         // Ensure "Bobby" is in the message
         if (!userMessage.includes("bobby")) return;
 
@@ -57,7 +60,7 @@ module.exports = (client) => {
             {
                 triggers: ["tell me a joke", "joke", "make me laugh"],
                 responses: [
-                    "Why don’t skeletons fight each other? They don’t have the guts.",
+                    "Why don't skeletons fight each other? They don't have the guts.",
                     "What do you get when you cross a snowman with a vampire? Frostbite!",
                     "Why did the scarecrow win an award? Because he was outstanding in his field!",
                 ]

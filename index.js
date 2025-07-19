@@ -42,6 +42,8 @@ require('./events/moderationHandler')(client);
 require('./events/boosterRoleHandler')(client);
 require('./events/memberCountHandler')(client);
 require('./events/levelingHandler')(client);
+require('./events/askHandler')(client);
+
 // Start the bot
 client.once("ready", () => {
   console.log("Role bot is online!");
