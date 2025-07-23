@@ -1,34 +1,12 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
+const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
+const { topEggRoleId } = require('../data/config');
 
-// Configuration - Update this with your actual REPO role ID
-const REPO_ROLE_ID = '1349166787526397982'; // Replace with actual @REPO role ID
-
-// Debug function to help find your role ID
-function findRepoRole(message) {
-    const repoRoles = message.guild.roles.cache.filter(role => 
-        role.name.toLowerCase().includes('repo')
-    );
-    
-    if (repoRoles.size > 0) {
-        console.log('Found REPO-related roles:');
-        repoRoles.forEach(role => {
-            console.log(`- Role: "${role.name}" | ID: ${role.id}`);
-        });
-    } else {
-        console.log('No REPO-related roles found');
-    }
-}
-
-// Store active teams (in production, consider using a database)
-const activeTeams = new Map();
-
-// Resend interval in milliseconds (10 minutes)
-const RESEND_INTERVAL = 10 * 60 * 1000;
-
-// Change team size to 6
-const TEAM_SIZE = 6; // 1 leader + 5 members
+const bobbyBucksFilePath = path.join(__dirname, '../data/bobby_bucks.txt');
+const houseFilePath = path.join(__dirname, '../data/house.txt');
 
 // Function to load image from URL
 async function loadImageFromURL(url) {
@@ -48,260 +26,370 @@ async function loadImageFromURL(url) {
     });
 }
 
-// Function to create team visualization
-async function createTeamVisualization(team) {
-    const canvas = createCanvas(600, 180);
-    const ctx = canvas.getContext('2d');
-    
-    // Background gradient (dark horror theme)
-    const gradient = ctx.createLinearGradient(0, 0, 600, 180);
-    gradient.addColorStop(0, '#0a0a0a');
-    gradient.addColorStop(1, '#1a1a1a');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 600, 180);
-    
-    // Horror-style accent (blood red)
-    ctx.fillStyle = '#8b0000';
-    ctx.fillRect(0, 0, 600, 4);
-    ctx.fillRect(0, 176, 600, 4);
-    
-    // Title
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 24px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('👻 REPO SQUAD', 300, 35);
-    
-    // Team member slots
-    const slotWidth = 100;
-    const slotHeight = 100;
-    const startX = 20;
-    const startY = 50;
-    const spacing = 110;
-    
-    const allMembers = [team.leader, ...team.members];
-    
-    for (let i = 0; i < TEAM_SIZE; i++) {
-        const x = startX + (i * spacing);
-        const y = startY;
-        
-        // Slot background
-        ctx.fillStyle = allMembers[i] ? '#8b0000' : '#333333';
-        ctx.fillRect(x - 2, y - 2, slotWidth + 4, slotHeight + 4);
-        
-        ctx.fillStyle = allMembers[i] ? '#1a1a1a' : '#2a2a2a';
-        ctx.fillRect(x, y, slotWidth, slotHeight);
-        
-        if (allMembers[i]) {
-            try {
-                // Get user avatar
-                const avatarURL = allMembers[i].avatarURL || 
-                    `https://cdn.discordapp.com/embed/avatars/${allMembers[i].id % 5}.png`;
-                
-                const avatar = await loadImageFromURL(avatarURL);
-                
-                // Draw circular avatar
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(x + slotWidth/2, y + slotWidth/2, (slotWidth-10)/2, 0, Math.PI * 2);
-                ctx.clip();
-                ctx.drawImage(avatar, x + 5, y + 5, slotWidth - 10, slotWidth - 10);
-                ctx.restore();
-                
-                // Leader badge
-                if (i === 0) {
-                    ctx.font = '20px Arial';
-                    ctx.fillStyle = '#ff6b6b';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('💀', x + slotWidth/2, y - 5);
-                }
-                
-                // Username
-                ctx.font = '12px Arial';
-                ctx.fillStyle = '#ffffff';
-                ctx.textAlign = 'center';
-                const displayName = allMembers[i].displayName || allMembers[i].username;
-                const truncatedName = displayName.length > 10 ? 
-                    displayName.substring(0, 10) + '...' : displayName;
-                ctx.fillText(truncatedName, x + slotWidth/2, y + slotHeight + 15);
-                
-            } catch (error) {
-                console.error('Error loading avatar:', error);
-                // Fallback: draw default avatar
-                ctx.fillStyle = '#8b0000';
-                ctx.fillRect(x + 5, y + 5, slotWidth - 10, slotWidth - 10);
-                ctx.fillStyle = '#ffffff';
-                ctx.font = '40px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('👤', x + slotWidth/2, y + slotWidth/2 + 10);
-            }
-        } else {
-            // Empty slot
-            ctx.fillStyle = '#666666';
-            ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('EMPTY', x + slotWidth/2, y + slotWidth/2 - 10);
-            ctx.fillText('SLOT', x + slotWidth/2, y + slotWidth/2 + 10);
-        }
-        
-        // Slot number
-        ctx.fillStyle = '#aaaaaa';
-        ctx.font = 'bold 12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${i + 1}`, x + slotWidth/2, y + slotHeight + 30);
-    }
-    
-    return canvas.toBuffer();
-}
-
 module.exports = (client) => {
-    // Function to resend team message to keep it at the bottom of chat
-    async function resendTeamMessage(teamId) {
-        const team = activeTeams.get(teamId);
-        if (!team) return; // Team no longer exists
-        
-        try {
-            // Get the channel
-            const channel = await client.channels.fetch(team.channelId);
-            if (!channel) return;
-            
-            // Create updated embed and components
-            const isFull = getTotalMembers(team) >= TEAM_SIZE;
-            const updatedEmbed = await createTeamEmbed(team);
-            const updatedComponents = createTeamButtons(teamId, isFull);
-            
-            // Delete the old message if it exists
-            try {
-                const oldMessage = await channel.messages.fetch(team.messageId);
-                if (oldMessage) await oldMessage.delete();
-            } catch (error) {
-                console.log(`Couldn't delete old team message: ${error.message}`);
-            }
-            
-            // Send a new message
-            const newMessage = await channel.send({
-                embeds: [updatedEmbed.embed],
-                files: updatedEmbed.files,
-                components: [updatedComponents]
-            });
-            
-            // Update the team with the new message ID
-            team.messageId = newMessage.id;
-            
-            // Set up the next resend timer if team isn't full
-            if (!isFull) {
-                // Clear any existing timer
-                if (team.resendTimer) clearTimeout(team.resendTimer);
-                
-                // Set new timer
-                team.resendTimer = setTimeout(() => resendTeamMessage(teamId), RESEND_INTERVAL);
-            }
-        } catch (error) {
-            console.error(`Error resending team message: ${error}`);
-        }
-    }
-
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
 
-        // Debug command to find REPO role ID
-        if (message.content === '!findreporole') {
-            findRepoRole(message);
-            return message.reply('Check your console for REPO role information!');
-        }
+        // Skip DM messages for this handler since it's for guild-only commands
+        if (!message.guild) return;
 
-        // Debug: Log all role mentions in the message
-        if (message.mentions.roles.size > 0) {
-            console.log('Role mentions detected:');
-            message.mentions.roles.forEach(role => {
-                console.log(`- ${role.name} (ID: ${role.id})`);
-            });
-        }
+        const args = message.content.split(' ');
+        const userRoles = message.member.roles.cache;
 
-        // Check if message mentions the REPO role or uses the !repo command
-        const repoRoleMention = `<@&${REPO_ROLE_ID}>`;
-        const isRepoCommand = message.content.toLowerCase() === '!repo';
-        if (message.content.includes(repoRoleMention) || 
-            message.mentions.roles.has(REPO_ROLE_ID) || 
-            isRepoCommand) {
-            console.log('REPO team creation triggered!');
-            // Always use a unique and consistent teamId
-            const teamId = `repo_team_${message.id}`;
-            // Create new team with the message author as leader
-            const team = {
-                id: teamId,
-                leader: {
-                    id: message.author.id,
-                    username: message.author.username,
-                    displayName: message.author.displayName || message.author.username,
-                    avatarURL: message.author.displayAvatarURL({ extension: 'png', size: 128 })
-                },
-                members: [],
-                channelId: message.channel.id,
-                messageId: null,
-                resendTimer: null
-            };
-
-            // Create the team embed and buttons
-            const embed = await createTeamEmbed(team);
-            const components = createTeamButtons(teamId, false);
-            try {
-                const teamMessage = await message.channel.send({
-                    embeds: [embed.embed],
-                    files: embed.files,
-                    components: [components]
-                });
-                // Store the team with message ID immediately after sending
-                team.messageId = teamMessage.id;
-                activeTeams.set(teamId, team);
-                console.log('REPO team created successfully:', teamId);
-                // Set up the resend timer to keep message at bottom of chat
-                team.resendTimer = setTimeout(() => resendTeamMessage(teamId), RESEND_INTERVAL);
-
-                // Delete after 30 minutes if team isn't full
-                setTimeout(() => {
-                    const currentTeam = activeTeams.get(teamId);
-                    if (currentTeam && getTotalMembers(currentTeam) < TEAM_SIZE) {
-                        // Clear the resend timer before removing
-                        if (currentTeam.resendTimer) {
-                            clearTimeout(currentTeam.resendTimer);
-                        }
-                        
-                        activeTeams.delete(teamId);
-                        
-                        // Attempt to delete the most recent message
-                        client.channels.fetch(currentTeam.channelId).then(channel => {
-                            channel.messages.fetch(currentTeam.messageId).then(msg => {
-                                msg.delete().catch(() => {});
-                            }).catch(() => {});
-                        }).catch(() => {});
-                    }
-                }, 30 * 60 * 1000); // 30 minutes
-
-            } catch (error) {
-                console.error('Error creating REPO team message:', error);
+        // Command to check Bobby Bucks balance
+        if (args[0] === '!balance') {
+            let userId, username, user;
+            
+            if (args[1]) {
+                // Check someone else's balance
+                const mentionedUser = message.mentions.users.first() || message.guild.members.cache.find(member => member.user.username === args[1])?.user;
+                if (!mentionedUser) {
+                    return message.channel.send('User not found.');
+                }
+                userId = mentionedUser.id;
+                username = mentionedUser.username;
+                user = mentionedUser;
+            } else {
+                // Check own balance
+                userId = message.author.id;
+                username = message.author.username;
+                user = message.author;
             }
+            
+            const balance = getBobbyBucks(userId);
+            const balanceCard = await createBalanceCard(user, balance);
+            const attachment = new AttachmentBuilder(balanceCard.toBuffer(), { name: 'balance-card.png' });
+
+            const embed = new EmbedBuilder()
+                .setTitle('🏦 Bobby Bucks Bank - Account Statement')
+                .setColor('#ffd700')
+                .setDescription(`**Account Holder:** ${username}`)
+                .setImage('attachment://balance-card.png')
+                .addFields(
+                    { name: '💰 Current Balance', value: `**B${balance.toLocaleString()}**`, inline: true },
+                    { name: '🏛️ Account Status', value: balance > 1000 ? '🌟 **Premium**' : '📋 **Standard**', inline: true },
+                    { name: '📊 Rank', value: `#${getCachedRank(userId, message.guild)}`, inline: true }
+                )
+                .setFooter({ text: 'Bobby Bucks Bank - Your trusted financial partner' })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [embed], files: [attachment] });
+        }
+
+        // Enhanced leaderboard command
+        if (args[0] === '!baltop') {
+            const topBalances = await getTopBalances(message.guild, 10);
+            
+            if (topBalances.length === 0) {
+                return message.channel.send('No balances found.');
+            }
+            
+            const leaderboardImage = await createLeaderboard(topBalances, message.guild);
+            const attachment = new AttachmentBuilder(leaderboardImage.toBuffer(), { name: 'leaderboard.png' });
+
+            const embed = new EmbedBuilder()
+                .setTitle('🏆 Bobby Bucks Leaderboard')
+                .setColor('#ffd700')
+                .setDescription('**Top 10 Richest Members**')
+                .setImage('attachment://leaderboard.png')
+                .addFields(
+                    { name: '📊 Total Economy', value: `B${getTotalEconomy().toLocaleString()}`, inline: true },
+                    { name: '🏛️ House Balance', value: `B${getHouseBalance().toLocaleString()}`, inline: true },
+                    { name: '👥 Active Users', value: `${topBalances.length} members`, inline: true }
+                )
+                .setFooter({ text: 'Rankings updated in real-time' })
+                .setTimestamp();
+            
+            return message.channel.send({ embeds: [embed], files: [attachment] });
+        }
+
+        // Command to award Bobby Bucks
+        if (args[0] === '!award' && args[1] && args[2]) {
+            if (!userRoles.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command.");
+            }
+
+            const mentionedUser = message.mentions.users.first() || message.guild.members.cache.find(member => member.user.username === args[1])?.user;
+            const userId = mentionedUser ? mentionedUser.id : null;
+            const amount = parseInt(args[2], 10);
+
+            if (!userId || isNaN(amount) || amount <= 0) {
+                return message.channel.send('Invalid user or amount specified.');
+            }
+
+            const oldBalance = getBobbyBucks(userId);
+            updateBobbyBucks(userId, amount);
+            const newBalance = getBobbyBucks(userId);
+
+            const transactionReceipt = await createTransactionReceipt(mentionedUser, amount, oldBalance, newBalance, 'AWARD', message.author);
+            const attachment = new AttachmentBuilder(transactionReceipt.toBuffer(), { name: 'transaction-receipt.png' });
+
+            const embed = new EmbedBuilder()
+                .setTitle('💰 Bobby Bucks Award - Transaction Complete')
+                .setColor('#00ff00')
+                .setDescription(`**${mentionedUser.username}** has been awarded Bobby Bucks!`)
+                .setImage('attachment://transaction-receipt.png')
+                .addFields(
+                    { name: '🎁 Amount Awarded', value: `**+B${amount.toLocaleString()}**`, inline: true },
+                    { name: '💳 New Balance', value: `**B${newBalance.toLocaleString()}**`, inline: true },
+                    { name: '👤 Awarded By', value: `${message.author.username}`, inline: true }
+                )
+                .setFooter({ text: 'Transaction processed by Bobby Bucks Bank' })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [embed], files: [attachment] });
+        }
+
+        // Command to spend Bobby Bucks
+        if (args[0] === '!spend' && args[1]) {
+            const userId = message.author.id;
+            const amount = parseInt(args[1], 10);
+            const balance = getBobbyBucks(userId);
+
+            if (isNaN(amount) || amount <= 0) {
+                return message.channel.send('Invalid amount specified.');
+            }
+
+            if (balance >= amount) {
+                const oldBalance = balance;
+                updateBobbyBucks(userId, -amount);
+                const newBalance = getBobbyBucks(userId);
+
+                const transactionReceipt = await createTransactionReceipt(message.author, amount, oldBalance, newBalance, 'SPEND', message.author);
+                const attachment = new AttachmentBuilder(transactionReceipt.toBuffer(), { name: 'spending-receipt.png' });
+
+                const embed = new EmbedBuilder()
+                    .setTitle('💸 Bobby Bucks Spending - Transaction Complete')
+                    .setColor('#ff6b6b')
+                    .setDescription(`**${message.author.username}** made a purchase!`)
+                    .setImage('attachment://spending-receipt.png')
+                    .addFields(
+                        { name: '💸 Amount Spent', value: `**-B${amount.toLocaleString()}**`, inline: true },
+                        { name: '💳 Remaining Balance', value: `**B${newBalance.toLocaleString()}**`, inline: true },
+                        { name: '📊 Savings Rate', value: `${((newBalance / oldBalance) * 100).toFixed(1)}%`, inline: true }
+                    )
+                    .setFooter({ text: 'Thank you for your business!' })
+                    .setTimestamp();
+
+                return message.channel.send({ embeds: [embed], files: [attachment] });
+            } else {
+                const insufficientFunds = await createInsufficientFundsCard(message.author, balance, amount);
+                const attachment = new AttachmentBuilder(insufficientFunds.toBuffer(), { name: 'insufficient-funds.png' });
+
+                const embed = new EmbedBuilder()
+                    .setTitle('❌ Transaction Declined')
+                    .setColor('#ff0000')
+                    .setDescription('**Insufficient Funds**')
+                    .setImage('attachment://insufficient-funds.png')
+                    .addFields(
+                        { name: '💳 Your Balance', value: `B${balance.toLocaleString()}`, inline: true },
+                        { name: '💸 Attempted Purchase', value: `B${amount.toLocaleString()}`, inline: true },
+                        { name: '💰 Amount Needed', value: `B${(amount - balance).toLocaleString()}`, inline: true }
+                    )
+                    .setFooter({ text: 'Consider earning more Bobby Bucks through games!' })
+                    .setTimestamp();
+
+                return message.channel.send({ embeds: [embed], files: [attachment] });
+            }
+        }
+
+        // Command to give all users in the server a specific amount of Bobby Bucks - FIXED
+        if (args[0] === '!awardall' && args[1]) {
+            if (!userRoles.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command.");
+            }
+
+            const amount = parseInt(args[1], 10);
+
+            if (isNaN(amount) || amount <= 0) {
+                return message.channel.send('Invalid amount specified.');
+            }
+
+            try {
+                // Fetch all members to ensure we have the complete member list
+                const allMembers = await message.guild.members.fetch();
+                
+                let membersAwarded = 0;
+                allMembers.forEach(member => {
+                    if (!member.user.bot) {
+                        updateBobbyBucks(member.id, amount);
+                        membersAwarded++;
+                    }
+                });
+
+                const massAwardImage = await createMassAwardCard(amount, membersAwarded, message.author);
+                const attachment = new AttachmentBuilder(massAwardImage.toBuffer(), { name: 'mass-award.png' });
+
+                const embed = new EmbedBuilder()
+                    .setTitle('🎉 Server-Wide Award - Economic Stimulus!')
+                    .setColor('#00ff00')
+                    .setDescription('**Universal Basic Bobby Bucks Distribution**')
+                    .setImage('attachment://mass-award.png')
+                    .addFields(
+                        { name: '💰 Amount Per User', value: `**+B${amount.toLocaleString()}**`, inline: true },
+                        { name: '👥 Users Affected', value: `**${membersAwarded} members**`, inline: true },
+                        { name: '💳 Total Distributed', value: `**B${(amount * membersAwarded).toLocaleString()}**`, inline: true }
+                    )
+                    .setFooter({ text: 'Economic stimulus program activated!' })
+                    .setTimestamp();
+
+                return message.channel.send({ embeds: [embed], files: [attachment] });
+            } catch (error) {
+                console.error('Error fetching guild members:', error);
+                return message.channel.send('❌ Failed to fetch all server members. Please try again.');
+            }
+        }
+
+        // Command to pay another user Bobby Bucks
+        if (args[0] === '!pay' && args[1] && args[2]) {
+            const senderId = message.author.id;
+            const mentionedUser = message.mentions.users.first() || message.guild.members.cache.find(member => member.user.username === args[1])?.user;
+            const amount = parseInt(args[2], 10);
+
+            if (!mentionedUser) {
+                return message.channel.send('❌ User not found. Please mention a valid user.');
+            }
+
+            if (mentionedUser.bot) {
+                return message.channel.send('❌ You cannot pay bots!');
+            }
+
+            if (mentionedUser.id === senderId) {
+                return message.channel.send('❌ You cannot pay yourself!');
+            }
+
+            if (isNaN(amount) || amount <= 0) {
+                return message.channel.send('❌ Invalid amount specified. Amount must be a positive number.');
+            }
+
+            const senderBalance = getBobbyBucks(senderId);
+
+            if (senderBalance < amount) {
+                const insufficientFunds = await createInsufficientFundsCard(message.author, senderBalance, amount);
+                const attachment = new AttachmentBuilder(insufficientFunds.toBuffer(), { name: 'insufficient-funds.png' });
+
+                const embed = new EmbedBuilder()
+                    .setTitle('❌ Payment Failed - Insufficient Funds')
+                    .setColor('#ff0000')
+                    .setDescription('**You don\'t have enough Bobby Bucks for this transfer**')
+                    .setImage('attachment://insufficient-funds.png')
+                    .addFields(
+                        { name: '💳 Your Balance', value: `B${senderBalance.toLocaleString()}`, inline: true },
+                        { name: '💸 Attempted Transfer', value: `B${amount.toLocaleString()}`, inline: true },
+                        { name: '💰 Amount Needed', value: `B${(amount - senderBalance).toLocaleString()}`, inline: true }
+                    )
+                    .setFooter({ text: 'Earn more Bobby Bucks through games and activities!' })
+                    .setTimestamp();
+
+                return message.channel.send({ embeds: [embed], files: [attachment] });
+            }
+
+            // Process the transfer
+            const senderOldBalance = senderBalance;
+            const recipientOldBalance = getBobbyBucks(mentionedUser.id);
+            
+            updateBobbyBucks(senderId, -amount); // Deduct from sender
+            updateBobbyBucks(mentionedUser.id, amount); // Add to recipient
+            
+            const senderNewBalance = getBobbyBucks(senderId);
+            const recipientNewBalance = getBobbyBucks(mentionedUser.id);
+
+            // Create payment receipt
+            const paymentReceipt = await createPaymentReceipt(message.author, mentionedUser, amount, senderOldBalance, senderNewBalance, recipientOldBalance, recipientNewBalance);
+            const attachment = new AttachmentBuilder(paymentReceipt.toBuffer(), { name: 'payment-receipt.png' });
+
+            const embed = new EmbedBuilder()
+                .setTitle('💸 Payment Successful - Transfer Complete')
+                .setColor('#00ff00')
+                .setDescription(`**${message.author.username}** paid **${mentionedUser.username}**`)
+                .setImage('attachment://payment-receipt.png')
+                .addFields(
+                    { name: '💰 Amount Transferred', value: `**B${amount.toLocaleString()}**`, inline: true },
+                    { name: '💳 Sender Balance', value: `B${senderNewBalance.toLocaleString()}`, inline: true },
+                    { name: '💳 Recipient Balance', value: `B${recipientNewBalance.toLocaleString()}`, inline: true }
+                )
+                .setFooter({ text: 'Transaction processed by Bobby Bucks Bank' })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [embed], files: [attachment] });
+        }
+
+        // Command to beg for Bobby Bucks with interactive tip jar
+        if (args[0] === '!beg') {
+            const userId = message.author.id;
+            const balance = getBobbyBucks(userId);
+            
+            // Create tip jar visualization
+            const tipJarImage = await createTipJarCard(message.author, balance);
+            const attachment = new AttachmentBuilder(tipJarImage.toBuffer(), { name: 'tip-jar.png' });
+
+            // Create donate button
+            const donateButton = new ButtonBuilder()
+                .setCustomId(`donate_${userId}_${message.id}`)
+                .setLabel('💰 Donate (1-10 BB)')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🪙');
+
+            const row = new ActionRowBuilder().addComponents(donateButton);
+
+            const embed = new EmbedBuilder()
+                .setTitle('🥺 Please Help - Tip Jar')
+                .setColor('#ff9500')
+                .setDescription(`**${message.author.username}** is asking for your kindness!`)
+                .setImage('attachment://tip-jar.png')
+                .addFields(
+                    { name: '💳 Current Balance', value: `B${balance.toLocaleString()}`, inline: true },
+                    { name: '🎲 Donation Range', value: '1-10 Bobby Bucks', inline: true },
+                    { name: '🕐 Status', value: 'Accepting donations', inline: true }
+                )
+                .setFooter({ text: 'Click the button below to make a random donation!' })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [embed], files: [attachment], components: [row] });
+        }
+
+        // Economy stats command
+        if (args[0] === '!economy') {
+            const stats = await getEconomyStats(message.guild);
+            const economyChart = await createEconomyChart(stats);
+            const attachment = new AttachmentBuilder(economyChart.toBuffer(), { name: 'economy-stats.png' });
+
+            const embed = new EmbedBuilder()
+                .setTitle('📊 Server Economy Statistics')
+                .setColor('#4a90e2')
+                .setDescription('**Complete Economic Overview**')
+                .setImage('attachment://economy-stats.png')
+                .addFields(
+                    { name: '💰 Total Economy', value: `B${stats.totalEconomy.toLocaleString()}`, inline: true },
+                    { name: '🏛️ House Balance', value: `B${stats.houseBalance.toLocaleString()}`, inline: true },
+                    { name: '👑 Richest User', value: `B${stats.richestBalance.toLocaleString()}`, inline: true },
+                    { name: '📈 Average Balance', value: `B${stats.averageBalance.toLocaleString()}`, inline: true },
+                    { name: '👥 Active Users', value: `${stats.activeUsers}`, inline: true },
+                    { name: '💎 Millionaires', value: `${stats.millionaires}`, inline: true }
+                )
+                .setFooter({ text: 'Updated in real-time' })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [embed], files: [attachment] });
         }
     });
 
-    // Handle button interactions (FIXED - only handle REPO team buttons)
+    // Handle button interactions (only for team builder)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton()) return;
-        
-        // CRITICAL FIX: Only handle REPO team buttons
-        if (!interaction.customId.startsWith('repo_')) {
-            return; // Not a REPO team button, ignore it
-        }
-        
+        // Only handle REPO team builder interactions
         const parts = interaction.customId.split('_');
-        const action = parts[1]; // repo_join, repo_leave, repo_disband
-        const teamId = parts.slice(2).join('_'); // Reconstruct the team ID
-        const fullTeamId = `repo_team_${teamId}`;
+        const action = parts[0];
+        // Always reconstruct teamId with repo_team_ prefix
+        const teamId = parts.slice(1).join('_');
+        const teamActions = ['join', 'leave', 'disband'];
+        if (!teamActions.includes(action)) return;
         
-        const team = activeTeams.get(fullTeamId);
+        const team = activeTeams.get(teamId);
         
-        console.log('REPO Button interaction:', interaction.customId);
-        console.log('Parsed action:', action, 'teamId:', fullTeamId);
-        console.log('Looking for team:', fullTeamId);
+        console.log('Button interaction:', interaction.customId);
+        console.log('Parsed action:', action, 'teamId:', teamId);
+        console.log('Looking for team:', teamId);
         console.log('Active teams:', Array.from(activeTeams.keys()));
 
         if (!team) {
@@ -351,7 +439,7 @@ module.exports = (client) => {
                 // Update the team display first
                 const isFull = getTotalMembers(team) >= TEAM_SIZE;
                 const updatedEmbed = await createTeamEmbed(team);
-                const updatedComponents = createTeamButtons(fullTeamId, isFull);
+                const updatedComponents = createTeamButtons(teamId, isFull);
 
                 if (!interaction.replied && !interaction.deferred) {
                     await interaction.update({
@@ -393,7 +481,7 @@ module.exports = (client) => {
 
                     // Auto-delete team after 5 minutes when full
                     setTimeout(() => {
-                        activeTeams.delete(fullTeamId);
+                        activeTeams.delete(teamId);
                         interaction.message.delete().catch(() => {});
                     }, 5 * 60 * 1000);
                 }
@@ -422,7 +510,7 @@ module.exports = (client) => {
                 // Update the team display
                 const isFull = getTotalMembers(team) >= TEAM_SIZE;
                 const updatedEmbed = await createTeamEmbed(team);
-                const updatedComponents = createTeamButtons(fullTeamId, isFull);
+                const updatedComponents = createTeamButtons(teamId, isFull);
 
                 await interaction.update({
                     embeds: [updatedEmbed.embed],
@@ -445,7 +533,7 @@ module.exports = (client) => {
                 }
 
                 // Remove team from active teams first
-                activeTeams.delete(fullTeamId);
+                activeTeams.delete(teamId);
                 
                 // Try to update the interaction to show disbanded message
                 try {
@@ -511,31 +599,34 @@ module.exports = (client) => {
             .setTimestamp();
 
         return {
-            embed: embed,
-            files: [attachment]
+            totalEconomy,
+            houseBalance,
+            activeUsers: balances.length,
+            averageBalance: balances.length > 0 ? Math.floor(totalEconomy / balances.length) : 0,
+            richestBalance: balances.length > 0 ? balances[0].balance : 0,
+            millionaires: balances.filter(b => b.balance >= 1000000).length,
+            poorUsers: balances.filter(b => b.balance < 100).length
         };
     }
 
-    // Helper function to create team buttons (FIXED - use repo_ prefix)
+    // Helper function to create team buttons
     function createTeamButtons(teamId, isFull) {
-        // Extract just the message ID from the full team ID
-        const messageId = teamId.replace('repo_team_', '');
-        
+        // Always use the full teamId in customId
         const joinButton = new ButtonBuilder()
-            .setCustomId(`repo_join_${messageId}`)
+            .setCustomId(`join_${teamId}`)
             .setLabel('Join Squad')
             .setStyle(ButtonStyle.Success)
             .setEmoji('➕')
             .setDisabled(isFull);
 
         const leaveButton = new ButtonBuilder()
-            .setCustomId(`repo_leave_${messageId}`)
+            .setCustomId(`leave_${teamId}`)
             .setLabel('Leave Squad')
             .setStyle(ButtonStyle.Danger)
             .setEmoji('➖');
 
         const disbandButton = new ButtonBuilder()
-            .setCustomId(`repo_disband_${messageId}`)
+            .setCustomId(`disband_${teamId}`)
             .setLabel('Disband Squad')
             .setStyle(ButtonStyle.Secondary)
             .setEmoji('🗑️');
@@ -547,41 +638,114 @@ module.exports = (client) => {
     function formatTeamMembersList(team) {
         const members = [];
         
-        // Add leader
-        members.push(`💀 **${team.leader.displayName}** (Squad Leader)`);
+        // Receipt background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 450, 400);
         
-        // Add other members
-        team.members.forEach((member, index) => {
-            members.push(`${index + 2}. **${member.displayName}**`);
-        });
-
-        // Add empty slots count
-        const emptySlots = TEAM_SIZE - getTotalMembers(team);
-        if (emptySlots > 0) {
-            members.push(`\n*${emptySlots} survivor slot${emptySlots > 1 ? 's' : ''} available*`);
-        }
-
-        return members.join('\n');
+        // Header
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('💝 DONATION RECEIPT', 225, 30);
+        ctx.font = '16px Arial';
+        ctx.fillText('Bobby Bucks Charity Foundation', 225, 55);
+        
+        // Dashed line
+        ctx.strokeStyle = '#cccccc';
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(20, 75);
+        ctx.lineTo(430, 75);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Donation details
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('DONATION DETAILS', 20, 105);
+        
+        ctx.font = '14px Arial';
+        ctx.fillText(`Donor: ${donor.username}`, 20, 130);
+        ctx.fillText(`Recipient: ${beggar.username}`, 20, 150);
+        ctx.fillText(`Amount: B${amount.toLocaleString()}`, 20, 170);
+        ctx.fillText(`Type: Random Charity Donation`, 20, 190);
+        
+        // Balance changes
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('BALANCE CHANGES', 20, 220);
+        
+        ctx.font = '14px Arial';
+        ctx.fillText(`${donor.username}'s Balance:`, 20, 245);
+        ctx.fillText(`  Before: B${donorOldBalance.toLocaleString()}`, 30, 265);
+        ctx.fillText(`  After: B${donorNewBalance.toLocaleString()}`, 30, 285);
+        
+        ctx.fillText(`${beggar.username}'s Balance:`, 20, 315);
+        ctx.fillText(`  Before: B${beggarOldBalance.toLocaleString()}`, 30, 335);
+        ctx.fillText(`  After: B${beggarNewBalance.toLocaleString()}`, 30, 355);
+        
+        // Footer
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Thank you for your generous donation! ❤️', 225, 385);
+        
+        return canvas;
     }
 
-    // Helper function to get total team members
-    function getTotalMembers(team) {
-        return 1 + team.members.length;
+    // Create payment receipt
+    async function createPaymentReceipt(sender, recipient, amount, senderOldBalance, senderNewBalance, recipientOldBalance, recipientNewBalance) {
+        const canvas = createCanvas(450, 300);
+        const ctx = canvas.getContext('2d');
+        
+        // Receipt background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 450, 300);
+        
+        // Header
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('💸 PAYMENT RECEIPT', 225, 30);
+        ctx.font = '16px Arial';
+        ctx.fillText('Bobby Bucks Transaction', 225, 55);
+        
+        // Dashed line
+        ctx.strokeStyle = '#cccccc';
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(20, 75);
+        ctx.lineTo(430, 75);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Payment details
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('PAYMENT DETAILS', 20, 105);
+        
+        ctx.font = '14px Arial';
+        ctx.fillText(`Sender: ${sender.username}`, 20, 130);
+        ctx.fillText(`Recipient: ${recipient.username}`, 20, 150);
+        ctx.fillText(`Amount: B${amount.toLocaleString()}`, 20, 170);
+        ctx.fillText(`Type: Direct Transfer`, 20, 190);
+        
+        // Balance changes
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('BALANCE CHANGES', 20, 220);
+        
+        ctx.font = '14px Arial';
+        ctx.fillText(`${sender.username}'s Balance:`, 20, 245);
+        ctx.fillText(`  Before: B${senderOldBalance.toLocaleString()}`, 30, 265);
+        ctx.fillText(`  After: B${senderNewBalance.toLocaleString()}`, 30, 285);
+        
+        ctx.fillText(`${recipient.username}'s Balance:`, 20, 315);
+        ctx.fillText(`  Before: B${recipientOldBalance.toLocaleString()}`, 30, 335);
+        ctx.fillText(`  After: B${recipientNewBalance.toLocaleString()}`, 30, 355);
+        
+        // Footer
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Thank you for using Bobby Bucks Bank!', 225, 385);
+        
+        return canvas;
     }
-
-    // Helper function to create disbanded embed
-    function createDisbandedEmbed() {
-        return new EmbedBuilder()
-            .setColor('#8b0000')
-            .setTitle('❌ REPO Squad Disbanded')
-            .setDescription('This horror squad has been disbanded by the squad leader.')
-            .setTimestamp();
-    }
-
-    // Clean up old teams on startup (optional)
-    client.once('ready', () => {
-        console.log('REPO Squad Builder with Visual Display loaded!');
-        // Clear any existing teams from memory on restart
-        activeTeams.clear();
-    });
 };
