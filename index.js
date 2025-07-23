@@ -19,11 +19,14 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
+// Increase max listeners to prevent warnings
+client.setMaxListeners(25);
+
 // Import and initialize event handlers
 require('./events/messageReactionHandler')(client);
 require('./events/loggingHandler')(client, loggingChannelId);
 require('./events/alertHandler')(client, alertKeywords, alertChannelId);
-require('./events/thinIceHandler')(client); // Include thin ice handler instead of insult handler
+require('./events/thinIceHandler')(client);
 require('./events/eggbuckHandler')(client);
 require('./events/gamblingHandler')(client);
 require('./events/blackjackHandler')(client);
@@ -42,7 +45,12 @@ require('./events/moderationHandler')(client);
 require('./events/boosterRoleHandler')(client);
 require('./events/memberCountHandler')(client);
 require('./events/levelingHandler')(client);
+require('./events/discordEventHandler')(client);
 require('./events/askHandler')(client);
+
+// Initialize Valorant API handler separately to prevent conflicts
+const valorantApiHandler = require('./events/valorantApiHandler');
+valorantApiHandler.init(client);
 
 // Start the bot
 client.once("ready", () => {

@@ -1,0 +1,30 @@
+{
+  "inhouse_1753301392421_oohvnlcw4": {
+    "id": "inhouse_1753301392421_oohvnlcw4",
+    "guildId": "701308904877064193",
+    "discordEventId": "1397672081071804559",
+    "scheduledDate": "2025-07-26T23:00:00.000Z",
+    "createdAt": "2025-07-23T20:09:52.421Z",
+    "isAutomatic": true,
+    "status": "scheduled",
+    "participants": [
+      {
+        "id": "451459488562806784",
+        "username": "_egg",
+        "displayName": "_Egg",
+        "tag": "_egg"
+      },
+      {
+        "id": "755593512556167249",
+        "username": "thechickensizedkiwi",
+        "displayName": "ChickenSizedKiwi",
+        "tag": "thechickensizedkiwi"
+      }
+    ],
+    "overflow": [],
+    "messageId": "1397672082892132536",
+    "channelId": "701466198851715163",
+    "fillTimer": null,
+    "balancedTeams": null
+  }
+}
