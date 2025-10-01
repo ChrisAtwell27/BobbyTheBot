@@ -51,7 +51,7 @@ const valorantApiHandler = require('./events/valorantApiHandler');
 valorantApiHandler.init(client);
 
 // Create HTTP server for health checks (required by Bluehost and other cloud platforms)
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 const server = http.createServer((req, res) => {
   // Health check endpoint
   if (req.url === '/health' || req.url === '/') {
@@ -68,7 +68,7 @@ const server = http.createServer((req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, () => {
   console.log(`Health check server running on port ${PORT}`);
 });
 
