@@ -7,13 +7,16 @@ const apiHandler = require('./valorantApiHandler');
 
 // Configuration - Update this with your actual Valorant role ID
 const VALORANT_ROLE_ID = '1058201257338228757'; // Replace with actual @Valorant role ID
+const TEAM_SIZE = 5; // Valorant team size
+const MAX_TEAMS_PER_USER = 1; // Limit active teams per user
+const TEAM_COOLDOWN = 60000; // 1 minute cooldown between team creations
 
 // Debug function to help find your role ID
 function findValorantRole(message) {
-    const valorantRoles = message.guild.roles.cache.filter(role => 
+    const valorantRoles = message.guild.roles.cache.filter(role =>
         role.name.toLowerCase().includes('valorant')
     );
-    
+
     if (valorantRoles.size > 0) {
         console.log('Found Valorant-related roles:');
         valorantRoles.forEach(role => {
@@ -26,6 +29,15 @@ function findValorantRole(message) {
 
 // Store active teams (in production, consider using a database)
 const activeTeams = new Map();
+
+// Store team history for statistics
+const teamHistory = [];
+
+// Track user cooldowns for team creation
+const userCooldowns = new Map();
+
+// Track user active teams count
+const userActiveTeams = new Map();
 
 // Resend interval in milliseconds (10 minutes)
 const RESEND_INTERVAL = 10 * 60 * 1000;
@@ -280,6 +292,130 @@ function getTotalMembers(team) {
     return 1 + team.members.length; // 1 for leader + members
 }
 
+// Function to check if user can create a team
+function canCreateTeam(userId) {
+    // Check cooldown
+    const lastCreated = userCooldowns.get(userId);
+    if (lastCreated && Date.now() - lastCreated < TEAM_COOLDOWN) {
+        const remaining = Math.ceil((TEAM_COOLDOWN - (Date.now() - lastCreated)) / 1000);
+        return { canCreate: false, reason: `cooldown`, remaining };
+    }
+
+    // Check active teams limit
+    const activeCount = userActiveTeams.get(userId) || 0;
+    if (activeCount >= MAX_TEAMS_PER_USER) {
+        return { canCreate: false, reason: `limit`, activeCount };
+    }
+
+    return { canCreate: true };
+}
+
+// Function to increment user's active team count
+function incrementUserTeamCount(userId) {
+    const current = userActiveTeams.get(userId) || 0;
+    userActiveTeams.set(userId, current + 1);
+    userCooldowns.set(userId, Date.now());
+}
+
+// Function to decrement user's active team count
+function decrementUserTeamCount(userId) {
+    const current = userActiveTeams.get(userId) || 0;
+    if (current > 0) {
+        userActiveTeams.set(userId, current - 1);
+    }
+}
+
+// Function to calculate team statistics
+async function calculateTeamStats(team) {
+    const allMembers = [team.leader, ...team.members];
+    const stats = {
+        totalMembers: allMembers.length,
+        registeredMembers: 0,
+        ranks: [],
+        averageRank: null,
+        highestRank: null,
+        lowestRank: null
+    };
+
+    for (const member of allMembers) {
+        const rankInfo = await getUserRankInfo(member.id);
+        if (rankInfo) {
+            stats.registeredMembers++;
+            stats.ranks.push({ member: member.displayName, ...rankInfo });
+        }
+    }
+
+    if (stats.ranks.length > 0) {
+        // Calculate average tier
+        const avgTier = Math.round(stats.ranks.reduce((sum, r) => sum + r.tier, 0) / stats.ranks.length);
+        stats.averageRank = apiHandler.RANK_MAPPING[avgTier] || apiHandler.RANK_MAPPING[0];
+
+        // Find highest and lowest ranks
+        const sortedRanks = [...stats.ranks].sort((a, b) => b.tier - a.tier);
+        stats.highestRank = apiHandler.RANK_MAPPING[sortedRanks[0].tier];
+        stats.lowestRank = apiHandler.RANK_MAPPING[sortedRanks[sortedRanks.length - 1].tier];
+    }
+
+    return stats;
+}
+
+// Function to save team to history
+function saveTeamToHistory(team, stats) {
+    const historyEntry = {
+        teamId: team.id,
+        leaderId: team.leader.id,
+        leaderName: team.leader.displayName,
+        memberIds: team.members.map(m => m.id),
+        memberNames: team.members.map(m => m.displayName),
+        createdAt: team.createdAt || new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        channelId: team.channelId,
+        stats: stats
+    };
+
+    teamHistory.push(historyEntry);
+
+    // Keep only last 50 teams in history
+    if (teamHistory.length > 50) {
+        teamHistory.shift();
+    }
+
+    console.log(`💾 Saved team ${team.id} to history. Total teams in history: ${teamHistory.length}`);
+}
+
+// Function to get user's team history
+function getUserTeamHistory(userId) {
+    return teamHistory.filter(entry =>
+        entry.leaderId === userId || entry.memberIds.includes(userId)
+    );
+}
+
+// Function to get team statistics summary
+function getTeamStatsSummary() {
+    if (teamHistory.length === 0) {
+        return null;
+    }
+
+    const totalTeams = teamHistory.length;
+    const teamsWithStats = teamHistory.filter(t => t.stats && t.stats.averageRank);
+
+    let avgRankSum = 0;
+    teamsWithStats.forEach(team => {
+        if (team.stats.averageRank) {
+            avgRankSum += team.stats.averageRank.tier || 0;
+        }
+    });
+
+    const overallAvgTier = teamsWithStats.length > 0 ? Math.round(avgRankSum / teamsWithStats.length) : 0;
+
+    return {
+        totalTeams,
+        teamsWithStats: teamsWithStats.length,
+        overallAverageRank: apiHandler.RANK_MAPPING[overallAvgTier] || apiHandler.RANK_MAPPING[0],
+        activeTeams: activeTeams.size
+    };
+}
+
 // Enhanced helper function to create team embed with visual display (now with persistent storage)
 async function createTeamEmbed(team) {
     const totalMembers = getTotalMembers(team);
@@ -376,17 +512,58 @@ async function formatEnhancedTeamMembersList(team) {
 }
 
 // Helper function to create disbanded embed
-function createDisbandedEmbed() {
-    return new EmbedBuilder()
-        .setColor('#ff0000')
-        .setTitle('❌ Team Disbanded')
-        .setDescription('This Valorant team has been disbanded by the leader.')
-        .addFields({
-            name: '🔄 Want to create a new team?',
-            value: 'Mention the @Valorant role or use `!valorantteam` to start fresh!',
-            inline: false
-        })
+// Commands to view team history and stats
+async function handleTeamHistoryCommand(message) {
+    const history = getUserTeamHistory(message.author.id);
+
+    if (history.length === 0) {
+        return message.reply('📋 You haven\'t been part of any completed teams yet! Create a team with `!valorantteam` or mention <@&' + VALORANT_ROLE_ID + '>');
+    }
+
+    const recentTeams = history.slice(-10).reverse();
+
+    const embed = new EmbedBuilder()
+        .setColor('#ff4654')
+        .setTitle(`📊 ${message.author.username}'s Team History`)
+        .setDescription(`You've been part of **${history.length}** completed team(s)`)
         .setTimestamp();
+
+    for (const [index, team] of recentTeams.entries()) {
+        const wasLeader = team.leaderId === message.author.id;
+        const members = wasLeader ? team.memberNames.join(', ') : `${team.leaderName} (leader), ${team.memberNames.join(', ')}`;
+        const avgRank = team.stats?.averageRank?.name || 'N/A';
+
+        embed.addFields({
+            name: `${index + 1}. ${wasLeader ? '👑' : '👤'} Team - ${new Date(team.completedAt).toLocaleDateString()}`,
+            value: `**Members:** ${members}\n**Avg Rank:** ${avgRank}\n**Registered:** ${team.stats?.registeredMembers || 0}/${TEAM_SIZE}`,
+            inline: false
+        });
+    }
+
+    return message.channel.send({ embeds: [embed] });
+}
+
+async function handleTeamStatsCommand(message) {
+    const summary = getTeamStatsSummary();
+
+    if (!summary) {
+        return message.reply('📊 No team statistics available yet! Teams must be completed to appear in stats.');
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor('#ff4654')
+        .setTitle('📊 Server Team Statistics')
+        .setDescription('Overall Valorant team statistics')
+        .addFields(
+            { name: '🎮 Total Teams Completed', value: summary.totalTeams.toString(), inline: true },
+            { name: '📊 Teams with Rank Data', value: summary.teamsWithStats.toString(), inline: true },
+            { name: '⚡ Currently Active', value: summary.activeTeams.toString(), inline: true },
+            { name: '🏆 Overall Average Rank', value: summary.overallAverageRank.name, inline: false }
+        )
+        .setFooter({ text: 'Register with !valstats to contribute to team statistics!' })
+        .setTimestamp();
+
+    return message.channel.send({ embeds: [embed] });
 }
 
 module.exports = (client) => {
@@ -454,6 +631,16 @@ module.exports = (client) => {
                 return message.reply('Check your console for Valorant role information!');
             }
 
+            // Team history command
+            if (message.content.toLowerCase() === '!valteams' || message.content.toLowerCase() === '!teamhistory') {
+                return handleTeamHistoryCommand(message);
+            }
+
+            // Team statistics command
+            if (message.content.toLowerCase() === '!teamstats') {
+                return handleTeamStatsCommand(message);
+            }
+
             // Debug: Log all role mentions in the message
             if (message.mentions.roles.size > 0) {
                 console.log('Role mentions detected:');
@@ -465,12 +652,30 @@ module.exports = (client) => {
             // Check if message mentions the Valorant role or uses the !Valorant command
             const valorantRoleMention = `<@&${VALORANT_ROLE_ID}>`;
             const isValorantCommand = message.content.toLowerCase() === '!valorantteam';
-            if (message.content.includes(valorantRoleMention) || 
-                message.mentions.roles.has(VALORANT_ROLE_ID) || 
+            if (message.content.includes(valorantRoleMention) ||
+                message.mentions.roles.has(VALORANT_ROLE_ID) ||
                 isValorantCommand) {
                 console.log('Valorant team creation triggered!');
+
+                // Check if user can create a team (cooldown + limit)
+                const canCreate = canCreateTeam(message.author.id);
+                if (!canCreate.canCreate) {
+                    if (canCreate.reason === 'cooldown') {
+                        return message.reply(`⏰ Please wait ${canCreate.remaining} seconds before creating another team.`);
+                    } else if (canCreate.reason === 'limit') {
+                        return message.reply(`❌ You already have ${canCreate.activeCount} active team(s). Please wait for it to fill or disband it first.`);
+                    }
+                }
+
                 // Always use a unique and consistent teamId
                 const teamId = `valorant_team_${message.id}`;
+
+                // Validate team size
+                if (TEAM_SIZE < 2 || TEAM_SIZE > 10) {
+                    console.error(`Invalid team size: ${TEAM_SIZE}. Must be between 2 and 10.`);
+                    return message.reply('❌ Invalid team configuration. Please contact an administrator.');
+                }
+
                 // Create new team with the message author as leader
                 const team = {
                     id: teamId,
@@ -483,49 +688,61 @@ module.exports = (client) => {
                     members: [],
                     channelId: message.channel.id,
                     messageId: null,
-                    resendTimer: null
+                    resendTimer: null,
+                    createdAt: new Date().toISOString()
                 };
 
                 // Create the team embed and buttons
                 try {
                     const embed = await createTeamEmbed(team);
                     const components = createTeamButtons(teamId, false);
-                    
+
                     const teamMessage = await message.channel.send({
                         embeds: [embed.embed],
                         files: embed.files,
                         components: [components]
                     });
+
                     // Store the team with message ID immediately after sending
                     team.messageId = teamMessage.id;
                     activeTeams.set(teamId, team);
-                    console.log('Team created successfully:', teamId);
+
+                    // Increment user's active team count
+                    incrementUserTeamCount(message.author.id);
+
+                    console.log(`✅ Team created successfully: ${teamId} by ${message.author.username}`);
+
                     // Set up the resend timer to keep message at bottom of chat
                     team.resendTimer = setTimeout(() => resendTeamMessage(teamId), RESEND_INTERVAL);
 
                     // Delete after 30 minutes if team isn't full
                     setTimeout(() => {
                         const currentTeam = activeTeams.get(teamId);
-                        if (currentTeam && getTotalMembers(currentTeam) < 5) {
+                        if (currentTeam && getTotalMembers(currentTeam) < TEAM_SIZE) {
                             // Clear the resend timer before removing
                             if (currentTeam.resendTimer) {
                                 clearTimeout(currentTeam.resendTimer);
                             }
-                            
+
+                            // Decrement user's active team count
+                            decrementUserTeamCount(currentTeam.leader.id);
+
                             activeTeams.delete(teamId);
-                            
+
                             // Attempt to delete the most recent message
                             client.channels.fetch(currentTeam.channelId).then(channel => {
                                 channel.messages.fetch(currentTeam.messageId).then(msg => {
                                     msg.delete().catch(() => {});
                                 }).catch(() => {});
                             }).catch(() => {});
+
+                            console.log(`⏰ Team ${teamId} expired after 30 minutes`);
                         }
                     }, 30 * 60 * 1000); // 30 minutes
 
                 } catch (error) {
-                    console.error('Error creating team message:', error);
-                    message.reply('❌ There was an error creating the team. Please try again in a moment.');
+                    console.error('❌ Error creating team message:', error);
+                    message.reply(`❌ There was an error creating the team: ${error.message}\nPlease try again in a moment.`).catch(console.error);
                 }
             }
         });
@@ -586,12 +803,15 @@ module.exports = (client) => {
                 team.members.push(userInfo);
 
                 try {
+                    // Defer the reply to prevent timeout (interactions must respond within 3 seconds)
+                    await interaction.deferUpdate();
+                    
                     // Update the team display first
                     const isFull = getTotalMembers(team) >= 5;
                     const updatedEmbed = await createTeamEmbed(team);
                     const updatedComponents = createTeamButtons(fullTeamId, isFull);
 
-                    await interaction.update({
+                    await interaction.editReply({
                         embeds: [updatedEmbed.embed],
                         files: updatedEmbed.files,
                         components: [updatedComponents]
@@ -604,34 +824,42 @@ module.exports = (client) => {
                             clearTimeout(team.resendTimer);
                             team.resendTimer = null;
                         }
-                        
-                        // Enhanced celebration with team average rank (now from persistent storage)
-                        const teamRanks = [];
-                        for (const member of [team.leader, ...team.members]) {
-                            const rankInfo = await getUserRankInfo(member.id);
-                            if (rankInfo) teamRanks.push(rankInfo);
-                        }
-                        
+
+                        // Calculate team statistics
+                        const teamStats = await calculateTeamStats(team);
+
+                        // Save team to history
+                        saveTeamToHistory(team, teamStats);
+
+                        // Decrement user's active team count
+                        decrementUserTeamCount(team.leader.id);
+
+                        // Build team rank info
                         let teamRankInfo = '';
-                        if (teamRanks.length > 0) {
-                            const avgTier = Math.round(teamRanks.reduce((sum, rank) => sum + rank.tier, 0) / teamRanks.length);
-                            const avgRank = apiHandler.RANK_MAPPING[avgTier] || apiHandler.RANK_MAPPING[0];
-                            teamRankInfo = `\n🏆 **Team Average Rank:** ${avgRank.name} (${teamRanks.length}/5 registered)`;
+                        if (teamStats.averageRank) {
+                            teamRankInfo = `\n🏆 **Team Average Rank:** ${teamStats.averageRank.name} (${teamStats.registeredMembers}/${TEAM_SIZE} registered)`;
+
+                            if (teamStats.highestRank && teamStats.lowestRank) {
+                                teamRankInfo += `\n📊 **Rank Range:** ${teamStats.lowestRank.name} - ${teamStats.highestRank.name}`;
+                            }
                         }
-                        
+
                         const celebrationEmbed = new EmbedBuilder()
                             .setColor('#00ff00')
                             .setTitle('🎉 TEAM COMPLETE!')
                             .setDescription(`Your Valorant team is ready to play! Good luck and have fun!${teamRankInfo}`)
                             .addFields(
                                 { name: '🎮 Ready to Queue!', value: 'Your 5-stack is complete and ready for competitive play!', inline: false },
-                                { name: '📊 Rank Registration', value: 'Unregistered players can use `!valstats` to show their rank in future teams!', inline: false }
+                                { name: '📊 Team Stats', value: `**Registered:** ${teamStats.registeredMembers}/${TEAM_SIZE}\n**Created:** <t:${Math.floor(new Date(team.createdAt).getTime() / 1000)}:R>`, inline: true },
+                                { name: '💡 Tip', value: 'Unregistered players can use `!valstats` to show their rank in future teams!', inline: true }
                             )
                             .setTimestamp();
 
                         await interaction.followUp({
                             embeds: [celebrationEmbed]
                         });
+
+                        console.log(`🎉 Team ${fullTeamId} completed with stats:`, teamStats);
 
                         // Auto-delete team after 5 minutes when full
                         setTimeout(() => {
@@ -641,10 +869,13 @@ module.exports = (client) => {
                     }
                 } catch (error) {
                     console.error('Error updating team:', error);
-                    await interaction.reply({
-                        content: '❌ There was an error updating the team. Please try again.',
-                        ephemeral: true
-                    });
+                    // If interaction is already acknowledged, we can't reply again
+                    if (!interaction.replied && !interaction.deferred) {
+                        await interaction.reply({
+                            content: '❌ There was an error updating the team. Please try again.',
+                            ephemeral: true
+                        }).catch(console.error);
+                    }
                 }
 
             } else if (action === 'leave') {
@@ -669,22 +900,28 @@ module.exports = (client) => {
                 team.members.splice(memberIndex, 1);
 
                 try {
+                    // Defer the reply to prevent timeout
+                    await interaction.deferUpdate();
+                    
                     // Update the team display
                     const isFull = getTotalMembers(team) >= 5;
                     const updatedEmbed = await createTeamEmbed(team);
                     const updatedComponents = createTeamButtons(fullTeamId, isFull);
 
-                    await interaction.update({
+                    await interaction.editReply({
                         embeds: [updatedEmbed.embed],
                         files: updatedEmbed.files,
                         components: [updatedComponents]
                     });
                 } catch (error) {
                     console.error('Error updating team after leave:', error);
-                    await interaction.reply({
-                        content: '❌ There was an error updating the team. Please try again.',
-                        ephemeral: true
-                    });
+                    // If interaction is already acknowledged, we can't reply again
+                    if (!interaction.replied && !interaction.deferred) {
+                        await interaction.reply({
+                            content: '❌ There was an error updating the team. Please try again.',
+                            ephemeral: true
+                        }).catch(console.error);
+                    }
                 }
 
             } else if (action === 'disband') {
@@ -696,22 +933,47 @@ module.exports = (client) => {
                     });
                 }
 
-                // Clear the resend timer before disbanding
-                if (team.resendTimer) {
-                    clearTimeout(team.resendTimer);
+                try {
+                    // Clear the resend timer before disbanding
+                    if (team.resendTimer) {
+                        clearTimeout(team.resendTimer);
+                    }
+
+                    // Decrement user's active team count
+                    decrementUserTeamCount(team.leader.id);
+
+                    // Remove team from active teams
+                    activeTeams.delete(fullTeamId);
+
+                    const disbandEmbed = new EmbedBuilder()
+                        .setColor('#ff0000')
+                        .setTitle('❌ Team Disbanded')
+                        .setDescription('This team has been disbanded by the leader.')
+                        .addFields({
+                            name: '📊 Team Stats',
+                            value: `**Duration:** <t:${Math.floor(new Date(team.createdAt).getTime() / 1000)}:R>\n**Members:** ${getTotalMembers(team)}/${TEAM_SIZE}`,
+                            inline: false
+                        })
+                        .setTimestamp();
+
+                    await interaction.update({
+                        embeds: [disbandEmbed],
+                        components: []
+                    });
+
+                    console.log(`🗑️ Team ${fullTeamId} disbanded by ${interaction.user.username}`);
+
+                    // Delete the message after 5 seconds
+                    setTimeout(() => {
+                        interaction.message.delete().catch(() => {});
+                    }, 5000);
+                } catch (error) {
+                    console.error('❌ Error disbanding team:', error);
+                    await interaction.reply({
+                        content: `❌ There was an error disbanding the team: ${error.message}`,
+                        ephemeral: true
+                    }).catch(console.error);
                 }
-
-                // Remove team and delete message
-                activeTeams.delete(fullTeamId);
-                await interaction.update({
-                    embeds: [createDisbandedEmbed()],
-                    components: []
-                });
-
-                // Delete the message after 5 seconds
-                setTimeout(() => {
-                    interaction.message.delete().catch(() => {});
-                }, 5000);
 
                 return;
             }

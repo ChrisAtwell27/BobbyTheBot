@@ -33,19 +33,16 @@ require('./events/blackjackHandler')(client);
 require('./events/interactionHandler')(client);
 require('./events/clipHandler')(client);
 require('./events/valorantTeamHandler')(client);
-require('./events/activityAwardsHandler')(client);
+require('./events/valorantInhouseHandler')(client);
 require('./events/russianRouletteHandler')(client);
 require('./events/gladiatorHandler')(client);
 require('./events/pokerHandler')(client);
-require('./events/repoTeamHandler')(client);
 require('./events/virtualPetHandler')(client);
 require('./events/helpHandler')(client);
 require('./events/kothHandler')(client);
 require('./events/moderationHandler')(client);
 require('./events/boosterRoleHandler')(client);
 require('./events/memberCountHandler')(client);
-require('./events/levelingHandler')(client);
-require('./events/discordEventHandler')(client);
 require('./events/askHandler')(client);
 
 // Initialize Valorant API handler separately to prevent conflicts
