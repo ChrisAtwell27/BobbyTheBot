@@ -61,16 +61,16 @@ module.exports = (client) => {
             const attachment = new AttachmentBuilder(balanceCard.toBuffer(), { name: 'balance-card.png' });
 
             const embed = new EmbedBuilder()
-                .setTitle('🏦 Honey Bank - Account Statement')
-                .setColor('#ffd700')
-                .setDescription(`**Account Holder:** ${username}`)
+                .setTitle('🍯 Honey Bank - Account Statement')
+                .setColor('#FFD700')
+                .setDescription(`**🐝 Account Holder:** ${username}`)
                 .setImage('attachment://balance-card.png')
                 .addFields(
-                    { name: '💰 Current Balance', value: `**🍯${balance.toLocaleString()}**`, inline: true },
-                    { name: '🏛️ Account Status', value: balance > 1000 ? '🌟 **Premium**' : '📋 **Standard**', inline: true },
-                    { name: '📊 Rank', value: `#${getCachedRank(userId, message.guild)}`, inline: true }
+                    { name: '🍯 Current Balance', value: `**🍯${balance.toLocaleString()}**`, inline: true },
+                    { name: '🏛️ Account Status', value: balance > 1000 ? '🌟 **Premium Hive**' : '🐝 **Standard Hive**', inline: true },
+                    { name: '📊 Hive Rank', value: `#${getCachedRank(userId, message.guild)}`, inline: true }
                 )
-                .setFooter({ text: 'Honey Bank - Your trusted financial partner' })
+                .setFooter({ text: 'Honey Bank - Sweet savings guaranteed! 🍯' })
                 .setTimestamp();
 
             return message.channel.send({ embeds: [embed], files: [attachment] });
@@ -88,16 +88,16 @@ module.exports = (client) => {
             const attachment = new AttachmentBuilder(leaderboardImage.toBuffer(), { name: 'leaderboard.png' });
 
             const embed = new EmbedBuilder()
-                .setTitle('🏆 Honey Leaderboard')
-                .setColor('#ffd700')
-                .setDescription('**Top 10 Richest Members**')
+                .setTitle('🍯 Honey Leaderboard - Top Beekeepers')
+                .setColor('#FFD700')
+                .setDescription('**🐝 Top 10 Honey Collectors**')
                 .setImage('attachment://leaderboard.png')
                 .addFields(
-                    { name: '📊 Total Economy', value: `🍯{getTotalEconomy().toLocaleString()}`, inline: true },
-                    { name: '🏛️ House Balance', value: `🍯{getHouseBalance().toLocaleString()}`, inline: true },
-                    { name: '👥 Active Users', value: `${topBalances.length} members`, inline: true }
+                    { name: '🍯 Total Honey Supply', value: `🍯${getTotalEconomy().toLocaleString()}`, inline: true },
+                    { name: '🏦 Hive Reserve', value: `🍯${getHouseBalance().toLocaleString()}`, inline: true },
+                    { name: '🐝 Active Beekeepers', value: `${topBalances.length} members`, inline: true }
                 )
-                .setFooter({ text: 'Rankings updated in real-time' })
+                .setFooter({ text: 'Sweet rankings updated in real-time! 🍯' })
                 .setTimestamp();
             
             return message.channel.send({ embeds: [embed], files: [attachment] });
@@ -130,8 +130,8 @@ module.exports = (client) => {
                 .setDescription(`**${mentionedUser.username}** has been awarded Honey!`)
                 .setImage('attachment://transaction-receipt.png')
                 .addFields(
-                    { name: '🎁 Amount Awarded', value: `**+🍯{amount.toLocaleString()}**`, inline: true },
-                    { name: '💳 New Balance', value: `**🍯{newBalance.toLocaleString()}**`, inline: true },
+                    { name: '🎁 Amount Awarded', value: `**+🍯${amount.toLocaleString()}**`, inline: true },
+                    { name: '💳 New Balance', value: `**🍯${newBalance.toLocaleString()}**`, inline: true },
                     { name: '👤 Awarded By', value: `${message.author.username}`, inline: true }
                 )
                 .setFooter({ text: 'Transaction processed by Honey Bank' })
@@ -164,8 +164,8 @@ module.exports = (client) => {
                     .setDescription(`**${message.author.username}** made a purchase!`)
                     .setImage('attachment://spending-receipt.png')
                     .addFields(
-                        { name: '💸 Amount Spent', value: `**-🍯{amount.toLocaleString()}**`, inline: true },
-                        { name: '💳 Remaining Balance', value: `**🍯{newBalance.toLocaleString()}**`, inline: true },
+                        { name: '💸 Amount Spent', value: `**-🍯${amount.toLocaleString()}**`, inline: true },
+                        { name: '💳 Remaining Balance', value: `**🍯${newBalance.toLocaleString()}**`, inline: true },
                         { name: '📊 Savings Rate', value: `${((newBalance / oldBalance) * 100).toFixed(1)}%`, inline: true }
                     )
                     .setFooter({ text: 'Thank you for your business!' })
@@ -182,9 +182,9 @@ module.exports = (client) => {
                     .setDescription('**Insufficient Funds**')
                     .setImage('attachment://insufficient-funds.png')
                     .addFields(
-                        { name: '💳 Your Balance', value: `🍯{balance.toLocaleString()}`, inline: true },
-                        { name: '💸 Attempted Purchase', value: `🍯{amount.toLocaleString()}`, inline: true },
-                        { name: '💰 Amount Needed', value: `🍯{(amount - balance).toLocaleString()}`, inline: true }
+                        { name: '💳 Your Balance', value: `🍯${balance.toLocaleString()}`, inline: true },
+                        { name: '💸 Attempted Purchase', value: `🍯${amount.toLocaleString()}`, inline: true },
+                        { name: '💰 Amount Needed', value: `🍯${(amount - balance).toLocaleString()}`, inline: true }
                     )
                     .setFooter({ text: 'Consider earning more Honey through games!' })
                     .setTimestamp();
@@ -226,9 +226,9 @@ module.exports = (client) => {
                     .setDescription('**Universal Basic Honey Distribution**')
                     .setImage('attachment://mass-award.png')
                     .addFields(
-                        { name: '💰 Amount Per User', value: `**+🍯{amount.toLocaleString()}**`, inline: true },
+                        { name: '💰 Amount Per User', value: `**+🍯${amount.toLocaleString()}**`, inline: true },
                         { name: '👥 Users Affected', value: `**${membersAwarded} members**`, inline: true },
-                        { name: '💳 Total Distributed', value: `**🍯{(amount * membersAwarded).toLocaleString()}**`, inline: true }
+                        { name: '💳 Total Distributed', value: `**🍯${(amount * membersAwarded).toLocaleString()}**`, inline: true }
                     )
                     .setFooter({ text: 'Economic stimulus program activated!' })
                     .setTimestamp();
@@ -274,9 +274,9 @@ module.exports = (client) => {
                     .setDescription('**You don\'t have enough Honey for this transfer**')
                     .setImage('attachment://insufficient-funds.png')
                     .addFields(
-                        { name: '💳 Your Balance', value: `🍯{senderBalance.toLocaleString()}`, inline: true },
-                        { name: '💸 Attempted Transfer', value: `🍯{amount.toLocaleString()}`, inline: true },
-                        { name: '💰 Amount Needed', value: `🍯{(amount - senderBalance).toLocaleString()}`, inline: true }
+                        { name: '💳 Your Balance', value: `🍯${senderBalance.toLocaleString()}`, inline: true },
+                        { name: '💸 Attempted Transfer', value: `🍯${amount.toLocaleString()}`, inline: true },
+                        { name: '💰 Amount Needed', value: `🍯${(amount - senderBalance).toLocaleString()}`, inline: true }
                     )
                     .setFooter({ text: 'Earn more Honey through games and activities!' })
                     .setTimestamp();
@@ -304,9 +304,9 @@ module.exports = (client) => {
                 .setDescription(`**${message.author.username}** paid **${mentionedUser.username}**`)
                 .setImage('attachment://payment-receipt.png')
                 .addFields(
-                    { name: '💰 Amount Transferred', value: `**🍯{amount.toLocaleString()}**`, inline: true },
-                    { name: '💳 Sender Balance', value: `🍯{senderNewBalance.toLocaleString()}`, inline: true },
-                    { name: '💳 Recipient Balance', value: `🍯{recipientNewBalance.toLocaleString()}`, inline: true }
+                    { name: '💰 Amount Transferred', value: `**🍯${amount.toLocaleString()}**`, inline: true },
+                    { name: '💳 Sender Balance', value: `🍯${senderNewBalance.toLocaleString()}`, inline: true },
+                    { name: '💳 Recipient Balance', value: `🍯${recipientNewBalance.toLocaleString()}`, inline: true }
                 )
                 .setFooter({ text: 'Transaction processed by Honey Bank' })
                 .setTimestamp();
@@ -326,23 +326,23 @@ module.exports = (client) => {
             // Create donate button
             const donateButton = new ButtonBuilder()
                 .setCustomId(`donate_${userId}_${message.id}`)
-                .setLabel('💰 Donate (1-10 BB)')
+                .setLabel('🍯 Donate Honey (1-10)')
                 .setStyle(ButtonStyle.Success)
-                .setEmoji('🪙');
+                .setEmoji('🐝');
 
             const row = new ActionRowBuilder().addComponents(donateButton);
 
             const embed = new EmbedBuilder()
-                .setTitle('🥺 Please Help - Tip Jar')
-                .setColor('#ff9500')
+                .setTitle('🐝 Please Share Some Honey!')
+                .setColor('#FFB900')
                 .setDescription(`**${message.author.username}** is asking for your kindness!`)
                 .setImage('attachment://tip-jar.png')
                 .addFields(
-                    { name: '💳 Current Balance', value: `🍯{balance.toLocaleString()}`, inline: true },
+                    { name: '🍯 Current Honey Jar', value: `🍯${balance.toLocaleString()}`, inline: true },
                     { name: '🎲 Donation Range', value: '1-10 Honey', inline: true },
-                    { name: '🕐 Status', value: 'Accepting donations', inline: true }
+                    { name: '🕐 Status', value: '🐝 Accepting donations', inline: true }
                 )
-                .setFooter({ text: 'Click the button below to make a random donation!' })
+                .setFooter({ text: 'Click the button to share some sweet honey! 🍯' })
                 .setTimestamp();
 
             return message.channel.send({ embeds: [embed], files: [attachment], components: [row] });
@@ -360,10 +360,10 @@ module.exports = (client) => {
                 .setDescription('**Complete Economic Overview**')
                 .setImage('attachment://economy-stats.png')
                 .addFields(
-                    { name: '💰 Total Economy', value: `🍯{stats.totalEconomy.toLocaleString()}`, inline: true },
-                    { name: '🏛️ House Balance', value: `🍯{stats.houseBalance.toLocaleString()}`, inline: true },
-                    { name: '👑 Richest User', value: `🍯{stats.richestBalance.toLocaleString()}`, inline: true },
-                    { name: '📈 Average Balance', value: `🍯{stats.averageBalance.toLocaleString()}`, inline: true },
+                    { name: '💰 Total Economy', value: `🍯${stats.totalEconomy.toLocaleString()}`, inline: true },
+                    { name: '🏛️ House Balance', value: `🍯${stats.houseBalance.toLocaleString()}`, inline: true },
+                    { name: '👑 Richest User', value: `🍯${stats.richestBalance.toLocaleString()}`, inline: true },
+                    { name: '📈 Average Balance', value: `🍯${stats.averageBalance.toLocaleString()}`, inline: true },
                     { name: '👥 Active Users', value: `${stats.activeUsers}`, inline: true },
                     { name: '💎 Millionaires', value: `${stats.millionaires}`, inline: true }
                 )
@@ -432,8 +432,8 @@ module.exports = (client) => {
                 .setDescription(`**${donor.username}** donated to **${beggar.user.username}**!`)
                 .setImage('attachment://donation-receipt.png')
                 .addFields(
-                    { name: '💰 Amount Donated', value: `**🍯{actualDonation.toLocaleString()}**`, inline: true },
-                    { name: '💳 Your Balance', value: `🍯{donorNewBalance.toLocaleString()}`, inline: true },
+                    { name: '💰 Amount Donated', value: `**🍯${actualDonation.toLocaleString()}**`, inline: true },
+                    { name: '💳 Your Balance', value: `🍯${donorNewBalance.toLocaleString()}`, inline: true },
                     { name: '🎯 Random Roll', value: `Rolled: ${donationAmount}`, inline: true }
                 )
                 .setFooter({ text: 'Thank you for your generosity! ❤️' })
@@ -453,11 +453,11 @@ module.exports = (client) => {
                     .setDescription(`**${beggar.user.username}** is asking for your kindness!`)
                     .setImage('attachment://tip-jar-updated.png')
                     .addFields(
-                        { name: '💳 Current Balance', value: `🍯{beggarNewBalance.toLocaleString()}`, inline: true },
+                        { name: '💳 Current Balance', value: `🍯${beggarNewBalance.toLocaleString()}`, inline: true },
                         { name: '🎲 Donation Range', value: '1-10 Honey', inline: true },
                         { name: '🕐 Status', value: 'Accepting donations', inline: true }
                     )
-                    .setFooter({ text: `Latest: ${donor.username} donated 🍯{actualDonation}!` })
+                    .setFooter({ text: `Latest: ${donor.username} donated 🍯${actualDonation}!` })
                     .setTimestamp();
 
                 await originalMessage.edit({ embeds: [updatedEmbed], files: [updatedAttachment] });
@@ -608,17 +608,25 @@ module.exports = (client) => {
         ctx.fillStyle = logoColor;
         ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'left';
-        ctx.fillText('🏦 Honey Bank', 30, 45);
+        ctx.fillText('🍯 Honey Bank', 30, 45);
         
         // Tier indicator with special styling
         if (cardTier === 'PLATINUM') {
             ctx.fillStyle = '#333333';
             ctx.font = 'bold 14px Arial';
-            ctx.fillText('💎 PLATINUM ELITE 💎', 30, 65);
+            ctx.fillText('🐝 PLATINUM HIVE 🐝', 30, 65);
         } else if (cardTier === 'GOLD') {
             ctx.fillStyle = '#8b4513';
             ctx.font = 'bold 14px Arial';
-            ctx.fillText('⭐ GOLD PREMIUM ⭐', 30, 65);
+            ctx.fillText('🌟 GOLD HIVE 🌟', 30, 65);
+        } else if (cardTier === 'SILVER') {
+            ctx.fillStyle = '#2c2c2c';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText('⭐ SILVER HIVE ⭐', 30, 65);
+        } else {
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText('🐝 BRONZE HIVE 🐝', 30, 65);
         }
         
         try {
@@ -712,15 +720,15 @@ module.exports = (client) => {
         if (cardTier === 'PLATINUM') {
             ctx.font = 'bold 40px Arial';
             ctx.fillStyle = '#333333';
-            ctx.fillText(`🍯{balance.toLocaleString()}`, 30, 220);
+            ctx.fillText(`🍯${balance.toLocaleString()}`, 30, 220);
             // Add subtle glow effect
             ctx.shadowColor = '#ffffff';
             ctx.shadowBlur = 5;
-            ctx.fillText(`🍯{balance.toLocaleString()}`, 30, 220);
+            ctx.fillText(`🍯${balance.toLocaleString()}`, 30, 220);
             ctx.shadowBlur = 0;
         } else {
             ctx.font = 'bold 36px Arial';
-            ctx.fillText(`🍯{balance.toLocaleString()}`, 30, 220);
+            ctx.fillText(`🍯${balance.toLocaleString()}`, 30, 220);
         }
         
         // Card type with special symbols
@@ -801,7 +809,7 @@ module.exports = (client) => {
             ctx.fillStyle = '#ffd700';
             ctx.font = 'bold 18px Arial';
             ctx.textAlign = 'right';
-            ctx.fillText(`🍯{entry.balance.toLocaleString()}`, 570, y - 5);
+            ctx.fillText(`🍯${entry.balance.toLocaleString()}`, 570, y - 5);
             
             // Separator line
             if (i < topBalances.length - 1) {
@@ -851,9 +859,9 @@ module.exports = (client) => {
         ctx.font = '14px Arial';
         ctx.fillText(`Type: ${type}`, 20, 130);
         ctx.fillText(`User: ${user.username}`, 20, 150);
-        ctx.fillText(`Amount: ${type === 'SPEND' ? '-' : '+'}🍯{amount.toLocaleString()}`, 20, 170);
-        ctx.fillText(`Previous Balance: 🍯{oldBalance.toLocaleString()}`, 20, 190);
-        ctx.fillText(`New Balance: 🍯{newBalance.toLocaleString()}`, 20, 210);
+        ctx.fillText(`Amount: ${type === 'SPEND' ? '-' : '+'}🍯${amount.toLocaleString()}`, 20, 170);
+        ctx.fillText(`Previous Balance: 🍯${oldBalance.toLocaleString()}`, 20, 190);
+        ctx.fillText(`New Balance: 🍯${newBalance.toLocaleString()}`, 20, 210);
         if (admin && type === 'AWARD') {
             ctx.fillText(`Authorized by: ${admin.username}`, 20, 230);
         }
@@ -894,9 +902,9 @@ module.exports = (client) => {
         ctx.fillText('INSUFFICIENT FUNDS', 200, 110);
         
         ctx.font = '16px Arial';
-        ctx.fillText(`Your balance: 🍯{balance.toLocaleString()}`, 200, 140);
-        ctx.fillText(`Attempted: 🍯{attemptedAmount.toLocaleString()}`, 200, 160);
-        ctx.fillText(`Needed: 🍯{(attemptedAmount - balance).toLocaleString()}`, 200, 180);
+        ctx.fillText(`Your balance: 🍯${balance.toLocaleString()}`, 200, 140);
+        ctx.fillText(`Attempted: 🍯${attemptedAmount.toLocaleString()}`, 200, 160);
+        ctx.fillText(`Needed: 🍯${(attemptedAmount - balance).toLocaleString()}`, 200, 180);
         
         ctx.font = '14px Arial';
         ctx.fillText('Try earning more through casino games!', 200, 210);
@@ -933,13 +941,13 @@ module.exports = (client) => {
         ctx.fillText('🎉 ECONOMIC STIMULUS!', 250, 80);
         
         ctx.font = 'bold 24px Arial';
-        ctx.fillText(`🍯{amount.toLocaleString()} per person!`, 250, 120);
+        ctx.fillText(`🍯${amount.toLocaleString()} per person!`, 250, 120);
         
         ctx.font = '20px Arial';
         ctx.fillText(`${membersCount} members affected`, 250, 150);
         
         ctx.font = '18px Arial';
-        ctx.fillText(`Total distributed: 🍯{(amount * membersCount).toLocaleString()}`, 250, 180);
+        ctx.fillText(`Total distributed: 🍯${(amount * membersCount).toLocaleString()}`, 250, 180);
         
         ctx.font = '14px Arial';
         ctx.fillText(`Authorized by: ${admin.username}`, 250, 220);
@@ -967,9 +975,9 @@ module.exports = (client) => {
         
         // Stats boxes
         const boxes = [
-            { label: 'Total Economy', value: `🍯{stats.totalEconomy.toLocaleString()}`, color: '#3498db' },
-            { label: 'House Balance', value: `🍯{stats.houseBalance.toLocaleString()}`, color: '#e74c3c' },
-            { label: 'Average Balance', value: `🍯{stats.averageBalance.toLocaleString()}`, color: '#2ecc71' },
+            { label: 'Total Economy', value: `🍯${stats.totalEconomy.toLocaleString()}`, color: '#3498db' },
+            { label: 'House Balance', value: `🍯${stats.houseBalance.toLocaleString()}`, color: '#e74c3c' },
+            { label: 'Average Balance', value: `🍯${stats.averageBalance.toLocaleString()}`, color: '#2ecc71' },
             { label: 'Active Users', value: stats.activeUsers.toString(), color: '#f39c12' }
         ];
         
@@ -1298,7 +1306,7 @@ module.exports = (client) => {
         ctx.fillText(user.username, 50, 250);
         
         ctx.font = '16px Arial';
-        ctx.fillText(`Current Balance: 🍯{balance.toLocaleString()}`, 50, 280);
+        ctx.fillText(`Current Balance: 🍯${balance.toLocaleString()}`, 50, 280);
         
         // Pleading message
         ctx.font = 'italic 14px Arial';
@@ -1308,7 +1316,7 @@ module.exports = (client) => {
         if (lastDonor && lastAmount) {
             ctx.fillStyle = '#00ff00';
             ctx.font = 'bold 14px Arial';
-            ctx.fillText(`💚 ${lastDonor} just donated 🍯{lastAmount}!`, 50, 340);
+            ctx.fillText(`💚 ${lastDonor} just donated 🍯${lastAmount}!`, 50, 340);
         }
         
         // Instructions
@@ -1354,7 +1362,7 @@ module.exports = (client) => {
         ctx.font = '14px Arial';
         ctx.fillText(`Donor: ${donor.username}`, 20, 130);
         ctx.fillText(`Recipient: ${beggar.username}`, 20, 150);
-        ctx.fillText(`Amount: 🍯{amount.toLocaleString()}`, 20, 170);
+        ctx.fillText(`Amount: 🍯${amount.toLocaleString()}`, 20, 170);
         ctx.fillText(`Type: Random Charity Donation`, 20, 190);
         
         // Balance changes
@@ -1363,12 +1371,12 @@ module.exports = (client) => {
         
         ctx.font = '14px Arial';
         ctx.fillText(`${donor.username}'s Balance:`, 20, 245);
-        ctx.fillText(`  Before: 🍯{donorOldBalance.toLocaleString()}`, 30, 265);
-        ctx.fillText(`  After: 🍯{donorNewBalance.toLocaleString()}`, 30, 285);
+        ctx.fillText(`  Before: 🍯${donorOldBalance.toLocaleString()}`, 30, 265);
+        ctx.fillText(`  After: 🍯${donorNewBalance.toLocaleString()}`, 30, 285);
         
         ctx.fillText(`${beggar.username}'s Balance:`, 20, 315);
-        ctx.fillText(`  Before: 🍯{beggarOldBalance.toLocaleString()}`, 30, 335);
-        ctx.fillText(`  After: 🍯{beggarNewBalance.toLocaleString()}`, 30, 355);
+        ctx.fillText(`  Before: 🍯${beggarOldBalance.toLocaleString()}`, 30, 335);
+        ctx.fillText(`  After: 🍯${beggarNewBalance.toLocaleString()}`, 30, 355);
         
         // Footer
         ctx.font = '12px Arial';
@@ -1412,7 +1420,7 @@ module.exports = (client) => {
         ctx.font = '14px Arial';
         ctx.fillText(`Sender: ${sender.username}`, 20, 130);
         ctx.fillText(`Recipient: ${recipient.username}`, 20, 150);
-        ctx.fillText(`Amount: 🍯{amount.toLocaleString()}`, 20, 170);
+        ctx.fillText(`Amount: 🍯${amount.toLocaleString()}`, 20, 170);
         ctx.fillText(`Type: Direct Transfer`, 20, 190);
         
         // Balance changes
@@ -1421,12 +1429,12 @@ module.exports = (client) => {
         
         ctx.font = '14px Arial';
         ctx.fillText(`${sender.username}'s Balance:`, 20, 245);
-        ctx.fillText(`  Before: 🍯{senderOldBalance.toLocaleString()}`, 30, 265);
-        ctx.fillText(`  After: 🍯{senderNewBalance.toLocaleString()}`, 30, 285);
+        ctx.fillText(`  Before: 🍯${senderOldBalance.toLocaleString()}`, 30, 265);
+        ctx.fillText(`  After: 🍯${senderNewBalance.toLocaleString()}`, 30, 285);
         
         ctx.fillText(`${recipient.username}'s Balance:`, 20, 315);
-        ctx.fillText(`  Before: 🍯{recipientOldBalance.toLocaleString()}`, 30, 335);
-        ctx.fillText(`  After: 🍯{recipientNewBalance.toLocaleString()}`, 30, 355);
+        ctx.fillText(`  Before: 🍯${recipientOldBalance.toLocaleString()}`, 30, 335);
+        ctx.fillText(`  After: 🍯${recipientNewBalance.toLocaleString()}`, 30, 355);
         
         // Footer
         ctx.font = '12px Arial';
@@ -1436,5 +1444,6 @@ module.exports = (client) => {
         return canvas;
     }
 };
+
 
 
