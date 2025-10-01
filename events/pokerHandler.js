@@ -218,7 +218,7 @@ async function createPokerTableVisualization(game) {
     // Game info
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 16px Arial';
-    ctx.fillText(`Pot: B${game.pot.toLocaleString()} | Round: ${game.bettingRound.toUpperCase()}`, 350, 70);
+    ctx.fillText(`Pot: ??{game.pot.toLocaleString()} | Round: ${game.bettingRound.toUpperCase()}`, 350, 70);
     
     // Community cards
     const cardWidth = 40;
@@ -284,12 +284,12 @@ async function createPokerTableVisualization(game) {
             
             ctx.fillStyle = '#ffd700';
             ctx.font = 'bold 9px Arial';
-            ctx.fillText(`B${player.chips.toLocaleString()}`, pos.x, pos.y + 47);
+            ctx.fillText(`??{player.chips.toLocaleString()}`, pos.x, pos.y + 47);
             
             if (player.currentBet > 0) {
                 ctx.fillStyle = '#00ff00';
                 ctx.font = 'bold 8px Arial';
-                ctx.fillText(`Bet: B${player.currentBet}`, pos.x, pos.y + 58);
+                ctx.fillText(`Bet: ??{player.currentBet}`, pos.x, pos.y + 58);
             }
             
             // Dealer button
@@ -317,7 +317,7 @@ async function createPokerTableVisualization(game) {
         if (callAmount > 0) {
             ctx.fillStyle = '#ffff00';
             ctx.font = '12px Arial';
-            ctx.fillText(`To call: B${callAmount.toLocaleString()}`, 350, 470);
+            ctx.fillText(`To call: ??{callAmount.toLocaleString()}`, 350, 470);
         }
     }
     
@@ -407,7 +407,7 @@ module.exports = (client) => {
                     embeds: [new EmbedBuilder()
                         .setColor('#ff0000')
                         .setTitle('❌ Insufficient Funds')
-                        .setDescription(`You need at least B${buyIn.toLocaleString()} to create this poker table!\nYour balance: B${userBalance.toLocaleString()}`)
+                        .setDescription(`You need at least ??{buyIn.toLocaleString()} to create this poker table!\nYour balance: ??{userBalance.toLocaleString()}`)
                         .setTimestamp()]
                 });
             }
@@ -546,7 +546,7 @@ module.exports = (client) => {
 
             if (userBalance < lobby.buyIn) {
                 return interaction.reply({
-                    content: `❌ You need B${lobby.buyIn.toLocaleString()} to join this table!`,
+                    content: `❌ You need ??{lobby.buyIn.toLocaleString()} to join this table!`,
                     ephemeral: true
                 });
             }
@@ -660,9 +660,9 @@ module.exports = (client) => {
                 .setTitle('🃏 Your Hand')
                 .setDescription(handText)
                 .addFields(
-                    { name: '💰 Your Chips', value: `B${player.chips.toLocaleString()}`, inline: true },
-                    { name: '🎯 Current Bet', value: `B${player.currentBet.toLocaleString()}`, inline: true },
-                    { name: '🏆 Pot', value: `B${game.pot.toLocaleString()}`, inline: true }
+                    { name: '💰 Your Chips', value: `??{player.chips.toLocaleString()}`, inline: true },
+                    { name: '🎯 Current Bet', value: `??{player.currentBet.toLocaleString()}`, inline: true },
+                    { name: '🏆 Pot', value: `??{game.pot.toLocaleString()}`, inline: true }
                 )
                 .setTimestamp();
 
@@ -991,10 +991,10 @@ module.exports = (client) => {
                 .setColor('#ffd700')
                 .setTitle('🏆 Hand Complete!')
                 .setDescription(winners.length === 1 ? 
-                    `**${winners[0].player.displayName || winners[0].player.username}** wins B${winners[0].winnings.toLocaleString()}!` :
+                    `**${winners[0].player.displayName || winners[0].player.username}** wins ??{winners[0].winnings.toLocaleString()}!` :
                     `**Split pot** between ${winners.length} players!`)
                 .addFields(
-                    { name: '💰 Pot', value: `B${game.pot.toLocaleString()}`, inline: true },
+                    { name: '💰 Pot', value: `??{game.pot.toLocaleString()}`, inline: true },
                     { name: '🃏 Winning Hand', value: winners[0].hand.description, inline: true },
                     { name: '⏰ Next Hand', value: 'Starting in 8 seconds...', inline: true }
                 );
@@ -1026,7 +1026,7 @@ module.exports = (client) => {
             
             const winner = game.players.sort((a, b) => b.chips - a.chips)[0];
             
-            // Pay out chips as Bobby Bucks
+            // Pay out chips as Honey
             game.players.forEach(player => {
                 if (player.chips > 0) {
                     updateBobbyBucks(player.id, player.chips);
@@ -1036,14 +1036,14 @@ module.exports = (client) => {
             const endEmbed = new EmbedBuilder()
                 .setColor('#ffd700')
                 .setTitle('🏁 Poker Game Complete!')
-                .setDescription(`**${winner.displayName || winner.username}** wins the table with B${winner.chips.toLocaleString()}!`)
+                .setDescription(`**${winner.displayName || winner.username}** wins the table with ??{winner.chips.toLocaleString()}!`)
                 .addFields(
                     { name: '📊 Final Standings', value: game.players
                         .sort((a, b) => b.chips - a.chips)
-                        .map((p, i) => `${i + 1}. ${p.displayName || p.username}: B${p.chips.toLocaleString()}`)
+                        .map((p, i) => `${i + 1}. ${p.displayName || p.username}: ??{p.chips.toLocaleString()}`)
                         .join('\n'), inline: false }
                 )
-                .setFooter({ text: 'All chips have been converted to Bobby Bucks' })
+                .setFooter({ text: 'All chips have been converted to Honey' })
                 .setTimestamp();
 
             await message.edit({ 
@@ -1075,7 +1075,7 @@ module.exports = (client) => {
         return new EmbedBuilder()
             .setColor('#0066cc')
             .setTitle('🃏 Poker Table Lobby')
-            .setDescription(`**Texas Hold'em Poker**\nBuy-in: B${lobby.buyIn.toLocaleString()}`)
+            .setDescription(`**Texas Hold'em Poker**\nBuy-in: ??{lobby.buyIn.toLocaleString()}`)
             .addFields(
                 { name: '👥 Players', value: `${lobby.players.length}/${MAX_PLAYERS}`, inline: true },
                 { name: '📊 Required', value: `${MIN_PLAYERS}-${MAX_PLAYERS} players`, inline: true },
@@ -1101,8 +1101,8 @@ module.exports = (client) => {
             .setDescription(`**Hand #${game.handCount}** | **${game.bettingRound.toUpperCase()} Round**`)
             .setImage('attachment://poker-table.png')
             .addFields(
-                { name: '💰 Pot', value: `B${game.pot.toLocaleString()}`, inline: true },
-                { name: '🎯 Current Bet', value: `B${game.currentBet.toLocaleString()}`, inline: true },
+                { name: '💰 Pot', value: `??{game.pot.toLocaleString()}`, inline: true },
+                { name: '🎯 Current Bet', value: `??{game.currentBet.toLocaleString()}`, inline: true },
                 { name: '👥 Active', value: `${activePlayers.length}`, inline: true }
             );
 
@@ -1110,7 +1110,7 @@ module.exports = (client) => {
             const callAmount = game.currentBet - currentPlayer.currentBet;
             embed.addFields({
                 name: '⏰ Current Turn',
-                value: `${currentPlayer.displayName || currentPlayer.username}\n${callAmount > 0 ? `To call: B${callAmount}` : 'Can check'}`,
+                value: `${currentPlayer.displayName || currentPlayer.username}\n${callAmount > 0 ? `To call: ??{callAmount}` : 'Can check'}`,
                 inline: false
             });
         }
@@ -1179,7 +1179,7 @@ module.exports = (client) => {
         ];
     }
 
-    // Bobby Bucks helper functions
+    // Honey helper functions
     function getBobbyBucks(userId) {
         if (!fs.existsSync(bobbyBucksFilePath)) {
             fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');

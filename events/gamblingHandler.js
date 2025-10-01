@@ -1,4 +1,4 @@
-const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+﻿const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const fs = require('fs');
 const path = require('path');
@@ -84,7 +84,7 @@ module.exports = (client) => {
             const gameList = new EmbedBuilder()
                 .setTitle('🎰 CASINO GAMES')
                 .setColor('#ffd700')
-                .setDescription('**Welcome to the Egg Bucks Casino!** 🎲\nChoose your game and test your luck!')
+                .setDescription('**Welcome to the Honey Casino!** 🎲\nChoose your game and test your luck!')
                 .addFields(
                     { name: '🏠 **HOUSE GAMES** (Solo Play)', value: '`!dice [amount] [guess (1-6)]` - **6x payout**\n`!flip [amount]` - **2x payout**\n`!roulette [amount] [red/black/number]` - **2x/36x payout**\n`!blackjack [amount]` - Beat the dealer!', inline: false },
                     { name: '⚔️ **PVP GAMES** (Player vs Player)', value: '`!rps [amount]` - Rock Paper Scissors duel\n`!highercard [amount]` - Higher card wins\n`!quickdraw [amount]` - Type random word fastest\n`!numberduel [amount]` - Closest number guess wins', inline: false },
@@ -144,7 +144,7 @@ module.exports = (client) => {
 
             const balance = getEggBucks(userId);
             if (balance < challenge.amount) {
-                return interaction.reply({ content: `❌ You don't have enough Egg Bucks. You need E${challenge.amount}. Your balance: E${balance}`, ephemeral: true });
+                return interaction.reply({ content: `❌ You don't have enough Honey. You need E${challenge.amount}. Your balance: E${balance}`, ephemeral: true });
             }
 
             // Lock opponent's bet
@@ -254,7 +254,7 @@ module.exports = (client) => {
         const balance = getEggBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is E$${balance}.`);
         }
 
         const challengeId = `rps_${Date.now()}_${userId}`;
@@ -328,7 +328,7 @@ module.exports = (client) => {
         const balance = getEggBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is E$${balance}.`);
         }
 
         const challengeId = `card_${Date.now()}_${userId}`;
@@ -409,7 +409,7 @@ module.exports = (client) => {
         const balance = getEggBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is E${balance}.`);
         }
 
         const challengeId = `quick_${Date.now()}_${userId}`;
@@ -480,7 +480,7 @@ module.exports = (client) => {
         const balance = getEggBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is E$${balance}.`);
         }
 
         const challengeId = `number_${Date.now()}_${userId}`;
@@ -1205,7 +1205,7 @@ module.exports = (client) => {
         const balance = getEggBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is E$${balance}.`);
         }
 
         const result = Math.random() < 0.5 ? 'heads' : 'tails';
@@ -1245,7 +1245,7 @@ module.exports = (client) => {
         const balance = getEggBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is E$${balance}.`);
         }
 
         const redNumbers = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
@@ -1296,7 +1296,7 @@ module.exports = (client) => {
         const balance = getEggBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is E$${balance}.`);
         }
 
         const diceRoll = Math.ceil(Math.random() * 6);
@@ -1332,7 +1332,7 @@ module.exports = (client) => {
         return message.channel.send({ embeds: [embed], files: [attachment] });
     }
 
-    // Functions to handle Egg Bucks and House balance
+    // Functions to handle Honey and House balance
     function getEggBucks(userId) {
         if (!fs.existsSync(eggBucksFilePath)) {
             fs.writeFileSync(eggBucksFilePath, '', 'utf-8');

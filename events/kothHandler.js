@@ -55,7 +55,7 @@ module.exports = (client) => {
             const balance = getEggBucks(userId);
 
             if (balance < challengeAmount) {
-                return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E${balance}.`);
+                return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is ??{balance}.`);
             }
 
             // Check if there's an active game in this channel
@@ -107,7 +107,7 @@ module.exports = (client) => {
             .setImage('attachment://koth-game.png')
             .addFields(
                 { name: '👑 Current King', value: message.author.username, inline: true },
-                { name: '💰 Current Pot', value: `E${amount.toLocaleString()}`, inline: true },
+                { name: '💰 Current Pot', value: `??{amount.toLocaleString()}`, inline: true },
                 { name: '⏰ Time Remaining', value: `<t:${Math.floor(gameData.endTime / 1000)}:R>`, inline: true },
                 { name: '🎯 How to Challenge', value: `Use \`!koth [amount]\` to challenge the King!`, inline: false },
                 { name: '📊 Challenge Formula', value: `50% chance at equal bets, up to 95% max`, inline: false }
@@ -172,9 +172,9 @@ module.exports = (client) => {
                     { name: '⚔️ Challenge Result', value: `**Success!** (${(chance * 100).toFixed(1)}% chance)`, inline: true },
                     { name: '🎲 Roll', value: `${(roll * 100).toFixed(1)}% (needed <${(chance * 100).toFixed(1)}%)`, inline: true },
                     { name: '👑 New King', value: message.author.username, inline: true },
-                    { name: '💰 Current Pot', value: `E${gameData.pot.toLocaleString()}`, inline: true },
+                    { name: '💰 Current Pot', value: `??{gameData.pot.toLocaleString()}`, inline: true },
                     { name: '⏰ Time Reset', value: `<t:${Math.floor(gameData.endTime / 1000)}:R>`, inline: true },
-                    { name: '💪 Kings Power', value: `E${challengeAmount.toLocaleString()}`, inline: true }
+                    { name: '💪 Kings Power', value: `??{challengeAmount.toLocaleString()}`, inline: true }
                 )
                 .setFooter({ text: 'Long live the new King! 👑' })
                 .setTimestamp();
@@ -200,9 +200,9 @@ module.exports = (client) => {
                     { name: '⚔️ Challenge Result', value: `**Failed!** (${(chance * 100).toFixed(1)}% chance)`, inline: true },
                     { name: '🎲 Roll', value: `${(roll * 100).toFixed(1)}% (needed <${(chance * 100).toFixed(1)}%)`, inline: true },
                     { name: '👑 King Remains', value: gameData.kingName, inline: true },
-                    { name: '💰 Pot Increased', value: `E${gameData.pot.toLocaleString()} (+E${challengeAmount.toLocaleString()})`, inline: true },
+                    { name: '💰 Pot Increased', value: `??{gameData.pot.toLocaleString()} (+??{challengeAmount.toLocaleString()})`, inline: true },
                     { name: '⏰ Time Remaining', value: `<t:${Math.floor(gameData.endTime / 1000)}:R>`, inline: true },
-                    { name: '💪 Kings Power', value: `E${gameData.kingAmount.toLocaleString()}`, inline: true }
+                    { name: '💪 Kings Power', value: `??{gameData.kingAmount.toLocaleString()}`, inline: true }
                 )
                 .setFooter({ text: 'The King\'s reign continues! 👑' })
                 .setTimestamp();
@@ -230,8 +230,8 @@ module.exports = (client) => {
             .setImage('attachment://koth-status.png')
             .addFields(
                 { name: '👑 Current King', value: gameData.kingName, inline: true },
-                { name: '💰 Current Pot', value: `E${gameData.pot.toLocaleString()}`, inline: true },
-                { name: '💪 King\'s Power', value: `E${gameData.kingAmount.toLocaleString()}`, inline: true },
+                { name: '💰 Current Pot', value: `??{gameData.pot.toLocaleString()}`, inline: true },
+                { name: '💪 King\'s Power', value: `??{gameData.kingAmount.toLocaleString()}`, inline: true },
                 { name: '⏰ Time Remaining', value: `<t:${Math.floor(gameData.endTime / 1000)}:R>`, inline: true },
                 { name: '🎯 Challenge Info', value: `Equal bet = 50% chance, higher = better odds!`, inline: true },
                 { name: '📊 Win Formula', value: `50% at equal bets, max 95% chance`, inline: true }
@@ -271,9 +271,9 @@ module.exports = (client) => {
                     .setImage('attachment://koth-victory.png')
                     .addFields(
                         { name: '🏆 Victor', value: gameData.kingName, inline: true },
-                        { name: '💰 Total Winnings', value: `E${winnings.toLocaleString()}`, inline: true },
-                        { name: '🏛️ House Cut', value: `E${houseCut.toLocaleString()} (${(HOUSE_CUT * 100)}%)`, inline: true },
-                        { name: '📊 Final Pot', value: `E${gameData.pot.toLocaleString()}`, inline: true },
+                        { name: '💰 Total Winnings', value: `??{winnings.toLocaleString()}`, inline: true },
+                        { name: '🏛️ House Cut', value: `??{houseCut.toLocaleString()} (${(HOUSE_CUT * 100)}%)`, inline: true },
+                        { name: '📊 Final Pot', value: `??{gameData.pot.toLocaleString()}`, inline: true },
                         { name: '⏰ Reign Duration', value: `${Math.floor((Date.now() - gameData.startTime) / 60000)} minutes`, inline: true },
                         { name: '👑 Royal Status', value: 'Unchallenged!', inline: true }
                     )
@@ -360,7 +360,7 @@ module.exports = (client) => {
         // Pot display
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 24px Arial';
-        ctx.fillText(`POT: E${gameData.pot.toLocaleString()}`, 300, 60);
+        ctx.fillText(`POT: ??{gameData.pot.toLocaleString()}`, 300, 60);
 
         // Time remaining
         const timeLeft = Math.max(0, gameData.endTime - Date.now());
@@ -373,7 +373,7 @@ module.exports = (client) => {
         // King's power
         ctx.fillStyle = '#ff6b6b';
         ctx.font = '16px Arial';
-        ctx.fillText(`King's Power: E${gameData.kingAmount.toLocaleString()}`, 300, 380);
+        ctx.fillText(`King's Power: ??{gameData.kingAmount.toLocaleString()}`, 300, 380);
 
         return canvas;
     }
@@ -419,12 +419,12 @@ module.exports = (client) => {
 
         // Winnings
         ctx.font = 'bold 24px Arial';
-        ctx.fillText(`WON E${winnings.toLocaleString()}!`, 300, 260);
+        ctx.fillText(`WON ??{winnings.toLocaleString()}!`, 300, 260);
 
         // Additional info
         ctx.font = '18px Arial';
-        ctx.fillText(`Total Pot: E${gameData.pot.toLocaleString()}`, 300, 300);
-        ctx.fillText(`House Cut: E${houseCut.toLocaleString()}`, 300, 325);
+        ctx.fillText(`Total Pot: ??{gameData.pot.toLocaleString()}`, 300, 300);
+        ctx.fillText(`House Cut: ??{houseCut.toLocaleString()}`, 300, 325);
 
         // Celebration
         ctx.font = '16px Arial';
@@ -433,7 +433,7 @@ module.exports = (client) => {
         return canvas;
     }
 
-    // Bobby Bucks functions
+    // Honey functions
     function getEggBucks(userId) {
         if (!fs.existsSync(eggBucksFilePath)) {
             fs.writeFileSync(eggBucksFilePath, '', 'utf-8');

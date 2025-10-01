@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+﻿const { EmbedBuilder } = require('discord.js');
 
 // Command keyword mapping for intelligent recommendations
 const COMMAND_KEYWORDS = {
@@ -9,12 +9,12 @@ const COMMAND_KEYWORDS = {
     
     // Economy
     money: { commands: ['!balance', '!beg', '!baltop'], category: 'Economy', description: 'Check money, beg, or view leaderboard' },
-    balance: { commands: ['!balance'], category: 'Economy', description: 'Check your Bobby Bucks' },
-    bucks: { commands: ['!balance', '!beg', '!baltop'], category: 'Economy', description: 'Manage your Bobby Bucks' },
+    balance: { commands: ['!balance'], category: 'Economy', description: 'Check your Honey' },
+    bucks: { commands: ['!balance', '!beg', '!baltop'], category: 'Economy', description: 'Manage your Honey' },
     rich: { commands: ['!baltop'], category: 'Economy', description: 'View richest members' },
     leaderboard: { commands: ['!baltop', '!activetop'], category: 'Economy', description: 'View leaderboards' },
     pay: { commands: ['!pay'], category: 'Economy', description: 'Pay another user' },
-    beg: { commands: ['!beg'], category: 'Economy', description: 'Beg for Bobby Bucks' },
+    beg: { commands: ['!beg'], category: 'Economy', description: 'Beg for Honey' },
     economy: { commands: ['!economy'], category: 'Economy', description: 'View economy stats' },
     
     // Gambling
@@ -229,7 +229,7 @@ module.exports = (client) => {
             {
                 triggers: ["i need money", "need money", "broke", "poor", "no money"],
                 responses: [
-                    "Need Bobby Bucks? Try `!beg` to get some free money, or check `!balance` to see what you have! 💰",
+                    "Need Honey? Try `!beg` to get some free money, or check `!balance` to see what you have! 💰",
                     "Low on funds? Use `!beg` to earn some quick bucks, or get active to win the daily `!activetop` prize!",
                     "Broke? No worries! Try `!beg` for free money, then maybe gamble with `!flip` to multiply it! 🎰",
                 ]
@@ -237,7 +237,7 @@ module.exports = (client) => {
             {
                 triggers: ["how do i make money", "earn money", "get money", "get bucks"],
                 responses: [
-                    "Earn Bobby Bucks by: 1) `!beg` for free money, 2) Win the daily `!activetop` (5000 BB!), 3) Win gambling games! 💰",
+                    "Earn Honey by: 1) `!beg` for free money, 2) Win the daily `!activetop` (5000??!), 3) Win gambling games! 💰",
                     "Money-making tips: Use `!beg` regularly, stay active to win `!activetop`, and try your luck with casino games! 🎰",
                 ]
             },
@@ -328,3 +328,4 @@ module.exports = (client) => {
         return message.channel.send(randomFallback);
     });
 };
+

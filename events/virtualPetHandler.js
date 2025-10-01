@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
@@ -146,7 +146,7 @@ module.exports = (client) => {
                 .setPlaceholder('Choose a pet to adopt!')
                 .addOptions(
                     Object.entries(PET_TYPES).map(([key, pet]) => ({
-                        label: `${pet.name} - B${pet.cost}`,
+                        label: `${pet.name} - ??{pet.cost}`,
                         description: `A lovely ${pet.name.toLowerCase()} companion`,
                         value: key,
                         emoji: pet.emoji
@@ -161,7 +161,7 @@ module.exports = (client) => {
                 .setDescription('**Welcome to the Pet Adoption Center!**\nChoose your new companion from our selection of adorable pets.')
                 .setImage('attachment://adoption-center.png')
                 .addFields(
-                    { name: '💰 Adoption Fees', value: Object.entries(PET_TYPES).map(([key, pet]) => `${pet.emoji} ${pet.name}: B${pet.cost}`).join('\n'), inline: true },
+                    { name: '💰 Adoption Fees', value: Object.entries(PET_TYPES).map(([key, pet]) => `${pet.emoji} ${pet.name}: ??{pet.cost}`).join('\n'), inline: true },
                     { name: '🎮 Getting Started', value: 'After adoption, use:\n• `!pet` - Check pet status\n• `!feed` - Feed your pet\n• `!play` - Play with your pet\n• `!petshop` - Buy items', inline: true }
                 )
                 .setFooter({ text: 'All pets come with love and companionship!' })
@@ -257,7 +257,7 @@ module.exports = (client) => {
                     { name: '💊 Medicine', value: 'Health and wellness', inline: true },
                     { name: '🛁 Care', value: 'Cleanliness supplies', inline: true },
                     { name: '👑 Accessories', value: 'Stylish additions', inline: true },
-                    { name: '💰 Your Balance', value: `B${getBobbyBucks(userId).toLocaleString()}`, inline: true }
+                    { name: '💰 Your Balance', value: `??{getBobbyBucks(userId).toLocaleString()}`, inline: true }
                 )
                 .setFooter({ text: 'Select a category above to start shopping!' })
                 .setTimestamp();
@@ -279,7 +279,7 @@ module.exports = (client) => {
             if (!food || food.type !== 'food') {
                 const availableFood = Object.entries(PET_ITEMS)
                     .filter(([key, item]) => item.type === 'food')
-                    .map(([key, item]) => `\`${key}\` - ${item.name} (B${item.cost})`)
+                    .map(([key, item]) => `\`${key}\` - ${item.name} (??{item.cost})`)
                     .join('\n');
                 
                 return message.channel.send(`❌ Invalid food item! Available food:\n${availableFood}`);
@@ -287,7 +287,7 @@ module.exports = (client) => {
 
             const balance = getBobbyBucks(userId);
             if (balance < food.cost) {
-                return message.channel.send(`❌ You need B${food.cost} to buy ${food.name}! You have B${balance}.`);
+                return message.channel.send(`❌ You need ??{food.cost} to buy ${food.name}! You have ??{balance}.`);
             }
 
             // Process feeding
@@ -308,7 +308,7 @@ module.exports = (client) => {
                 .setImage('attachment://feeding-card.png')
                 .addFields(
                     { name: '🍽️ Food', value: food.name, inline: true },
-                    { name: '💰 Cost', value: `B${food.cost}`, inline: true },
+                    { name: '💰 Cost', value: `??{food.cost}`, inline: true },
                     { name: '⭐ XP Gained', value: '+5 XP', inline: true }
                 )
                 .setFooter({ text: 'Your pet is grateful for the meal!' })
@@ -441,7 +441,7 @@ module.exports = (client) => {
             const balance = getBobbyBucks(userId);
             
             if (balance < trainingCost) {
-                return message.channel.send(`❌ Training costs B${trainingCost}! You have B${balance}.`);
+                return message.channel.send(`❌ Training costs ??{trainingCost}! You have ??{balance}.`);
             }
 
             const timeSinceLastTraining = Date.now() - (pet.lastTraining || 0);
@@ -479,7 +479,7 @@ module.exports = (client) => {
                 .setDescription(`**${pet.name} completed training!**${levelUpText}`)
                 .setImage('attachment://training-card.png')
                 .addFields(
-                    { name: '💰 Cost', value: `B${trainingCost}`, inline: true },
+                    { name: '💰 Cost', value: `??{trainingCost}`, inline: true },
                     { name: '⭐ XP Gained', value: '+15 XP', inline: true },
                     { name: '😊 Happiness', value: '+10', inline: true }
                 )
@@ -508,7 +508,7 @@ module.exports = (client) => {
 
             if (balance < pet.cost) {
                 return interaction.reply({
-                    content: `❌ You need B${pet.cost} to adopt a ${pet.name}! You have B${balance}.`,
+                    content: `❌ You need ??{pet.cost} to adopt a ${pet.name}! You have ??{balance}.`,
                     ephemeral: true
                 });
             }
@@ -528,7 +528,7 @@ module.exports = (client) => {
                 .setImage('attachment://adoption-success.png')
                 .addFields(
                     { name: '🏷️ Pet Type', value: pet.name, inline: true },
-                    { name: '💰 Adoption Fee', value: `B${pet.cost}`, inline: true },
+                    { name: '💰 Adoption Fee', value: `??{pet.cost}`, inline: true },
                     { name: '🎯 Getting Started', value: 'Use `!pet` to check on your new friend!', inline: true }
                 )
                 .setFooter({ text: 'Remember to feed and care for your pet regularly!' })
@@ -553,7 +553,7 @@ module.exports = (client) => {
                 .setPlaceholder(`Choose a ${category} item to buy!`)
                 .addOptions(
                     items.map(([key, item]) => ({
-                        label: `${item.name} - B${item.cost}`,
+                        label: `${item.name} - ??{item.cost}`,
                         description: getItemDescription(item),
                         value: key,
                         emoji: item.emoji
@@ -570,11 +570,11 @@ module.exports = (client) => {
                 .addFields(
                     items.map(([key, item]) => ({
                         name: `${item.emoji} ${item.name}`,
-                        value: `Cost: B${item.cost}\nEffect: ${getItemDescription(item)}`,
+                        value: `Cost: ??{item.cost}\nEffect: ${getItemDescription(item)}`,
                         inline: true
                     }))
                 )
-                .addFields({ name: '💰 Your Balance', value: `B${balance.toLocaleString()}`, inline: false })
+                .addFields({ name: '💰 Your Balance', value: `??{balance.toLocaleString()}`, inline: false })
                 .setFooter({ text: 'Select an item above to purchase it!' })
                 .setTimestamp();
 
@@ -595,7 +595,7 @@ module.exports = (client) => {
 
             if (balance < item.cost) {
                 return interaction.reply({
-                    content: `❌ You need B${item.cost} to buy ${item.name}! You have B${balance}.`,
+                    content: `❌ You need ??{item.cost} to buy ${item.name}! You have ??{balance}.`,
                     ephemeral: true
                 });
             }
@@ -616,7 +616,7 @@ module.exports = (client) => {
                 .setImage('attachment://purchase-card.png')
                 .addFields(
                     { name: '📦 Item', value: item.name, inline: true },
-                    { name: '💰 Cost', value: `B${item.cost}`, inline: true },
+                    { name: '💰 Cost', value: `??{item.cost}`, inline: true },
                     { name: '✨ Effect', value: getItemDescription(item), inline: true }
                 )
                 .setFooter({ text: 'Use `!use ' + itemKey + '` to use this item!' })
@@ -1037,7 +1037,7 @@ module.exports = (client) => {
             ctx.font = 'bold 12px Arial';
             ctx.fillText(pet.name, x, y + 20);
             ctx.font = '10px Arial';
-            ctx.fillText(`B${pet.cost}`, x, y + 35);
+            ctx.fillText(`??{pet.cost}`, x, y + 35);
         }
         
         return canvas;
@@ -1408,7 +1408,7 @@ module.exports = (client) => {
         ctx.fillText(item.name, 175, 140);
         
         ctx.font = '14px Arial';
-        ctx.fillText(`Cost: B${item.cost}`, 175, 165);
+        ctx.fillText(`Cost: ??{item.cost}`, 175, 165);
         
         return canvas;
     }
@@ -1570,3 +1570,4 @@ module.exports = (client) => {
         return canvas;
     }
 };
+

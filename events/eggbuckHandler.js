@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
@@ -36,7 +36,7 @@ module.exports = (client) => {
         const args = message.content.split(' ');
         const userRoles = message.member.roles.cache;
 
-        // Command to check Bobby Bucks balance
+        // Command to check Honey balance
         if (args[0] === '!balance') {
             let userId, username, user;
             
@@ -61,16 +61,16 @@ module.exports = (client) => {
             const attachment = new AttachmentBuilder(balanceCard.toBuffer(), { name: 'balance-card.png' });
 
             const embed = new EmbedBuilder()
-                .setTitle('🏦 Bobby Bucks Bank - Account Statement')
+                .setTitle('🏦 Honey Bank - Account Statement')
                 .setColor('#ffd700')
                 .setDescription(`**Account Holder:** ${username}`)
                 .setImage('attachment://balance-card.png')
                 .addFields(
-                    { name: '💰 Current Balance', value: `**B${balance.toLocaleString()}**`, inline: true },
+                    { name: '💰 Current Balance', value: `**🍯${balance.toLocaleString()}**`, inline: true },
                     { name: '🏛️ Account Status', value: balance > 1000 ? '🌟 **Premium**' : '📋 **Standard**', inline: true },
                     { name: '📊 Rank', value: `#${getCachedRank(userId, message.guild)}`, inline: true }
                 )
-                .setFooter({ text: 'Bobby Bucks Bank - Your trusted financial partner' })
+                .setFooter({ text: 'Honey Bank - Your trusted financial partner' })
                 .setTimestamp();
 
             return message.channel.send({ embeds: [embed], files: [attachment] });
@@ -88,13 +88,13 @@ module.exports = (client) => {
             const attachment = new AttachmentBuilder(leaderboardImage.toBuffer(), { name: 'leaderboard.png' });
 
             const embed = new EmbedBuilder()
-                .setTitle('🏆 Bobby Bucks Leaderboard')
+                .setTitle('🏆 Honey Leaderboard')
                 .setColor('#ffd700')
                 .setDescription('**Top 10 Richest Members**')
                 .setImage('attachment://leaderboard.png')
                 .addFields(
-                    { name: '📊 Total Economy', value: `B${getTotalEconomy().toLocaleString()}`, inline: true },
-                    { name: '🏛️ House Balance', value: `B${getHouseBalance().toLocaleString()}`, inline: true },
+                    { name: '📊 Total Economy', value: `🍯{getTotalEconomy().toLocaleString()}`, inline: true },
+                    { name: '🏛️ House Balance', value: `🍯{getHouseBalance().toLocaleString()}`, inline: true },
                     { name: '👥 Active Users', value: `${topBalances.length} members`, inline: true }
                 )
                 .setFooter({ text: 'Rankings updated in real-time' })
@@ -103,7 +103,7 @@ module.exports = (client) => {
             return message.channel.send({ embeds: [embed], files: [attachment] });
         }
 
-        // Command to award Bobby Bucks
+        // Command to award Honey
         if (args[0] === '!award' && args[1] && args[2]) {
             if (!userRoles.has(topEggRoleId)) {
                 return message.reply("You don't have permission to use this command.");
@@ -125,22 +125,22 @@ module.exports = (client) => {
             const attachment = new AttachmentBuilder(transactionReceipt.toBuffer(), { name: 'transaction-receipt.png' });
 
             const embed = new EmbedBuilder()
-                .setTitle('💰 Bobby Bucks Award - Transaction Complete')
+                .setTitle('💰 Honey Award - Transaction Complete')
                 .setColor('#00ff00')
-                .setDescription(`**${mentionedUser.username}** has been awarded Bobby Bucks!`)
+                .setDescription(`**${mentionedUser.username}** has been awarded Honey!`)
                 .setImage('attachment://transaction-receipt.png')
                 .addFields(
-                    { name: '🎁 Amount Awarded', value: `**+B${amount.toLocaleString()}**`, inline: true },
-                    { name: '💳 New Balance', value: `**B${newBalance.toLocaleString()}**`, inline: true },
+                    { name: '🎁 Amount Awarded', value: `**+🍯{amount.toLocaleString()}**`, inline: true },
+                    { name: '💳 New Balance', value: `**🍯{newBalance.toLocaleString()}**`, inline: true },
                     { name: '👤 Awarded By', value: `${message.author.username}`, inline: true }
                 )
-                .setFooter({ text: 'Transaction processed by Bobby Bucks Bank' })
+                .setFooter({ text: 'Transaction processed by Honey Bank' })
                 .setTimestamp();
 
             return message.channel.send({ embeds: [embed], files: [attachment] });
         }
 
-        // Command to spend Bobby Bucks
+        // Command to spend Honey
         if (args[0] === '!spend' && args[1]) {
             const userId = message.author.id;
             const amount = parseInt(args[1], 10);
@@ -159,13 +159,13 @@ module.exports = (client) => {
                 const attachment = new AttachmentBuilder(transactionReceipt.toBuffer(), { name: 'spending-receipt.png' });
 
                 const embed = new EmbedBuilder()
-                    .setTitle('💸 Bobby Bucks Spending - Transaction Complete')
+                    .setTitle('💸 Honey Spending - Transaction Complete')
                     .setColor('#ff6b6b')
                     .setDescription(`**${message.author.username}** made a purchase!`)
                     .setImage('attachment://spending-receipt.png')
                     .addFields(
-                        { name: '💸 Amount Spent', value: `**-B${amount.toLocaleString()}**`, inline: true },
-                        { name: '💳 Remaining Balance', value: `**B${newBalance.toLocaleString()}**`, inline: true },
+                        { name: '💸 Amount Spent', value: `**-🍯{amount.toLocaleString()}**`, inline: true },
+                        { name: '💳 Remaining Balance', value: `**🍯{newBalance.toLocaleString()}**`, inline: true },
                         { name: '📊 Savings Rate', value: `${((newBalance / oldBalance) * 100).toFixed(1)}%`, inline: true }
                     )
                     .setFooter({ text: 'Thank you for your business!' })
@@ -182,18 +182,18 @@ module.exports = (client) => {
                     .setDescription('**Insufficient Funds**')
                     .setImage('attachment://insufficient-funds.png')
                     .addFields(
-                        { name: '💳 Your Balance', value: `B${balance.toLocaleString()}`, inline: true },
-                        { name: '💸 Attempted Purchase', value: `B${amount.toLocaleString()}`, inline: true },
-                        { name: '💰 Amount Needed', value: `B${(amount - balance).toLocaleString()}`, inline: true }
+                        { name: '💳 Your Balance', value: `🍯{balance.toLocaleString()}`, inline: true },
+                        { name: '💸 Attempted Purchase', value: `🍯{amount.toLocaleString()}`, inline: true },
+                        { name: '💰 Amount Needed', value: `🍯{(amount - balance).toLocaleString()}`, inline: true }
                     )
-                    .setFooter({ text: 'Consider earning more Bobby Bucks through games!' })
+                    .setFooter({ text: 'Consider earning more Honey through games!' })
                     .setTimestamp();
 
                 return message.channel.send({ embeds: [embed], files: [attachment] });
             }
         }
 
-        // Command to give all users in the server a specific amount of Bobby Bucks - FIXED
+        // Command to give all users in the server a specific amount of Honey - FIXED
         if (args[0] === '!awardall' && args[1]) {
             if (!userRoles.has(topEggRoleId)) {
                 return message.reply("You don't have permission to use this command.");
@@ -223,12 +223,12 @@ module.exports = (client) => {
                 const embed = new EmbedBuilder()
                     .setTitle('🎉 Server-Wide Award - Economic Stimulus!')
                     .setColor('#00ff00')
-                    .setDescription('**Universal Basic Bobby Bucks Distribution**')
+                    .setDescription('**Universal Basic Honey Distribution**')
                     .setImage('attachment://mass-award.png')
                     .addFields(
-                        { name: '💰 Amount Per User', value: `**+B${amount.toLocaleString()}**`, inline: true },
+                        { name: '💰 Amount Per User', value: `**+🍯{amount.toLocaleString()}**`, inline: true },
                         { name: '👥 Users Affected', value: `**${membersAwarded} members**`, inline: true },
-                        { name: '💳 Total Distributed', value: `**B${(amount * membersAwarded).toLocaleString()}**`, inline: true }
+                        { name: '💳 Total Distributed', value: `**🍯{(amount * membersAwarded).toLocaleString()}**`, inline: true }
                     )
                     .setFooter({ text: 'Economic stimulus program activated!' })
                     .setTimestamp();
@@ -240,7 +240,7 @@ module.exports = (client) => {
             }
         }
 
-        // Command to pay another user Bobby Bucks
+        // Command to pay another user Honey
         if (args[0] === '!pay' && args[1] && args[2]) {
             const senderId = message.author.id;
             const mentionedUser = message.mentions.users.first() || message.guild.members.cache.find(member => member.user.username === args[1])?.user;
@@ -271,14 +271,14 @@ module.exports = (client) => {
                 const embed = new EmbedBuilder()
                     .setTitle('❌ Payment Failed - Insufficient Funds')
                     .setColor('#ff0000')
-                    .setDescription('**You don\'t have enough Bobby Bucks for this transfer**')
+                    .setDescription('**You don\'t have enough Honey for this transfer**')
                     .setImage('attachment://insufficient-funds.png')
                     .addFields(
-                        { name: '💳 Your Balance', value: `B${senderBalance.toLocaleString()}`, inline: true },
-                        { name: '💸 Attempted Transfer', value: `B${amount.toLocaleString()}`, inline: true },
-                        { name: '💰 Amount Needed', value: `B${(amount - senderBalance).toLocaleString()}`, inline: true }
+                        { name: '💳 Your Balance', value: `🍯{senderBalance.toLocaleString()}`, inline: true },
+                        { name: '💸 Attempted Transfer', value: `🍯{amount.toLocaleString()}`, inline: true },
+                        { name: '💰 Amount Needed', value: `🍯{(amount - senderBalance).toLocaleString()}`, inline: true }
                     )
-                    .setFooter({ text: 'Earn more Bobby Bucks through games and activities!' })
+                    .setFooter({ text: 'Earn more Honey through games and activities!' })
                     .setTimestamp();
 
                 return message.channel.send({ embeds: [embed], files: [attachment] });
@@ -304,17 +304,17 @@ module.exports = (client) => {
                 .setDescription(`**${message.author.username}** paid **${mentionedUser.username}**`)
                 .setImage('attachment://payment-receipt.png')
                 .addFields(
-                    { name: '💰 Amount Transferred', value: `**B${amount.toLocaleString()}**`, inline: true },
-                    { name: '💳 Sender Balance', value: `B${senderNewBalance.toLocaleString()}`, inline: true },
-                    { name: '💳 Recipient Balance', value: `B${recipientNewBalance.toLocaleString()}`, inline: true }
+                    { name: '💰 Amount Transferred', value: `**🍯{amount.toLocaleString()}**`, inline: true },
+                    { name: '💳 Sender Balance', value: `🍯{senderNewBalance.toLocaleString()}`, inline: true },
+                    { name: '💳 Recipient Balance', value: `🍯{recipientNewBalance.toLocaleString()}`, inline: true }
                 )
-                .setFooter({ text: 'Transaction processed by Bobby Bucks Bank' })
+                .setFooter({ text: 'Transaction processed by Honey Bank' })
                 .setTimestamp();
 
             return message.channel.send({ embeds: [embed], files: [attachment] });
         }
 
-        // Command to beg for Bobby Bucks with interactive tip jar
+        // Command to beg for Honey with interactive tip jar
         if (args[0] === '!beg') {
             const userId = message.author.id;
             const balance = getBobbyBucks(userId);
@@ -338,8 +338,8 @@ module.exports = (client) => {
                 .setDescription(`**${message.author.username}** is asking for your kindness!`)
                 .setImage('attachment://tip-jar.png')
                 .addFields(
-                    { name: '💳 Current Balance', value: `B${balance.toLocaleString()}`, inline: true },
-                    { name: '🎲 Donation Range', value: '1-10 Bobby Bucks', inline: true },
+                    { name: '💳 Current Balance', value: `🍯{balance.toLocaleString()}`, inline: true },
+                    { name: '🎲 Donation Range', value: '1-10 Honey', inline: true },
                     { name: '🕐 Status', value: 'Accepting donations', inline: true }
                 )
                 .setFooter({ text: 'Click the button below to make a random donation!' })
@@ -360,10 +360,10 @@ module.exports = (client) => {
                 .setDescription('**Complete Economic Overview**')
                 .setImage('attachment://economy-stats.png')
                 .addFields(
-                    { name: '💰 Total Economy', value: `B${stats.totalEconomy.toLocaleString()}`, inline: true },
-                    { name: '🏛️ House Balance', value: `B${stats.houseBalance.toLocaleString()}`, inline: true },
-                    { name: '👑 Richest User', value: `B${stats.richestBalance.toLocaleString()}`, inline: true },
-                    { name: '📈 Average Balance', value: `B${stats.averageBalance.toLocaleString()}`, inline: true },
+                    { name: '💰 Total Economy', value: `🍯{stats.totalEconomy.toLocaleString()}`, inline: true },
+                    { name: '🏛️ House Balance', value: `🍯{stats.houseBalance.toLocaleString()}`, inline: true },
+                    { name: '👑 Richest User', value: `🍯{stats.richestBalance.toLocaleString()}`, inline: true },
+                    { name: '📈 Average Balance', value: `🍯{stats.averageBalance.toLocaleString()}`, inline: true },
                     { name: '👥 Active Users', value: `${stats.activeUsers}`, inline: true },
                     { name: '💎 Millionaires', value: `${stats.millionaires}`, inline: true }
                 )
@@ -393,11 +393,11 @@ module.exports = (client) => {
                 });
             }
 
-            // Check if donor has enough money (at least 1 Bobby Buck)
+            // Check if donor has enough money (at least 1 Honey)
             const donorBalance = getBobbyBucks(donorId);
             if (donorBalance < 1) {
                 return interaction.reply({
-                    content: '❌ You need at least 1 Bobby Buck to donate!',
+                    content: '❌ You need at least 1 Honey to donate!',
                     ephemeral: true
                 });
             }
@@ -432,8 +432,8 @@ module.exports = (client) => {
                 .setDescription(`**${donor.username}** donated to **${beggar.user.username}**!`)
                 .setImage('attachment://donation-receipt.png')
                 .addFields(
-                    { name: '💰 Amount Donated', value: `**B${actualDonation.toLocaleString()}**`, inline: true },
-                    { name: '💳 Your Balance', value: `B${donorNewBalance.toLocaleString()}`, inline: true },
+                    { name: '💰 Amount Donated', value: `**🍯{actualDonation.toLocaleString()}**`, inline: true },
+                    { name: '💳 Your Balance', value: `🍯{donorNewBalance.toLocaleString()}`, inline: true },
                     { name: '🎯 Random Roll', value: `Rolled: ${donationAmount}`, inline: true }
                 )
                 .setFooter({ text: 'Thank you for your generosity! ❤️' })
@@ -453,11 +453,11 @@ module.exports = (client) => {
                     .setDescription(`**${beggar.user.username}** is asking for your kindness!`)
                     .setImage('attachment://tip-jar-updated.png')
                     .addFields(
-                        { name: '💳 Current Balance', value: `B${beggarNewBalance.toLocaleString()}`, inline: true },
-                        { name: '🎲 Donation Range', value: '1-10 Bobby Bucks', inline: true },
+                        { name: '💳 Current Balance', value: `🍯{beggarNewBalance.toLocaleString()}`, inline: true },
+                        { name: '🎲 Donation Range', value: '1-10 Honey', inline: true },
                         { name: '🕐 Status', value: 'Accepting donations', inline: true }
                     )
-                    .setFooter({ text: `Latest: ${donor.username} donated B${actualDonation}!` })
+                    .setFooter({ text: `Latest: ${donor.username} donated 🍯{actualDonation}!` })
                     .setTimestamp();
 
                 await originalMessage.edit({ embeds: [updatedEmbed], files: [updatedAttachment] });
@@ -467,7 +467,7 @@ module.exports = (client) => {
         }
     });
 
-    // Award 500 Bobby Bucks to new members on join (silent)
+    // Award 500 Honey to new members on join (silent)
     client.on('guildMemberAdd', async (member) => {
         if (member.user.bot) return; // Don't award bots
         updateBobbyBucks(member.id, 500);
@@ -608,7 +608,7 @@ module.exports = (client) => {
         ctx.fillStyle = logoColor;
         ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'left';
-        ctx.fillText('🏦 BOBBY BUCKS BANK', 30, 45);
+        ctx.fillText('🏦 Honey Bank', 30, 45);
         
         // Tier indicator with special styling
         if (cardTier === 'PLATINUM') {
@@ -712,15 +712,15 @@ module.exports = (client) => {
         if (cardTier === 'PLATINUM') {
             ctx.font = 'bold 40px Arial';
             ctx.fillStyle = '#333333';
-            ctx.fillText(`B${balance.toLocaleString()}`, 30, 220);
+            ctx.fillText(`🍯{balance.toLocaleString()}`, 30, 220);
             // Add subtle glow effect
             ctx.shadowColor = '#ffffff';
             ctx.shadowBlur = 5;
-            ctx.fillText(`B${balance.toLocaleString()}`, 30, 220);
+            ctx.fillText(`🍯{balance.toLocaleString()}`, 30, 220);
             ctx.shadowBlur = 0;
         } else {
             ctx.font = 'bold 36px Arial';
-            ctx.fillText(`B${balance.toLocaleString()}`, 30, 220);
+            ctx.fillText(`🍯{balance.toLocaleString()}`, 30, 220);
         }
         
         // Card type with special symbols
@@ -759,7 +759,7 @@ module.exports = (client) => {
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 32px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('🏆 BOBBY BUCKS LEADERBOARD', 300, 50);
+        ctx.fillText('🏆 Honey LEADERBOARD', 300, 50);
         
         // Server name
         ctx.fillStyle = '#ffffff';
@@ -801,7 +801,7 @@ module.exports = (client) => {
             ctx.fillStyle = '#ffd700';
             ctx.font = 'bold 18px Arial';
             ctx.textAlign = 'right';
-            ctx.fillText(`B${entry.balance.toLocaleString()}`, 570, y - 5);
+            ctx.fillText(`🍯{entry.balance.toLocaleString()}`, 570, y - 5);
             
             // Separator line
             if (i < topBalances.length - 1) {
@@ -830,7 +830,7 @@ module.exports = (client) => {
         ctx.fillStyle = '#000000';
         ctx.font = 'bold 24px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('🏦 BOBBY BUCKS BANK', 200, 30);
+        ctx.fillText('🏦 Honey Bank', 200, 30);
         ctx.font = '16px Arial';
         ctx.fillText('TRANSACTION RECEIPT', 200, 50);
         
@@ -851,9 +851,9 @@ module.exports = (client) => {
         ctx.font = '14px Arial';
         ctx.fillText(`Type: ${type}`, 20, 130);
         ctx.fillText(`User: ${user.username}`, 20, 150);
-        ctx.fillText(`Amount: ${type === 'SPEND' ? '-' : '+'}B${amount.toLocaleString()}`, 20, 170);
-        ctx.fillText(`Previous Balance: B${oldBalance.toLocaleString()}`, 20, 190);
-        ctx.fillText(`New Balance: B${newBalance.toLocaleString()}`, 20, 210);
+        ctx.fillText(`Amount: ${type === 'SPEND' ? '-' : '+'}🍯{amount.toLocaleString()}`, 20, 170);
+        ctx.fillText(`Previous Balance: 🍯{oldBalance.toLocaleString()}`, 20, 190);
+        ctx.fillText(`New Balance: 🍯{newBalance.toLocaleString()}`, 20, 210);
         if (admin && type === 'AWARD') {
             ctx.fillText(`Authorized by: ${admin.username}`, 20, 230);
         }
@@ -865,7 +865,7 @@ module.exports = (client) => {
         // Footer
         ctx.font = '12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Thank you for banking with Bobby Bucks Bank!', 200, 310);
+        ctx.fillText('Thank you for banking with Honey Bank!', 200, 310);
         ctx.fillText('Questions? Contact support at #help', 200, 330);
         
         return canvas;
@@ -894,9 +894,9 @@ module.exports = (client) => {
         ctx.fillText('INSUFFICIENT FUNDS', 200, 110);
         
         ctx.font = '16px Arial';
-        ctx.fillText(`Your balance: B${balance.toLocaleString()}`, 200, 140);
-        ctx.fillText(`Attempted: B${attemptedAmount.toLocaleString()}`, 200, 160);
-        ctx.fillText(`Needed: B${(attemptedAmount - balance).toLocaleString()}`, 200, 180);
+        ctx.fillText(`Your balance: 🍯{balance.toLocaleString()}`, 200, 140);
+        ctx.fillText(`Attempted: 🍯{attemptedAmount.toLocaleString()}`, 200, 160);
+        ctx.fillText(`Needed: 🍯{(attemptedAmount - balance).toLocaleString()}`, 200, 180);
         
         ctx.font = '14px Arial';
         ctx.fillText('Try earning more through casino games!', 200, 210);
@@ -933,13 +933,13 @@ module.exports = (client) => {
         ctx.fillText('🎉 ECONOMIC STIMULUS!', 250, 80);
         
         ctx.font = 'bold 24px Arial';
-        ctx.fillText(`B${amount.toLocaleString()} per person!`, 250, 120);
+        ctx.fillText(`🍯{amount.toLocaleString()} per person!`, 250, 120);
         
         ctx.font = '20px Arial';
         ctx.fillText(`${membersCount} members affected`, 250, 150);
         
         ctx.font = '18px Arial';
-        ctx.fillText(`Total distributed: B${(amount * membersCount).toLocaleString()}`, 250, 180);
+        ctx.fillText(`Total distributed: 🍯{(amount * membersCount).toLocaleString()}`, 250, 180);
         
         ctx.font = '14px Arial';
         ctx.fillText(`Authorized by: ${admin.username}`, 250, 220);
@@ -967,9 +967,9 @@ module.exports = (client) => {
         
         // Stats boxes
         const boxes = [
-            { label: 'Total Economy', value: `B${stats.totalEconomy.toLocaleString()}`, color: '#3498db' },
-            { label: 'House Balance', value: `B${stats.houseBalance.toLocaleString()}`, color: '#e74c3c' },
-            { label: 'Average Balance', value: `B${stats.averageBalance.toLocaleString()}`, color: '#2ecc71' },
+            { label: 'Total Economy', value: `🍯{stats.totalEconomy.toLocaleString()}`, color: '#3498db' },
+            { label: 'House Balance', value: `🍯{stats.houseBalance.toLocaleString()}`, color: '#e74c3c' },
+            { label: 'Average Balance', value: `🍯{stats.averageBalance.toLocaleString()}`, color: '#2ecc71' },
             { label: 'Active Users', value: stats.activeUsers.toString(), color: '#f39c12' }
         ];
         
@@ -1050,7 +1050,7 @@ module.exports = (client) => {
         return canvas;
     }
 
-    // Function to get a user's Bobby Bucks balance
+    // Function to get a user's Honey balance
     function getBobbyBucks(userId) {
         if (!fs.existsSync(bobbyBucksFilePath)) {
             fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
@@ -1060,7 +1060,7 @@ module.exports = (client) => {
         return userRecord ? parseInt(userRecord.split(':')[1], 10) : 0;
     }
 
-    // Function to update a user's Bobby Bucks balance
+    // Function to update a user's Honey balance
     function updateBobbyBucks(userId, amount) {
         if (!fs.existsSync(bobbyBucksFilePath)) {
             fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
@@ -1083,7 +1083,7 @@ module.exports = (client) => {
         return newBalance;
     }
 
-    // Function to set a user's Bobby Bucks balance directly
+    // Function to set a user's Honey balance directly
     function setBobbyBucks(userId, amount) {
         if (!fs.existsSync(bobbyBucksFilePath)) {
             fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
@@ -1298,24 +1298,24 @@ module.exports = (client) => {
         ctx.fillText(user.username, 50, 250);
         
         ctx.font = '16px Arial';
-        ctx.fillText(`Current Balance: B${balance.toLocaleString()}`, 50, 280);
+        ctx.fillText(`Current Balance: 🍯{balance.toLocaleString()}`, 50, 280);
         
         // Pleading message
         ctx.font = 'italic 14px Arial';
-        ctx.fillText('Please spare some Bobby Bucks... 🥺', 50, 310);
+        ctx.fillText('Please spare some Honey... 🥺', 50, 310);
         
         // Last donation info (if any)
         if (lastDonor && lastAmount) {
             ctx.fillStyle = '#00ff00';
             ctx.font = 'bold 14px Arial';
-            ctx.fillText(`💚 ${lastDonor} just donated B${lastAmount}!`, 50, 340);
+            ctx.fillText(`💚 ${lastDonor} just donated 🍯{lastAmount}!`, 50, 340);
         }
         
         // Instructions
         ctx.fillStyle = '#cccccc';
         ctx.font = '12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Click the donate button to give 1-10 Bobby Bucks!', 250, 380);
+        ctx.fillText('Click the donate button to give 1-10 Honey!', 250, 380);
         
         return canvas;
     }
@@ -1335,7 +1335,7 @@ module.exports = (client) => {
         ctx.textAlign = 'center';
         ctx.fillText('💝 DONATION RECEIPT', 225, 30);
         ctx.font = '16px Arial';
-        ctx.fillText('Bobby Bucks Charity Foundation', 225, 55);
+        ctx.fillText('Honey Charity Foundation', 225, 55);
         
         // Dashed line
         ctx.strokeStyle = '#cccccc';
@@ -1354,7 +1354,7 @@ module.exports = (client) => {
         ctx.font = '14px Arial';
         ctx.fillText(`Donor: ${donor.username}`, 20, 130);
         ctx.fillText(`Recipient: ${beggar.username}`, 20, 150);
-        ctx.fillText(`Amount: B${amount.toLocaleString()}`, 20, 170);
+        ctx.fillText(`Amount: 🍯{amount.toLocaleString()}`, 20, 170);
         ctx.fillText(`Type: Random Charity Donation`, 20, 190);
         
         // Balance changes
@@ -1363,12 +1363,12 @@ module.exports = (client) => {
         
         ctx.font = '14px Arial';
         ctx.fillText(`${donor.username}'s Balance:`, 20, 245);
-        ctx.fillText(`  Before: B${donorOldBalance.toLocaleString()}`, 30, 265);
-        ctx.fillText(`  After: B${donorNewBalance.toLocaleString()}`, 30, 285);
+        ctx.fillText(`  Before: 🍯{donorOldBalance.toLocaleString()}`, 30, 265);
+        ctx.fillText(`  After: 🍯{donorNewBalance.toLocaleString()}`, 30, 285);
         
         ctx.fillText(`${beggar.username}'s Balance:`, 20, 315);
-        ctx.fillText(`  Before: B${beggarOldBalance.toLocaleString()}`, 30, 335);
-        ctx.fillText(`  After: B${beggarNewBalance.toLocaleString()}`, 30, 355);
+        ctx.fillText(`  Before: 🍯{beggarOldBalance.toLocaleString()}`, 30, 335);
+        ctx.fillText(`  After: 🍯{beggarNewBalance.toLocaleString()}`, 30, 355);
         
         // Footer
         ctx.font = '12px Arial';
@@ -1393,7 +1393,7 @@ module.exports = (client) => {
         ctx.textAlign = 'center';
         ctx.fillText('💸 PAYMENT RECEIPT', 225, 30);
         ctx.font = '16px Arial';
-        ctx.fillText('Bobby Bucks Transaction', 225, 55);
+        ctx.fillText('Honey Transaction', 225, 55);
         
         // Dashed line
         ctx.strokeStyle = '#cccccc';
@@ -1412,7 +1412,7 @@ module.exports = (client) => {
         ctx.font = '14px Arial';
         ctx.fillText(`Sender: ${sender.username}`, 20, 130);
         ctx.fillText(`Recipient: ${recipient.username}`, 20, 150);
-        ctx.fillText(`Amount: B${amount.toLocaleString()}`, 20, 170);
+        ctx.fillText(`Amount: 🍯{amount.toLocaleString()}`, 20, 170);
         ctx.fillText(`Type: Direct Transfer`, 20, 190);
         
         // Balance changes
@@ -1421,18 +1421,20 @@ module.exports = (client) => {
         
         ctx.font = '14px Arial';
         ctx.fillText(`${sender.username}'s Balance:`, 20, 245);
-        ctx.fillText(`  Before: B${senderOldBalance.toLocaleString()}`, 30, 265);
-        ctx.fillText(`  After: B${senderNewBalance.toLocaleString()}`, 30, 285);
+        ctx.fillText(`  Before: 🍯{senderOldBalance.toLocaleString()}`, 30, 265);
+        ctx.fillText(`  After: 🍯{senderNewBalance.toLocaleString()}`, 30, 285);
         
         ctx.fillText(`${recipient.username}'s Balance:`, 20, 315);
-        ctx.fillText(`  Before: B${recipientOldBalance.toLocaleString()}`, 30, 335);
-        ctx.fillText(`  After: B${recipientNewBalance.toLocaleString()}`, 30, 355);
+        ctx.fillText(`  Before: 🍯{recipientOldBalance.toLocaleString()}`, 30, 335);
+        ctx.fillText(`  After: 🍯{recipientNewBalance.toLocaleString()}`, 30, 355);
         
         // Footer
         ctx.font = '12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Thank you for using Bobby Bucks Bank!', 225, 385);
+        ctx.fillText('Thank you for using Honey Bank!', 225, 385);
         
         return canvas;
     }
 };
+
+

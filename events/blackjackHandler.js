@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
+﻿const { ActionRowBuilder, ButtonBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const fs = require('fs');
 const path = require('path');
@@ -59,7 +59,7 @@ module.exports = (client) => {
             const balance = getEggBucks(userId);
 
             if (balance < betAmount) {
-                return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+                return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
             }
 
             startBlackjackGame(message, userId, betAmount);
@@ -236,7 +236,7 @@ module.exports = (client) => {
             const handLabel = isSplit ? `${playerName.toUpperCase()} - HAND ${handIndex + 1}` : `${playerName.toUpperCase()}`;
             ctx.fillText(handLabel, 30, yOffset);
             ctx.fillText(`Total: ${score}`, 30, yOffset + 20);
-            ctx.fillText(`Bet: E$${betAmount}`, 30, yOffset + 40);
+            ctx.fillText(`Bet: 🍯${betAmount}`, 30, yOffset + 40);
             
             // Draw player cards
             const playerStartX = (canvas.width - (hand.length * (CARD_WIDTH + CARD_SPACING) - CARD_SPACING)) / 2;
@@ -306,12 +306,12 @@ module.exports = (client) => {
         let gameEmbed = new EmbedBuilder()
             .setTitle('🎰 Casino Blackjack')
             .setColor('#0f5132')
-            .setDescription(`**${message.author.username}** is playing Blackjack!\n**Bet:** E$${betAmount}${streakInfo}${deckInfo}`)
+            .setDescription(`**${message.author.username}** is playing Blackjack!\n**Bet:** 🍯${betAmount}${streakInfo}${deckInfo}`)
             .setImage('attachment://blackjack-table.png')
             .addFields(
                 { name: '🎯 Your Hand', value: `${displayHandEmoji(playerHand)}\n**Score:** ${playerScore}`, inline: true },
                 { name: '🎭 Dealer\'s Hand', value: `${displayHandEmoji([dealerHand[0]])} 🎴\n**Score:** ${calculateHandValue([dealerHand[0]])} + ?`, inline: true },
-                { name: '💰 Game Info', value: `**Your Balance:** E$${getEggBucks(userId)}\n**House Edge:** ${getHouseBalance()}`, inline: true }
+                { name: '💰 Game Info', value: `**Your Balance:** 🍯${getEggBucks(userId)}\n**House Edge:** ${getHouseBalance()}`, inline: true }
             )
             .setFooter({ text: 'Choose your action wisely! 🎲' })
             .setTimestamp();
@@ -332,7 +332,7 @@ module.exports = (client) => {
                     .setImage('attachment://blackjack-result.png')
                     .addFields(
                         { name: '🎯 Final Result', value: `**You:** ${playerScore}\n**Dealer:** ${dealerScore}`, inline: true },
-                        { name: '💰 Payout', value: `**Returned:** E$${betAmount}`, inline: true }
+                        { name: '💰 Payout', value: `**Returned:** 🍯${betAmount}`, inline: true }
                     )
                     .setFooter({ text: 'Your bet has been returned!' })
                     .setTimestamp();
@@ -349,7 +349,7 @@ module.exports = (client) => {
                 const finalCanvas = await createGameTable(playerHand, dealerHand, playerScore, dealerScore, 'win', message.author.username, betAmount, false, currentStreak + 1, deckStatus);
                 const finalAttachment = new AttachmentBuilder(finalCanvas.toBuffer(), { name: 'blackjack-result.png' });
                 
-                let bonusText = streakBonus > 0 ? `\n🔥 **Streak Bonus: +E$${streakBonus}**` : '';
+                let bonusText = streakBonus > 0 ? `\n🔥 **Streak Bonus: +🍯${streakBonus}**` : '';
                 
                 gameEmbed = new EmbedBuilder()
                     .setTitle('🎰 Blackjack - Natural 21!')
@@ -358,7 +358,7 @@ module.exports = (client) => {
                     .setImage('attachment://blackjack-result.png')
                     .addFields(
                         { name: '🎯 Final Result', value: `**You:** ${playerScore}\n**Dealer:** ${dealerScore}`, inline: true },
-                        { name: '💰 Payout', value: `**Won:** E$${totalWinnings}\n**New Balance:** E$${getEggBucks(userId)}\n**Streak:** ${currentStreak + 1} wins`, inline: true }
+                        { name: '💰 Payout', value: `**Won:** 🍯${totalWinnings}\n**New Balance:** 🍯${getEggBucks(userId)}\n**Streak:** ${currentStreak + 1} wins`, inline: true }
                     )
                     .setFooter({ text: 'Blackjack pays 3:2!' })
                     .setTimestamp();
@@ -426,7 +426,7 @@ module.exports = (client) => {
                         .setImage('attachment://blackjack-result.png')
                         .addFields(
                             { name: '🎯 Final Result', value: `**You:** ${playerScore} (BUST)\n**Dealer:** ${calculateHandValue([dealerHand[0]])} + ?`, inline: true },
-                            { name: '💰 Loss', value: `**Lost:** E$${betAmount}\n**New Balance:** E$${getEggBucks(userId)}\n**Streak:** Reset`, inline: true }
+                            { name: '💰 Loss', value: `**Lost:** 🍯${betAmount}\n**New Balance:** 🍯${getEggBucks(userId)}\n**Streak:** Reset`, inline: true }
                         )
                         .setFooter({ text: 'Better luck next time!' })
                         .setTimestamp();
@@ -441,12 +441,12 @@ module.exports = (client) => {
                     gameEmbed = new EmbedBuilder()
                         .setTitle('🎰 Casino Blackjack')
                         .setColor('#0f5132')
-                        .setDescription(`**${message.author.username}** is playing Blackjack!\n**Bet:** E$${betAmount}${streakInfo}${deckInfo}`)
+                        .setDescription(`**${message.author.username}** is playing Blackjack!\n**Bet:** 🍯${betAmount}${streakInfo}${deckInfo}`)
                         .setImage('attachment://blackjack-table.png')
                         .addFields(
                             { name: '🎯 Your Hand', value: `${displayHandEmoji(playerHand)}\n**Score:** ${playerScore}`, inline: true },
                             { name: '🎭 Dealer\'s Hand', value: `${displayHandEmoji([dealerHand[0]])} 🎴\n**Score:** ${calculateHandValue([dealerHand[0]])} + ?`, inline: true },
-                            { name: '💰 Game Info', value: `**Your Balance:** E$${getEggBucks(userId)}\n**House Edge:** ${getHouseBalance()}`, inline: true }
+                            { name: '💰 Game Info', value: `**Your Balance:** 🍯${getEggBucks(userId)}\n**House Edge:** ${getHouseBalance()}`, inline: true }
                         )
                         .setFooter({ text: 'Choose your action wisely! 🎲' })
                         .setTimestamp();
@@ -477,7 +477,7 @@ module.exports = (client) => {
                             .setImage('attachment://blackjack-result.png')
                             .addFields(
                                 { name: '🎯 Final Result', value: `**You:** ${playerScore} (BUST)\n**Dealer:** ${calculateHandValue([dealerHand[0]])} + ?`, inline: true },
-                                { name: '💰 Loss', value: `**Lost:** E$${actualBet}\n**New Balance:** E$${getEggBucks(userId)}\n**Streak:** Reset`, inline: true }
+                                { name: '💰 Loss', value: `**Lost:** 🍯${actualBet}\n**New Balance:** 🍯${getEggBucks(userId)}\n**Streak:** Reset`, inline: true }
                             )
                             .setFooter({ text: 'Double down gone wrong!' })
                             .setTimestamp();
@@ -507,13 +507,13 @@ module.exports = (client) => {
                     updateEggBucks(userId, totalWinnings);
                     updateStreak(userId, true); // Increment streak
                     newStreak = currentStreak + 1;
-                    resultMessage = streakBonus > 0 ? `🎉 You won E$${totalWinnings}! (E$${streakBonus} streak bonus)` : `🎉 You won E$${totalWinnings}!`;
+                    resultMessage = streakBonus > 0 ? `🎉 You won 🍯${totalWinnings}! (🍯${streakBonus} streak bonus)` : `🎉 You won 🍯${totalWinnings}!`;
                     resultColor = '#00ff00';
                     gameState = 'win';
                 } else if (playerScore === dealerScore) {
                     // Tie - return the bet (no streak change)
                     updateEggBucks(userId, actualBet);
-                    resultMessage = `🤝 It's a tie! You get your E$${actualBet} back.`;
+                    resultMessage = `🤝 It's a tie! You get your 🍯${actualBet} back.`;
                     resultColor = '#ffaa00';
                     gameState = 'tie';
                 } else {
@@ -521,7 +521,7 @@ module.exports = (client) => {
                     updateHouse(actualBet);
                     updateStreak(userId, false); // Reset streak
                     newStreak = 0;
-                    resultMessage = `😢 You lost E$${actualBet}. Better luck next time!`;
+                    resultMessage = `😢 You lost 🍯${actualBet}. Better luck next time!`;
                     resultColor = '#ff0000';
                     gameState = 'lose';
                 }
@@ -536,7 +536,7 @@ module.exports = (client) => {
                     .setImage('attachment://blackjack-result.png')
                     .addFields(
                         { name: '🎯 Final Result', value: `**You:** ${playerScore}\n**Dealer:** ${dealerScore}`, inline: true },
-                        { name: '💰 Your Stats', value: `**New Balance:** E$${getEggBucks(userId)}\n**Win Streak:** ${newStreak}\n**House Balance:** E$${getHouseBalance()}`, inline: true }
+                        { name: '💰 Your Stats', value: `**New Balance:** 🍯${getEggBucks(userId)}\n**Win Streak:** ${newStreak}\n**House Balance:** 🍯${getHouseBalance()}`, inline: true }
                     )
                     .setFooter({ text: 'Thanks for playing! 🎲' })
                     .setTimestamp();
@@ -560,7 +560,7 @@ module.exports = (client) => {
                     .setImage('attachment://blackjack-result.png')
                     .addFields(
                         { name: '🎯 Your Hand', value: `${displayHandEmoji(playerHand)}\n**Score:** ${playerScore}`, inline: true },
-                        { name: '💰 Refund', value: `**Returned:** E$${refund}\n**New Balance:** E$${getEggBucks(userId)}`, inline: true }
+                        { name: '💰 Refund', value: `**Returned:** 🍯${refund}\n**New Balance:** 🍯${getEggBucks(userId)}`, inline: true }
                     )
                     .setFooter({ text: 'Sometimes the best move is to fold!' })
                     .setTimestamp();
@@ -582,7 +582,7 @@ module.exports = (client) => {
                 gameEmbed = new EmbedBuilder()
                     .setTitle('🎰 Blackjack - Split Hands!')
                     .setColor('#0f5132')
-                    .setDescription(`✂️ **${message.author.username}** split their hand!\n**Total Bet:** E$${betAmount * 2}`)
+                    .setDescription(`✂️ **${message.author.username}** split their hand!\n**Total Bet:** 🍯${betAmount * 2}`)
                     .setImage('attachment://blackjack-split.png')
                     .addFields(
                         { name: '🎯 Hand 1', value: `${displayHandEmoji(hand1)}\n**Score:** ${score1}`, inline: true },
@@ -725,7 +725,7 @@ module.exports = (client) => {
         return hand.map(card => `${card.value}${suitEmojis[card.suit]}`).join(' ');
     }
 
-    // Functions to handle Egg Bucks
+    // Functions to handle Honey
     function getEggBucks(userId) {
         if (!fs.existsSync(eggBucksFilePath)) {
             fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
@@ -830,7 +830,7 @@ module.exports = (client) => {
         
         if (playerScore > 21) {
             updateHouse(betAmount);
-            resultMessage = `💥 Hand ${handNumber} Bust! Lost E$${betAmount}`;
+            resultMessage = `💥 Hand ${handNumber} Bust! Lost 🍯${betAmount}`;
             gameState = 'bust';
         } else if (dealerScore > 21 || playerScore > dealerScore) {
             const baseWinnings = betAmount * 2;
@@ -838,15 +838,15 @@ module.exports = (client) => {
             payout = baseWinnings + streakBonus;
             updateEggBucks(userId, payout);
             won = true;
-            resultMessage = `🎉 Hand ${handNumber} Wins! Won E$${payout}`;
+            resultMessage = `🎉 Hand ${handNumber} Wins! Won 🍯${payout}`;
             gameState = 'win';
         } else if (playerScore === dealerScore) {
             updateEggBucks(userId, betAmount);
-            resultMessage = `🤝 Hand ${handNumber} Push! Returned E$${betAmount}`;
+            resultMessage = `🤝 Hand ${handNumber} Push! Returned 🍯${betAmount}`;
             gameState = 'tie';
         } else {
             updateHouse(betAmount);
-            resultMessage = `😢 Hand ${handNumber} Loses! Lost E$${betAmount}`;
+            resultMessage = `😢 Hand ${handNumber} Loses! Lost 🍯${betAmount}`;
             gameState = 'lose';
         }
         
@@ -868,10 +868,11 @@ module.exports = (client) => {
             .addFields(
                 { name: '🎯 Your Hand', value: `${displayHandEmoji(playerHand)}\n**Score:** ${playerScore}`, inline: true },
                 { name: '🎭 Dealer', value: `${displayHandEmoji(dealerHand)}\n**Score:** ${dealerScore}`, inline: true },
-                { name: '💰 Balance', value: `E$${getEggBucks(userId)}`, inline: true }
+                { name: '💰 Balance', value: `🍯${getEggBucks(userId)}`, inline: true }
             )
             .setTimestamp();
         
         await message.channel.send({ embeds: [embed], files: [finalAttachment] });
     }
 };
+

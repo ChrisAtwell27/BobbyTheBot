@@ -40,16 +40,16 @@ const HELP_CATEGORIES = {
     economy: {
         name: '💰 Economy & Currency',
         emoji: '💰',
-        description: 'Manage your Bobby Bucks and economy',
+        description: 'Manage your Honey and economy',
         commands: [
-            { name: '!balance', description: 'Check your Bobby Bucks balance', usage: '!balance [@user]' },
+            { name: '!balance', description: 'Check your Honey balance', usage: '!balance [@user]' },
             { name: '!baltop', description: 'View the richest members leaderboard', usage: '!baltop' },
-            { name: '!pay', description: 'Pay another user Bobby Bucks', usage: '!pay @user [amount]' },
-            { name: '!beg', description: 'Beg for Bobby Bucks with interactive tip jar', usage: '!beg' },
+            { name: '!pay', description: 'Pay another user Honey', usage: '!pay @user [amount]' },
+            { name: '!beg', description: 'Beg for Honey with interactive tip jar', usage: '!beg' },
             { name: '!economy', description: 'View server economy statistics', usage: '!economy' },
-            { name: '!spend', description: 'Spend your Bobby Bucks', usage: '!spend [amount]' },
-            { name: '!award', description: '**[ADMIN]** Award Bobby Bucks to user', usage: '!award @user [amount]' },
-            { name: '!awardall', description: '**[ADMIN]** Award all users Bobby Bucks', usage: '!awardall [amount]' }
+            { name: '!spend', description: 'Spend your Honey', usage: '!spend [amount]' },
+            { name: '!award', description: '**[ADMIN]** Award Honey to user', usage: '!award @user [amount]' },
+            { name: '!awardall', description: '**[ADMIN]** Award all users Honey', usage: '!awardall [amount]' }
         ]
     },
     casino: {
@@ -475,7 +475,7 @@ module.exports = (client) => {
                 .setDescription('**Welcome to Bobby Bot!** 🎉\n\nI\'m your all-in-one Discord companion with tons of features to enhance your server experience!')
                 .setImage('attachment://help-menu.png')
                 .addFields(
-                    { name: '💰 Economy System', value: 'Bobby Bucks currency with banking features', inline: true },
+                    { name: '💰 Economy System', value: 'Honey currency with banking features', inline: true },
                     { name: '🎰 Casino Games', value: 'Dice, roulette, blackjack, and more!', inline: true },
                     { name: '⚔️ PvP Battles', value: 'Challenge friends to epic duels', inline: true },
                     { name: '🃏 Poker Tables', value: 'Texas Hold\'em with friends', inline: true },
@@ -487,7 +487,7 @@ module.exports = (client) => {
                 )
                 .addFields({
                     name: '🚀 Quick Start',
-                    value: '• Use `!balance` to check your Bobby Bucks\n• Try `!gamble` to see casino games\n• Say "Hey Bobby" to start chatting!\n• Use the dropdown below for detailed help\n• Type `!cmdlist` for a quick command reference',
+                    value: '• Use `!balance` to check your Honey\n• Try `!gamble` to see casino games\n• Say "Hey Bobby" to start chatting!\n• Use the dropdown below for detailed help\n• Type `!cmdlist` for a quick command reference',
                     inline: false
                 })
                 .setFooter({ text: 'Select a category above for detailed command information!' })
@@ -555,7 +555,7 @@ module.exports = (client) => {
             .setDescription('**Welcome to Bobby Bot!** 🎉\n\nI\'m your all-in-one Discord companion with tons of features to enhance your server experience!')
             .setImage('attachment://help-menu.png')
             .addFields(
-                { name: '💰 Economy System', value: 'Bobby Bucks currency with banking features', inline: true },
+                { name: '💰 Economy System', value: 'Honey currency with banking features', inline: true },
                 { name: '🎰 Casino Games', value: 'Dice, roulette, blackjack, and more!', inline: true },
                 { name: '⚔️ PvP Battles', value: 'Challenge friends to epic duels', inline: true },
                 { name: '🃏 Poker Tables', value: 'Texas Hold\'em with friends', inline: true },
@@ -567,7 +567,7 @@ module.exports = (client) => {
             )
             .addFields({
                 name: '🚀 Quick Start',
-                value: '• Use `!balance` to check your Bobby Bucks\n• Try `!gamble` to see casino games\n• Say "Hey Bobby" to start chatting!\n• Use the dropdown below for detailed help',
+                value: '• Use `!balance` to check your Honey\n• Try `!gamble` to see casino games\n• Say "Hey Bobby" to start chatting!\n• Use the dropdown below for detailed help',
                 inline: false
             })
             .setFooter({ text: 'Select a category above for detailed command information!' })
