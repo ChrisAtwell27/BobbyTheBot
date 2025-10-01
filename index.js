@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 
 // Load configuration values
 const { loggingChannelId, alertChannelId, alertKeywords } = require('./data/config');
@@ -48,6 +49,28 @@ require('./events/askHandler')(client);
 // Initialize Valorant API handler separately to prevent conflicts
 const valorantApiHandler = require('./events/valorantApiHandler');
 valorantApiHandler.init(client);
+
+// Create HTTP server for health checks (required by Bluehost and other cloud platforms)
+const PORT = process.env.PORT || 8080;
+const server = http.createServer((req, res) => {
+  // Health check endpoint
+  if (req.url === '/health' || req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ 
+      status: 'ok', 
+      uptime: process.uptime(),
+      bot: client.user ? client.user.tag : 'Not ready',
+      timestamp: new Date().toISOString()
+    }));
+  } else {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
+  }
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Health check server running on port ${PORT}`);
+});
 
 // Start the bot
 client.once("ready", () => {
