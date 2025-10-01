@@ -128,22 +128,22 @@ async function balanceTeams(players) {
 
 // Enhanced function to create in-house visualization
 async function createInhouseVisualization(inhouse, showTeams = false, balancedTeams = null) {
-    const canvas = createCanvas(1100, 280);
+    const canvas = createCanvas(1100, 420);
     const ctx = canvas.getContext('2d');
     
     // Enhanced background gradient
-    const gradient = ctx.createLinearGradient(0, 0, 1100, 280);
+    const gradient = ctx.createLinearGradient(0, 0, 1100, 420);
     gradient.addColorStop(0, '#0a0e13');
     gradient.addColorStop(0.3, '#1e2328');
     gradient.addColorStop(0.7, '#2c3e50');
     gradient.addColorStop(1, '#0a0e13');
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 1100, 280);
+    ctx.fillRect(0, 0, 1100, 420);
     
     // Add subtle pattern overlay
     ctx.fillStyle = 'rgba(255, 70, 84, 0.05)';
     for (let i = 0; i < 1100; i += 30) {
-        for (let j = 0; j < 280; j += 30) {
+        for (let j = 0; j < 420; j += 30) {
             if ((i + j) % 60 === 0) {
                 ctx.fillRect(i, j, 15, 15);
             }
@@ -157,7 +157,7 @@ async function createInhouseVisualization(inhouse, showTeams = false, balancedTe
     accentGradient.addColorStop(1, '#ff4654');
     ctx.fillStyle = accentGradient;
     ctx.fillRect(0, 0, 1100, 6);
-    ctx.fillRect(0, 274, 1100, 6);
+    ctx.fillRect(0, 414, 1100, 6);
     
     // Enhanced title with glow effect
     ctx.shadowColor = '#ff4654';
@@ -219,7 +219,7 @@ async function createInhouseVisualization(inhouse, showTeams = false, balancedTe
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
         ctx.fillStyle = balancedTeams.mmrDifference < 200 ? '#00ff88' : '#ffaa00';
-        ctx.fillText(`MMR Diff: ${Math.round(balancedTeams.mmrDifference)}`, 550, 265);
+        ctx.fillText(`MMR Diff: ${Math.round(balancedTeams.mmrDifference)}`, 550, 405);
     } else {
         // Show all 10 slots in two rows
         allMembers = [inhouse.leader, ...inhouse.members];

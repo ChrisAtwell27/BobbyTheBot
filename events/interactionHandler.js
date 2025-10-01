@@ -249,6 +249,14 @@ module.exports = (client) => {
                 ]
             },
             {
+                triggers: ["minecraft", "mc server", "mine craft"],
+                responses: [
+                    "🎮 Join our Minecraft server! **IP:** `31.214.162.143:25732` ⛏️",
+                    "Want to play Minecraft? Connect to our server: **31.214.162.143:25732** 🏗️",
+                    "Our Minecraft server is live! **IP:** `31.214.162.143:25732` - See you there! ⚒️",
+                ]
+            },
+            {
                 triggers: ["what is the meaning of life", "meaning of life", "what's the meaning of life"],
                 responses: [
                     "42. It's always 42. But for you, Bobby thinks it could also be pizza. 🍕",
