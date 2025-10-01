@@ -242,14 +242,6 @@ module.exports = (client) => {
                 ]
             },
             {
-                triggers: ["play game", "what games", "game", "wanna play"],
-                responses: [
-                    "I've got tons of games! Try `!gamble` for casino games, `!poker` for Texas Hold'em, or `!gladiator` to duel someone! 🎮",
-                    "Games galore! Casino: `!flip`, `!blackjack`, `!dice` | PvP: `!gladiator`, `!rps` | Teams: `!valorantteam` 🎲",
-                    "Ready to play? Check out `!gamble` for solo games or challenge someone with `!rps` or `!gladiator`! ⚔️",
-                ]
-            },
-            {
                 triggers: ["valorant", "val team", "need team"],
                 responses: [
                     "Need a Valorant team? Try `!valorantteam` for 5 players or `!valinhouse` for 10-player in-house matches! 🎯",
