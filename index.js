@@ -45,6 +45,7 @@ require('./events/moderationHandler')(client);
 require('./events/boosterRoleHandler')(client);
 require('./events/memberCountHandler')(client);
 require('./events/askHandler')(client);
+require('./events/wordleHandler')(client);
 
 // Initialize Valorant API handler separately to prevent conflicts
 const valorantApiHandler = require('./events/valorantApiHandler');
