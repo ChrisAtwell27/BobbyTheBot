@@ -144,6 +144,10 @@ module.exports = (client) => {
         // Only process messages in the Wordle channel
         if (message.channel.id !== WORDLE_CHANNEL_ID) return;
 
+        // Ignore messages that say "{user} was playing"
+        if (message.content.includes('was playing')) return;
+        if (message.content.includes('is playing')) return;
+
         // Check if this is a Wordle results message
         if (message.content.includes('Here are yesterday\'s results:') ||
             message.content.includes('day streak!')) {
@@ -188,6 +192,49 @@ module.exports = (client) => {
                         message.guild.members.cache.map(m => `${m.user.username} / ${m.displayName}`).slice(0, 5)
                     );
                 }
+            }
+
+            // After processing scores, send the leaderboard
+            const stats = calculateStats();
+
+            if (Object.keys(stats).length > 0) {
+                // Sort users by weighted score (lower is better)
+                const sortedUsers = Object.entries(stats).sort((a, b) => a[1].weightedScore - b[1].weightedScore);
+
+                const { EmbedBuilder } = require('discord.js');
+
+                // Build the leaderboard description with proper formatting
+                let leaderboardText = '';
+                const topTen = sortedUsers.slice(0, 10);
+
+                for (let i = 0; i < topTen.length; i++) {
+                    const [userId, userStats] = topTen[i];
+                    const member = message.guild.members.cache.get(userId);
+                    const username = member ? member.user.username : `Unknown User (${userId})`;
+
+                    let medal;
+                    if (i === 0) medal = '🥇';
+                    else if (i === 1) medal = '🥈';
+                    else if (i === 2) medal = '🥉';
+                    else medal = `**${i + 1}.**`;
+
+                    leaderboardText += `${medal} **${username}**\n`;
+                    leaderboardText += `└ Avg: **${userStats.avgScore.toFixed(2)}** | Games: **${userStats.totalGames}** | Best: **${userStats.bestScore}/6**\n\n`;
+                }
+
+                const embed = new EmbedBuilder()
+                    .setTitle('🟩 Wordle Leaderboard - Top Word Masters')
+                    .setColor('#6aaa64')
+                    .setDescription(leaderboardText.trim())
+                    .addFields(
+                        { name: '📊 Total Players', value: `${Object.keys(stats).length}`, inline: true },
+                        { name: '🎮 Total Games Played', value: `${Object.values(stats).reduce((sum, s) => sum + s.totalGames, 0)}`, inline: true },
+                        { name: '⭐ Best Score', value: `${Math.min(...Object.values(stats).map(s => s.bestScore))}/6`, inline: true }
+                    )
+                    .setFooter({ text: 'Rankings favor consistency and volume. Play more to climb! 🟩' })
+                    .setTimestamp();
+
+                message.channel.send({ embeds: [embed] });
             }
         }
 
