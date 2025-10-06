@@ -128,6 +128,27 @@ function parseWordleMessage(content) {
     return results;
 }
 
+// Add timestamps to legacy scores based on position (oldest first, one per day)
+function migrateLegacyScores() {
+    const userData = loadUserData();
+    let modified = false;
+
+    Object.entries(userData).forEach(([userId, scores]) => {
+        for (let i = 0; i < scores.length; i++) {
+            if (!scores[i].timestamp) {
+                // Assign timestamps going backwards from today, one day per score
+                const daysAgo = scores.length - i - 1;
+                scores[i].timestamp = Date.now() - (daysAgo * 24 * 60 * 60 * 1000);
+                modified = true;
+            }
+        }
+    });
+
+    if (modified) {
+        saveUserData(userData);
+    }
+}
+
 // Calculate statistics for leaderboard
 // timeFilter: optional object with { start: timestamp, end: timestamp } to filter by time range
 function calculateStats(timeFilter = null) {
@@ -327,6 +348,9 @@ module.exports = (client) => {
 
         // Handle !wordleweekly command
         if (message.content.toLowerCase() === '!wordleweekly') {
+            // Migrate legacy scores if needed
+            migrateLegacyScores();
+
             const now = Date.now();
             const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
             const timeFilter = { start: oneWeekAgo, end: now };
@@ -384,6 +408,9 @@ module.exports = (client) => {
 
         // Handle !wordlemonthly command
         if (message.content.toLowerCase() === '!wordlemonthly') {
+            // Migrate legacy scores if needed
+            migrateLegacyScores();
+
             const now = Date.now();
             const oneMonthAgo = now - (30 * 24 * 60 * 60 * 1000);
             const timeFilter = { start: oneMonthAgo, end: now };
