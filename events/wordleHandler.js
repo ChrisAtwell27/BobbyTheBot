@@ -9,7 +9,8 @@ if (!fs.existsSync(wordleScoresFilePath)) {
     fs.writeFileSync(wordleScoresFilePath, '', 'utf8');
 }
 
-// Load user data from file (format: userId|score1|score2|score3...)
+// Load user data from file (format: userId|score1:timestamp1|score2:timestamp2...)
+// For backward compatibility, also supports old format: userId|score1|score2|score3...
 function loadUserData() {
     const data = fs.readFileSync(wordleScoresFilePath, 'utf8');
     const userData = {};
@@ -18,7 +19,15 @@ function loadUserData() {
         if (line.trim()) {
             const parts = line.split('|');
             const userId = parts[0];
-            const scores = parts.slice(1).map(s => parseInt(s));
+            const scores = parts.slice(1).map(s => {
+                if (s.includes(':')) {
+                    const [score, timestamp] = s.split(':');
+                    return { score: parseInt(score), timestamp: parseInt(timestamp) };
+                } else {
+                    // Legacy format - no timestamp
+                    return { score: parseInt(s), timestamp: null };
+                }
+            });
             userData[userId] = scores;
         }
     });
@@ -31,7 +40,16 @@ function saveUserData(userData) {
     let content = '';
 
     Object.entries(userData).forEach(([userId, scores]) => {
-        let line = userId + '|' + scores.join('|');
+        const scoreStrs = scores.map(s => {
+            if (typeof s === 'object' && s.timestamp !== null) {
+                return `${s.score}:${s.timestamp}`;
+            } else if (typeof s === 'object') {
+                return `${s.score}`;
+            } else {
+                return `${s}`;
+            }
+        });
+        let line = userId + '|' + scoreStrs.join('|');
         content += line + '\n';
     });
 
@@ -39,14 +57,18 @@ function saveUserData(userData) {
 }
 
 // Add a score for a user
-function addScore(userId, score) {
+function addScore(userId, score, timestamp = null) {
     const userData = loadUserData();
 
     if (!userData[userId]) {
         userData[userId] = [];
     }
 
-    userData[userId].push(score);
+    const scoreEntry = {
+        score: score,
+        timestamp: timestamp || Date.now()
+    };
+    userData[userId].push(scoreEntry);
     saveUserData(userData);
 }
 
@@ -107,30 +129,41 @@ function parseWordleMessage(content) {
 }
 
 // Calculate statistics for leaderboard
-function calculateStats() {
+// timeFilter: optional object with { start: timestamp, end: timestamp } to filter by time range
+function calculateStats(timeFilter = null) {
     const userData = loadUserData();
     const userStats = {};
 
     Object.entries(userData).forEach(([userId, scores]) => {
-        if (scores.length > 0) {
-            const totalScore = scores.reduce((sum, s) => sum + s, 0);
-            const bestScore = Math.min(...scores);
-            const avgScore = totalScore / scores.length;
+        // Filter scores by time range if specified
+        let filteredScores = scores;
+        if (timeFilter) {
+            filteredScores = scores.filter(s => {
+                if (!s.timestamp) return false; // Exclude scores without timestamps
+                return s.timestamp >= timeFilter.start && s.timestamp <= timeFilter.end;
+            });
+        }
+
+        if (filteredScores.length > 0) {
+            const scoreValues = filteredScores.map(s => typeof s === 'object' ? s.score : s);
+            const totalScore = scoreValues.reduce((sum, s) => sum + s, 0);
+            const bestScore = Math.min(...scoreValues);
+            const avgScore = totalScore / scoreValues.length;
 
             // Calculate weighted score that HEAVILY favors volume
             // Lower is better. Exponential penalty for low game counts.
             // Formula: avgScore * (50 / games)^0.7
             // This means more games = exponentially better score
-            const volumeMultiplier = Math.pow(50 / scores.length, 0.7);
+            const volumeMultiplier = Math.pow(50 / filteredScores.length, 0.7);
             const weightedScore = avgScore * volumeMultiplier;
 
             userStats[userId] = {
-                totalGames: scores.length,
+                totalGames: filteredScores.length,
                 totalScore: totalScore,
                 bestScore: bestScore,
                 avgScore: avgScore,
                 weightedScore: weightedScore,
-                scores: scores
+                scores: filteredScores
             };
         }
     });
@@ -284,6 +317,120 @@ module.exports = (client) => {
                 .addFields(
                     { name: '📊 Total Players', value: `${Object.keys(stats).length}`, inline: true },
                     { name: '🎮 Total Games Played', value: `${Object.values(stats).reduce((sum, s) => sum + s.totalGames, 0)}`, inline: true },
+                    { name: '⭐ Best Score', value: `${Math.min(...Object.values(stats).map(s => s.bestScore))}/6`, inline: true }
+                )
+                .setFooter({ text: 'Rankings favor consistency and volume. Play more to climb! 🟩' })
+                .setTimestamp();
+
+            message.channel.send({ embeds: [embed] });
+        }
+
+        // Handle !wordleweekly command
+        if (message.content.toLowerCase() === '!wordleweekly') {
+            const now = Date.now();
+            const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
+            const timeFilter = { start: oneWeekAgo, end: now };
+            const stats = calculateStats(timeFilter);
+
+            if (Object.keys(stats).length === 0) {
+                return message.channel.send('No Wordle scores recorded in the past week!');
+            }
+
+            // Sort users by weighted score (lower is better)
+            const sortedUsers = Object.entries(stats).sort((a, b) => a[1].weightedScore - b[1].weightedScore);
+
+            const { EmbedBuilder } = require('discord.js');
+
+            // Fetch guild members to ensure we have usernames
+            try {
+                await message.guild.members.fetch();
+            } catch (error) {
+                console.error('Error fetching guild members:', error);
+            }
+
+            // Build the leaderboard description with proper formatting
+            let leaderboardText = '';
+            const topTen = sortedUsers.slice(0, 10);
+
+            for (let i = 0; i < topTen.length; i++) {
+                const [userId, userStats] = topTen[i];
+                const member = message.guild.members.cache.get(userId);
+                const username = member ? member.user.username : `Unknown User (${userId})`;
+
+                let medal;
+                if (i === 0) medal = '🥇';
+                else if (i === 1) medal = '🥈';
+                else if (i === 2) medal = '🥉';
+                else medal = `**${i + 1}.**`;
+
+                leaderboardText += `${medal} **${username}**\n`;
+                leaderboardText += `└ Avg: **${userStats.avgScore.toFixed(2)}** | Games: **${userStats.totalGames}** | Best: **${userStats.bestScore}/6**\n\n`;
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle('📅 Weekly Wordle Leaderboard - Past 7 Days')
+                .setColor('#6aaa64')
+                .setDescription(leaderboardText.trim())
+                .addFields(
+                    { name: '📊 Active Players', value: `${Object.keys(stats).length}`, inline: true },
+                    { name: '🎮 Games This Week', value: `${Object.values(stats).reduce((sum, s) => sum + s.totalGames, 0)}`, inline: true },
+                    { name: '⭐ Best Score', value: `${Math.min(...Object.values(stats).map(s => s.bestScore))}/6`, inline: true }
+                )
+                .setFooter({ text: 'Rankings favor consistency and volume. Play more to climb! 🟩' })
+                .setTimestamp();
+
+            message.channel.send({ embeds: [embed] });
+        }
+
+        // Handle !wordlemonthly command
+        if (message.content.toLowerCase() === '!wordlemonthly') {
+            const now = Date.now();
+            const oneMonthAgo = now - (30 * 24 * 60 * 60 * 1000);
+            const timeFilter = { start: oneMonthAgo, end: now };
+            const stats = calculateStats(timeFilter);
+
+            if (Object.keys(stats).length === 0) {
+                return message.channel.send('No Wordle scores recorded in the past month!');
+            }
+
+            // Sort users by weighted score (lower is better)
+            const sortedUsers = Object.entries(stats).sort((a, b) => a[1].weightedScore - b[1].weightedScore);
+
+            const { EmbedBuilder } = require('discord.js');
+
+            // Fetch guild members to ensure we have usernames
+            try {
+                await message.guild.members.fetch();
+            } catch (error) {
+                console.error('Error fetching guild members:', error);
+            }
+
+            // Build the leaderboard description with proper formatting
+            let leaderboardText = '';
+            const topTen = sortedUsers.slice(0, 10);
+
+            for (let i = 0; i < topTen.length; i++) {
+                const [userId, userStats] = topTen[i];
+                const member = message.guild.members.cache.get(userId);
+                const username = member ? member.user.username : `Unknown User (${userId})`;
+
+                let medal;
+                if (i === 0) medal = '🥇';
+                else if (i === 1) medal = '🥈';
+                else if (i === 2) medal = '🥉';
+                else medal = `**${i + 1}.**`;
+
+                leaderboardText += `${medal} **${username}**\n`;
+                leaderboardText += `└ Avg: **${userStats.avgScore.toFixed(2)}** | Games: **${userStats.totalGames}** | Best: **${userStats.bestScore}/6**\n\n`;
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle('📅 Monthly Wordle Leaderboard - Past 30 Days')
+                .setColor('#6aaa64')
+                .setDescription(leaderboardText.trim())
+                .addFields(
+                    { name: '📊 Active Players', value: `${Object.keys(stats).length}`, inline: true },
+                    { name: '🎮 Games This Month', value: `${Object.values(stats).reduce((sum, s) => sum + s.totalGames, 0)}`, inline: true },
                     { name: '⭐ Best Score', value: `${Math.min(...Object.values(stats).map(s => s.bestScore))}/6`, inline: true }
                 )
                 .setFooter({ text: 'Rankings favor consistency and volume. Play more to climb! 🟩' })
