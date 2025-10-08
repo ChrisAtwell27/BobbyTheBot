@@ -235,10 +235,9 @@ module.exports = (client) => {
                 .setPlaceholder('Choose a pet to adopt!')
                 .addOptions(
                     Object.entries(PET_TYPES).map(([key, pet]) => ({
-                        label: `${pet.name} - ??{pet.cost}`,
+                        label: `${pet.emoji} ${pet.name} - ¢${pet.cost}`,
                         description: `A lovely ${pet.name.toLowerCase()} companion`,
-                        value: key,
-                        emoji: pet.emoji
+                        value: key
                     }))
                 );
 
@@ -271,28 +270,24 @@ module.exports = (client) => {
             const petCard = await createPetCard(message.author, pet);
             const attachment = new AttachmentBuilder(petCard.toBuffer(), { name: 'pet-status.png' });
 
-            // Row 1: Basic Care
+            // Row 1: Basic Care (emojis in labels to avoid rendering issues)
             const careRow = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
                         .setCustomId(`pet_feed_${userId}`)
-                        .setLabel('Feed')
-                        .setEmoji('🍽️')
+                        .setLabel('🍽 Feed')
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId(`pet_play_${userId}`)
-                        .setLabel('Play')
-                        .setEmoji('🎾')
+                        .setLabel('🎾 Play')
                         .setStyle(ButtonStyle.Success),
                     new ButtonBuilder()
                         .setCustomId(`pet_clean_${userId}`)
-                        .setLabel('Clean')
-                        .setEmoji('🛁')
+                        .setLabel('🛁 Clean')
                         .setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder()
                         .setCustomId(`pet_sleep_${userId}`)
-                        .setLabel('Sleep')
-                        .setEmoji('😴')
+                        .setLabel('💤 Sleep')
                         .setStyle(ButtonStyle.Secondary)
                 );
 
@@ -301,23 +296,19 @@ module.exports = (client) => {
                 .addComponents(
                     new ButtonBuilder()
                         .setCustomId(`pet_mood_${userId}`)
-                        .setLabel('Mood')
-                        .setEmoji('😊')
+                        .setLabel('😊 Mood')
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId(`pet_race_${userId}`)
-                        .setLabel('Race')
-                        .setEmoji('🏁')
+                        .setLabel('🏁 Race')
                         .setStyle(ButtonStyle.Success),
                     new ButtonBuilder()
                         .setCustomId(`pet_treasure_${userId}`)
-                        .setLabel('Treasure')
-                        .setEmoji('💎')
+                        .setLabel('💎 Treasure')
                         .setStyle(ButtonStyle.Success),
                     new ButtonBuilder()
                         .setCustomId(`pet_adventure_${userId}`)
-                        .setLabel('Adventure')
-                        .setEmoji('🗺️')
+                        .setLabel('🗺 Adventure')
                         .setStyle(ButtonStyle.Success)
                 );
 
@@ -326,23 +317,19 @@ module.exports = (client) => {
                 .addComponents(
                     new ButtonBuilder()
                         .setCustomId(`pet_train_${userId}`)
-                        .setLabel('Train')
-                        .setEmoji('🎓')
+                        .setLabel('🎓 Train')
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId(`pet_achievements_${userId}`)
-                        .setLabel('Achievements')
-                        .setEmoji('🏆')
+                        .setLabel('🏆 Achievements')
                         .setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder()
                         .setCustomId(`pet_shop_${userId}`)
-                        .setLabel('Shop')
-                        .setEmoji('🛒')
+                        .setLabel('🛒 Shop')
                         .setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder()
                         .setCustomId(`pet_inventory_${userId}`)
-                        .setLabel('Inventory')
-                        .setEmoji('🎒')
+                        .setLabel('🎒 Inventory')
                         .setStyle(ButtonStyle.Secondary)
                 );
 
@@ -350,69 +337,117 @@ module.exports = (client) => {
             const personality = pet.personality ? PERSONALITIES[pet.personality] : null;
             const petStatus = getPetStatus(pet);
 
+            // Calculate sleep status if sleeping
+            let sleepInfo = '';
+            if (pet.isSleeping && pet.sleepStartTime) {
+                const sleepMinutes = Math.floor((Date.now() - pet.sleepStartTime) / 60000);
+                sleepInfo = `\n\n😴 **Currently Sleeping** (${sleepMinutes} min)\n⚡ Energy recovering at 2/min`;
+            }
+
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name} - Pet Dashboard`)
+                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}`)
                 .setColor(petStatus.color)
-                .setDescription(`**${petStatus.message}**\n${mood.emoji} *${mood.messages[Math.floor(Math.random() * mood.messages.length)]}*`)
+                .setDescription(`**${petStatus.message}**\n${mood.emoji} *${mood.messages[Math.floor(Math.random() * mood.messages.length)]}*${sleepInfo}`)
                 .setImage('attachment://pet-status.png')
                 .addFields(
-                    { name: '📊 Stats', value: getStatsDisplay(pet), inline: true },
-                    { name: '🎭 Personality', value: personality ? `${personality.emoji} ${pet.personality}` : '🎲 Random', inline: true },
-                    { name: '⭐ Level', value: `Level ${pet.level}\n${pet.experience}/100 XP`, inline: true },
-                    { name: '🎂 Age', value: `${pet.age} days old`, inline: true },
-                    { name: '🏆 Achievements', value: `${getPetAchievements(userId).length}/${Object.keys(ACHIEVEMENTS).length} unlocked`, inline: true },
-                    { name: '📈 Stats', value: `Races Won: ${pet.stats?.race_wins || 0}\nTreasures: ${pet.stats?.treasures_found || 0}\nPlaydates: ${pet.stats?.playdates || 0}`, inline: true }
+                    { name: '\u200B', value: getStatsDisplay(pet), inline: false },
+                    {
+                        name: '📋 Info',
+                        value: `⭐ **Level ${pet.level}** • ${pet.experience}/100 XP\n🎂 Age: **${pet.age} days**\n🎭 ${personality ? `${personality.emoji} ${pet.personality}` : '🎲 Random'}`,
+                        inline: true
+                    },
+                    {
+                        name: '🏆 Progress',
+                        value: `Achievements: **${getPetAchievements(userId).length}/10**\nRaces Won: **${pet.stats?.race_wins || 0}**\nTreasures: **${pet.stats?.treasures_found || 0}**\nPlaydates: **${pet.stats?.playdates || 0}**`,
+                        inline: true
+                    }
                 )
-                .setFooter({ text: '💡 Use the buttons below to interact with your pet!' })
+                .setFooter({ text: '💡 Stats update in real-time! Use buttons below to interact.' })
                 .setTimestamp();
 
             return message.channel.send({ embeds: [embed], files: [attachment], components: [careRow, gamesRow, socialRow] });
         }
 
-        // Pet shop command
-        if (args[0] === '!petshop') {
+        // Pet shop command - IMPROVED!
+        if (args[0] === '!petshop' || args[0] === '!shop') {
             const userId = message.author.id;
             const pet = getPet(userId);
-            
+
             if (!pet) {
                 return message.channel.send('❌ You need a pet to use the pet shop! Use `!adopt` to get one.');
             }
 
-            const shopImage = await createPetShopDisplay();
-            const attachment = new AttachmentBuilder(shopImage.toBuffer(), { name: 'pet-shop.png' });
+            const balance = getBobbyBucks(userId);
 
-            const categories = ['food', 'toy', 'medicine', 'care', 'accessory'];
+            // Create item buttons organized by category
+            const foodItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'food');
+            const toyItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'toy');
+            const medicineItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'medicine');
+            const careItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'care');
+            const accessoryItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'accessory');
+
+            const embed = new EmbedBuilder()
+                .setTitle('🛒 Bobby\'s Pet Shop')
+                .setColor('#6B8E23')
+                .setDescription(`**Welcome! We have everything your pet needs!**\n💰 Your Balance: **¢${balance.toLocaleString()}**\n\n🛍️ *Select an item below to purchase*`)
+                .addFields(
+                    {
+                        name: '🍽️ Food & Treats',
+                        value: foodItems.map(([, item]) =>
+                            `**${item.emoji} ${item.name}** - ¢${item.cost}\n↳ ${item.hunger ? `+${item.hunger} Hunger` : ''} ${item.happiness ? `+${item.happiness} Happiness` : ''}`
+                        ).join('\n'),
+                        inline: false
+                    },
+                    {
+                        name: '🎾 Toys',
+                        value: toyItems.map(([, item]) =>
+                            `**${item.emoji} ${item.name}** - ¢${item.cost}\n↳ +${item.happiness} Happiness, ${item.energy} Energy`
+                        ).join('\n'),
+                        inline: false
+                    },
+                    {
+                        name: '💊 Medicine & Health',
+                        value: medicineItems.map(([, item]) =>
+                            `**${item.emoji} ${item.name}** - ¢${item.cost}\n↳ +${item.health} Health${item.happiness ? `, +${item.happiness} Happiness` : ''}`
+                        ).join('\n'),
+                        inline: true
+                    },
+                    {
+                        name: '🛁 Care Items',
+                        value: careItems.map(([, item]) =>
+                            `**${item.emoji} ${item.name}** - ¢${item.cost}\n↳ +${item.cleanliness} Cleanliness${item.happiness ? `, +${item.happiness} Happiness` : ''}`
+                        ).join('\n'),
+                        inline: true
+                    },
+                    {
+                        name: '👑 Accessories (Permanent!)',
+                        value: accessoryItems.map(([, item]) => {
+                            const effects = [];
+                            if (item.happiness) effects.push(`+${item.happiness} Happiness`);
+                            if (item.energy) effects.push(`+${item.energy} Energy`);
+                            return `**${item.emoji} ${item.name}** - ¢${item.cost}\n↳ ${effects.join(', ')} (Keeps forever!)`;
+                        }).join('\n'),
+                        inline: false
+                    }
+                )
+                .setFooter({ text: '💡 Use !use <item_key> to use items from your inventory' })
+                .setTimestamp();
+
+            // Create select menu with ALL items
+            const allItems = Object.entries(PET_ITEMS).map(([key, item]) => ({
+                label: `${item.emoji} ${item.name} - ¢${item.cost}`,
+                description: `${item.type.charAt(0).toUpperCase() + item.type.slice(1)} item`,
+                value: key
+            })).slice(0, 25); // Discord limit
+
             const selectMenu = new StringSelectMenuBuilder()
-                .setCustomId(`pet_shop_${userId}`)
-                .setPlaceholder('Choose a category to browse!')
-                .addOptions(
-                    categories.map(category => ({
-                        label: category.charAt(0).toUpperCase() + category.slice(1),
-                        description: `Browse ${category} items for your pet`,
-                        value: category,
-                        emoji: getCategoryEmoji(category)
-                    }))
-                );
+                .setCustomId(`pet_buyitem_${userId}`)
+                .setPlaceholder('🛍️ Select an item to purchase...')
+                .addOptions(allItems);
 
             const row = new ActionRowBuilder().addComponents(selectMenu);
 
-            const embed = new EmbedBuilder()
-                .setTitle('🛒 Pet Shop - Everything for Your Pet!')
-                .setColor('#5a6c8a')
-                .setDescription('**Welcome to the Pet Shop!**\nFind everything your pet needs to stay happy and healthy.')
-                .setImage('attachment://pet-shop.png')
-                .addFields(
-                    { name: '🍽️ Food', value: 'Keep your pet well-fed', inline: true },
-                    { name: '🎾 Toys', value: 'Fun and entertainment', inline: true },
-                    { name: '💊 Medicine', value: 'Health and wellness', inline: true },
-                    { name: '🛁 Care', value: 'Cleanliness supplies', inline: true },
-                    { name: '👑 Accessories', value: 'Stylish additions', inline: true },
-                    { name: '💰 Your Balance', value: `??{getBobbyBucks(userId).toLocaleString()}`, inline: true }
-                )
-                .setFooter({ text: 'Select a category above to start shopping!' })
-                .setTimestamp();
-
-            return message.channel.send({ embeds: [embed], files: [attachment], components: [row] });
+            return message.channel.send({ embeds: [embed], components: [row] });
         }
 
         // Feed pet with specific food
@@ -1280,15 +1315,30 @@ module.exports = (client) => {
             const moodCard = await createMoodCard(pet, interaction.user);
             const attachment = new AttachmentBuilder(moodCard.toBuffer(), { name: 'pet-mood.png' });
             const mood = getPetMood(pet);
+            const personality = pet.personality ? PERSONALITIES[pet.personality] : null;
+
+            // Back button to return to dashboard
+            const backButton = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`pet_dashboard_${userId}`)
+                        .setLabel('⬅️ Back to Dashboard')
+                        .setStyle(ButtonStyle.Secondary)
+                );
 
             const embed = new EmbedBuilder()
                 .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Emotional State`)
                 .setColor(getPetStatus(pet).color)
                 .setDescription(`**${pet.name} ${mood.messages[Math.floor(Math.random() * mood.messages.length)]}**`)
                 .setImage('attachment://pet-mood.png')
+                .addFields(
+                    { name: '🎭 Personality', value: personality ? `${personality.emoji} ${pet.personality}` : '🎲 Random', inline: true },
+                    { name: '💭 Current Thought', value: `"${getPetThoughts(pet)}"`, inline: false }
+                )
                 .setTimestamp();
 
-            return interaction.reply({ embeds: [embed], files: [attachment], ephemeral: false });
+            // Update the message instead of creating new one
+            return interaction.update({ embeds: [embed], files: [attachment], components: [backButton] });
         }
 
         if (interaction.isButton() && interaction.customId.startsWith('pet_achievements_')) {
@@ -1301,28 +1351,38 @@ module.exports = (client) => {
             const userAchievements = getPetAchievements(userId);
             const earnedAchievements = Object.entries(ACHIEVEMENTS)
                 .filter(([key]) => userAchievements.includes(key))
-                .map(([, ach]) => `${ach.emoji} **${ach.name}**`)
+                .map(([, ach]) => `${ach.emoji} **${ach.name}** - ${ach.description}`)
                 .join('\n') || 'No achievements yet!';
 
             const nextAchievements = Object.entries(ACHIEVEMENTS)
                 .filter(([key]) => !userAchievements.includes(key))
-                .slice(0, 3)
-                .map(([, ach]) => `${ach.emoji} **${ach.name}** - ${ach.description}`)
+                .slice(0, 5)
+                .map(([, ach]) => `${ach.emoji} **${ach.name}** - ${ach.description}\n   *Reward: ¢${ach.reward}*`)
                 .join('\n');
+
+            const backButton = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`pet_dashboard_${userId}`)
+                        .setLabel('⬅️ Back to Dashboard')
+                        .setStyle(ButtonStyle.Secondary)
+                );
 
             const embed = new EmbedBuilder()
                 .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Achievements`)
                 .setColor('#9370db')
-                .setDescription(`**Earned: ${userAchievements.length}/${Object.keys(ACHIEVEMENTS).length}**`)
+                .setDescription(`**Progress: ${userAchievements.length}/${Object.keys(ACHIEVEMENTS).length} Unlocked**`)
                 .addFields(
-                    { name: '🏆 Unlocked', value: earnedAchievements, inline: false },
-                    { name: '🎯 Next Goals', value: nextAchievements || 'All done!', inline: false }
+                    { name: '✅ Unlocked Achievements', value: earnedAchievements, inline: false },
+                    { name: '🎯 Next Goals', value: nextAchievements || '🎉 All achievements complete!', inline: false }
                 )
+                .setFooter({ text: 'Complete goals to earn Bobby Bucks!' })
                 .setTimestamp();
 
-            return interaction.reply({ embeds: [embed], ephemeral: true });
+            return interaction.update({ embeds: [embed], components: [backButton] });
         }
 
+        // Quick helper messages (ephemeral)
         if (interaction.isButton() && interaction.customId.startsWith('pet_race_')) {
             return interaction.reply({ content: '🏁 Use the `!race` command to start a race!', ephemeral: true });
         }
@@ -1332,7 +1392,7 @@ module.exports = (client) => {
         }
 
         if (interaction.isButton() && interaction.customId.startsWith('pet_adventure_')) {
-            return interaction.reply({ content: '🗺️ Use the `!adventure` command to go on an adventure!', ephemeral: true });
+            return interaction.reply({ content: '🗺 Use the `!adventure` command to go on an adventure!', ephemeral: true });
         }
 
         if (interaction.isButton() && interaction.customId.startsWith('pet_train_')) {
@@ -1340,11 +1400,165 @@ module.exports = (client) => {
         }
 
         if (interaction.isButton() && interaction.customId.startsWith('pet_shop_')) {
-            return interaction.reply({ content: '🛒 Use the `!petshop` command to visit the shop!', ephemeral: true });
+            const userId = interaction.customId.split('_')[2];
+            if (interaction.user.id !== userId) {
+                return interaction.reply({ content: '❌ Not your pet!', ephemeral: true });
+            }
+
+            // Open shop in the same message
+            const balance = getBobbyBucks(userId);
+
+            const foodItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'food');
+            const toyItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'toy');
+            const medicineItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'medicine');
+            const careItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'care');
+            const accessoryItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'accessory');
+
+            const embed = new EmbedBuilder()
+                .setTitle('🛒 Bobby\'s Pet Shop')
+                .setColor('#6B8E23')
+                .setDescription(`**Welcome! We have everything your pet needs!**\n💰 Your Balance: **¢${balance.toLocaleString()}**\n\n🛍️ *Select an item below to purchase*`)
+                .addFields(
+                    {
+                        name: '🍽️ Food & Treats',
+                        value: foodItems.map(([, item]) =>
+                            `**${item.emoji} ${item.name}** - ¢${item.cost}\n↳ ${item.hunger ? `+${item.hunger} Hunger` : ''} ${item.happiness ? `+${item.happiness} Happiness` : ''}`
+                        ).join('\n'),
+                        inline: false
+                    },
+                    {
+                        name: '🎾 Toys',
+                        value: toyItems.map(([, item]) =>
+                            `**${item.emoji} ${item.name}** - ¢${item.cost}\n↳ +${item.happiness} Happiness, ${item.energy} Energy`
+                        ).join('\n'),
+                        inline: false
+                    },
+                    {
+                        name: '💊 Medicine & Health',
+                        value: medicineItems.map(([, item]) =>
+                            `**${item.emoji} ${item.name}** - ¢${item.cost}\n↳ +${item.health} Health${item.happiness ? `, +${item.happiness} Happiness` : ''}`
+                        ).join('\n'),
+                        inline: true
+                    },
+                    {
+                        name: '🛁 Care Items',
+                        value: careItems.map(([, item]) =>
+                            `**${item.emoji} ${item.name}** - ¢${item.cost}\n↳ +${item.cleanliness} Cleanliness${item.happiness ? `, +${item.happiness} Happiness` : ''}`
+                        ).join('\n'),
+                        inline: true
+                    },
+                    {
+                        name: '👑 Accessories (Permanent!)',
+                        value: accessoryItems.map(([, item]) => {
+                            const effects = [];
+                            if (item.happiness) effects.push(`+${item.happiness} Happiness`);
+                            if (item.energy) effects.push(`+${item.energy} Energy`);
+                            return `**${item.emoji} ${item.name}** - ¢${item.cost}\n↳ ${effects.join(', ')} (Keeps forever!)`;
+                        }).join('\n'),
+                        inline: false
+                    }
+                )
+                .setFooter({ text: '💡 Select item to purchase, then click Back' })
+                .setTimestamp();
+
+            const allItems = Object.entries(PET_ITEMS).map(([key, item]) => ({
+                label: `${item.emoji} ${item.name} - ¢${item.cost}`,
+                description: `${item.type.charAt(0).toUpperCase() + item.type.slice(1)} item`,
+                value: key
+            })).slice(0, 25);
+
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId(`pet_buyitem_${userId}`)
+                .setPlaceholder('🛍️ Select an item to purchase...')
+                .addOptions(allItems);
+
+            const backButton = new ButtonBuilder()
+                .setCustomId(`pet_dashboard_${userId}`)
+                .setLabel('⬅️ Back to Dashboard')
+                .setStyle(ButtonStyle.Secondary);
+
+            const row1 = new ActionRowBuilder().addComponents(selectMenu);
+            const row2 = new ActionRowBuilder().addComponents(backButton);
+
+            return interaction.update({ embeds: [embed], components: [row1, row2] });
         }
 
         if (interaction.isButton() && interaction.customId.startsWith('pet_inventory_')) {
-            return interaction.reply({ content: '🎒 Use the `!inventory` command to check your items!', ephemeral: true });
+            return interaction.reply({ content: '🎒 Use the `!inventory` or `!petinv` command to check your items!', ephemeral: true });
+        }
+
+        // Dashboard button - return to main menu
+        if (interaction.isButton() && interaction.customId.startsWith('pet_dashboard_')) {
+            const userId = interaction.customId.split('_')[2];
+            if (interaction.user.id !== userId) {
+                return interaction.reply({ content: '❌ Not your pet!', ephemeral: true });
+            }
+
+            const pet = getPet(userId);
+            if (!pet) {
+                return interaction.reply({ content: '❌ Pet not found!', ephemeral: true });
+            }
+
+            const petCard = await createPetCard(interaction.user, pet);
+            const attachment = new AttachmentBuilder(petCard.toBuffer(), { name: 'pet-status.png' });
+
+            // Recreate dashboard
+            const careRow = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder().setCustomId(`pet_feed_${userId}`).setLabel('🍽 Feed').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`pet_play_${userId}`).setLabel('🎾 Play').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`pet_clean_${userId}`).setLabel('🛁 Clean').setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`pet_sleep_${userId}`).setLabel('💤 Sleep').setStyle(ButtonStyle.Secondary)
+                );
+
+            const gamesRow = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder().setCustomId(`pet_mood_${userId}`).setLabel('😊 Mood').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`pet_race_${userId}`).setLabel('🏁 Race').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`pet_treasure_${userId}`).setLabel('💎 Treasure').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`pet_adventure_${userId}`).setLabel('🗺 Adventure').setStyle(ButtonStyle.Success)
+                );
+
+            const socialRow = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder().setCustomId(`pet_train_${userId}`).setLabel('🎓 Train').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`pet_achievements_${userId}`).setLabel('🏆 Achievements').setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`pet_shop_${userId}`).setLabel('🛒 Shop').setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`pet_inventory_${userId}`).setLabel('🎒 Inventory').setStyle(ButtonStyle.Secondary)
+                );
+
+            const mood = getPetMood(pet);
+            const personality = pet.personality ? PERSONALITIES[pet.personality] : null;
+            const petStatus = getPetStatus(pet);
+
+            let sleepInfo = '';
+            if (pet.isSleeping && pet.sleepStartTime) {
+                const sleepMinutes = Math.floor((Date.now() - pet.sleepStartTime) / 60000);
+                sleepInfo = `\n\n😴 **Currently Sleeping** (${sleepMinutes} min)\n⚡ Energy recovering at 2/min`;
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}`)
+                .setColor(petStatus.color)
+                .setDescription(`**${petStatus.message}**\n${mood.emoji} *${mood.messages[Math.floor(Math.random() * mood.messages.length)]}*${sleepInfo}`)
+                .setImage('attachment://pet-status.png')
+                .addFields(
+                    { name: '\u200B', value: getStatsDisplay(pet), inline: false },
+                    {
+                        name: '📋 Info',
+                        value: `⭐ **Level ${pet.level}** • ${pet.experience}/100 XP\n🎂 Age: **${pet.age} days**\n🎭 ${personality ? `${personality.emoji} ${pet.personality}` : '🎲 Random'}`,
+                        inline: true
+                    },
+                    {
+                        name: '🏆 Progress',
+                        value: `Achievements: **${getPetAchievements(userId).length}/10**\nRaces Won: **${pet.stats?.race_wins || 0}**\nTreasures: **${pet.stats?.treasures_found || 0}**\nPlaydates: **${pet.stats?.playdates || 0}**`,
+                        inline: true
+                    }
+                )
+                .setFooter({ text: '💡 Stats update in real-time! Use buttons below to interact.' })
+                .setTimestamp();
+
+            return interaction.update({ embeds: [embed], files: [attachment], components: [careRow, gamesRow, socialRow] });
         }
 
         // Handle pet care buttons
@@ -1398,10 +1612,19 @@ module.exports = (client) => {
                     if (pet.energy >= 90) {
                         return interaction.reply({ content: '❌ Your pet is not tired right now!', ephemeral: true });
                     }
-                    pet.energy = Math.min(100, pet.energy + 30);
+
+                    // Put pet to sleep - they will recover energy over time
+                    pet.isSleeping = true;
+                    pet.sleepStartTime = Date.now();
+                    pet.energy = Math.min(100, pet.energy + 10); // Immediate small boost
                     pet.health = Math.min(100, pet.health + 5);
                     xpGained = 2;
-                    response = `${pet.name} took a nice nap and feels refreshed!`;
+
+                    // Calculate how long they should sleep (based on how tired they are)
+                    const energyDeficit = 100 - pet.energy;
+                    const sleepMinutes = Math.ceil(energyDeficit / 2); // 2 energy per minute while sleeping
+
+                    response = `${pet.name} is now sleeping! 😴\nThey will recover **${energyDeficit} energy** over the next **${sleepMinutes} minutes**.\n\n💡 Energy will automatically recover while sleeping!`;
                     break;
             }
 
@@ -1446,7 +1669,15 @@ module.exports = (client) => {
         const userRecord = data.split('\n').find(line => line.startsWith(`${userId}|`));
         if (userRecord) {
             try {
-                return JSON.parse(userRecord.substring(userRecord.indexOf('|') + 1));
+                let pet = JSON.parse(userRecord.substring(userRecord.indexOf('|') + 1));
+
+                // Apply time-based stat updates before returning
+                pet = updatePetStatsOverTime(pet);
+
+                // Save the updated stats back
+                savePet(userId, pet);
+
+                return pet;
             } catch (e) {
                 return null;
             }
@@ -1536,43 +1767,101 @@ module.exports = (client) => {
         return newBalance;
     }
 
+    function updatePetStatsOverTime(pet) {
+        const now = Date.now();
+        const lastUpdate = pet.lastStatUpdate || pet.created || now;
+        const minutesPassed = Math.floor((now - lastUpdate) / 60000);
+
+        if (minutesPassed < 1) return pet; // No update needed if less than 1 minute
+
+        const petType = PET_TYPES[pet.type];
+        const personality = pet.personality ? PERSONALITIES[pet.personality] : null;
+
+        // Calculate decay/growth per minute
+        const hungerDecayPerMin = petType.hungerDecay / 5; // Original was per 5 minutes
+        const happinessDecayPerMin = petType.happinessDecay / 5;
+        const cleanlinessDecayPerMin = petType.cleanlinessDecay / 5;
+        const healthDecayPerMin = petType.healthDecay / 5;
+
+        // HUNGER: Decreases over time (pet gets hungry)
+        pet.hunger = Math.max(0, pet.hunger - (hungerDecayPerMin * minutesPassed));
+
+        // HAPPINESS: Decreases over time, but slower if personality is content
+        const happinessMultiplier = personality ? (personality.happiness_bonus || 1) : 1;
+        pet.happiness = Math.max(0, pet.happiness - (happinessDecayPerMin * minutesPassed / happinessMultiplier));
+
+        // ENERGY: Gradually INCREASES over time when pet is resting (recovery)
+        // But decreases if hunger or health is too low
+        if (pet.isSleeping) {
+            // Pet is actively sleeping - faster energy recovery!
+            const sleepRecoveryPerMin = 2.0; // Recovers 2 energy per minute while sleeping
+            pet.energy = Math.min(100, pet.energy + (sleepRecoveryPerMin * minutesPassed));
+
+            // Wake up pet once fully rested
+            if (pet.energy >= 95) {
+                pet.isSleeping = false;
+                pet.sleepStartTime = null;
+            }
+        } else if (pet.hunger < 20 || pet.health < 30) {
+            // Low hunger or health drains energy
+            pet.energy = Math.max(0, pet.energy - (0.3 * minutesPassed));
+        } else {
+            // Natural energy recovery (slower than sleep for balance)
+            const energyRecoveryPerMin = 0.2; // Recovers 12 energy per hour when resting
+            pet.energy = Math.min(100, pet.energy + (energyRecoveryPerMin * minutesPassed));
+        }
+
+        // CLEANLINESS: Decreases over time
+        pet.cleanliness = Math.max(0, pet.cleanliness - (cleanlinessDecayPerMin * minutesPassed));
+
+        // HEALTH: Decreases slowly over time, faster if stats are critical
+        let healthDecay = healthDecayPerMin;
+        if (pet.hunger < 20) healthDecay *= 2; // Starving hurts health
+        if (pet.happiness < 20) healthDecay *= 1.5; // Sadness affects health
+        if (pet.cleanliness < 20) healthDecay *= 1.5; // Poor hygiene affects health
+        pet.health = Math.max(0, pet.health - (healthDecay * minutesPassed));
+
+        // If health is critical, all stats suffer
+        if (pet.health < 20) {
+            pet.happiness = Math.max(0, pet.happiness - (0.2 * minutesPassed));
+            pet.energy = Math.max(0, pet.energy - (0.3 * minutesPassed));
+        }
+
+        // Age the pet
+        const daysSinceCreated = Math.floor((now - pet.created) / (24 * 60 * 60 * 1000));
+        pet.age = daysSinceCreated;
+
+        // Update last stat update timestamp
+        pet.lastStatUpdate = now;
+
+        return pet;
+    }
+
     function updateAllPetsDecay() {
         if (!fs.existsSync(petsFilePath)) return;
-        
+
         const data = fs.readFileSync(petsFilePath, 'utf-8').trim();
         if (!data) return;
-        
+
         const lines = data.split('\n').filter(line => line.includes('|'));
         let updatedData = '';
-        
+
         lines.forEach(line => {
             const separatorIndex = line.indexOf('|');
             if (separatorIndex === -1) return;
-            
+
             const userId = line.substring(0, separatorIndex);
             const petDataStr = line.substring(separatorIndex + 1);
-            
+
             try {
-                const pet = JSON.parse(petDataStr);
-                const petType = PET_TYPES[pet.type];
-                
-                // Apply decay rates
-                pet.hunger = Math.max(0, pet.hunger - petType.hungerDecay);
-                pet.happiness = Math.max(0, pet.happiness - petType.happinessDecay);
-                pet.energy = Math.max(0, pet.energy - petType.energyDecay);
-                pet.cleanliness = Math.max(0, pet.cleanliness - petType.cleanlinessDecay);
-                pet.health = Math.max(0, pet.health - petType.healthDecay);
-                
-                // Age the pet
-                const daysSinceCreated = Math.floor((Date.now() - pet.created) / (24 * 60 * 60 * 1000));
-                pet.age = daysSinceCreated;
-                
+                let pet = JSON.parse(petDataStr);
+                pet = updatePetStatsOverTime(pet);
                 updatedData += `${userId}|${JSON.stringify(pet)}\n`;
             } catch (e) {
                 updatedData += line + '\n';
             }
         });
-        
+
         fs.writeFileSync(petsFilePath, updatedData.trim(), 'utf-8');
     }
 
@@ -1641,12 +1930,16 @@ module.exports = (client) => {
             const empty = 10 - filled;
             return '█'.repeat(filled) + '░'.repeat(empty);
         };
-        
-        return `🍽️ Hunger: ${getBar(pet.hunger)} ${pet.hunger}%\n` +
-               `😊 Happiness: ${getBar(pet.happiness)} ${pet.happiness}%\n` +
-               `❤️ Health: ${getBar(pet.health)} ${pet.health}%\n` +
-               `⚡ Energy: ${getBar(pet.energy)} ${pet.energy}%\n` +
-               `🛁 Cleanliness: ${getBar(pet.cleanliness)} ${pet.cleanliness}%`;
+
+        const pad = (num) => num.toString().padStart(3, ' ');
+
+        return `\`\`\`
+🍽️ Hunger      ${getBar(pet.hunger)} ${pad(pet.hunger)}%
+😊 Happiness   ${getBar(pet.happiness)} ${pad(pet.happiness)}%
+❤️  Health      ${getBar(pet.health)} ${pad(pet.health)}%
+⚡ Energy      ${getBar(pet.energy)} ${pad(pet.energy)}%
+🛁 Cleanliness ${getBar(pet.cleanliness)} ${pad(pet.cleanliness)}%
+\`\`\``;
     }
 
     function getItemDescription(item) {
