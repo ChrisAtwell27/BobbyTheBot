@@ -41,10 +41,15 @@ function getUserPersonalityScore(userId) {
             if (line.trim().startsWith('#') || !line.trim()) continue;
 
             const [id, scoreStr] = line.split(':');
-            if (id === userId) {
-                const score = parseInt(scoreStr, 10);
+            // Trim whitespace from both id and score
+            const trimmedId = id ? id.trim() : '';
+            const trimmedScore = scoreStr ? scoreStr.trim() : '';
+
+            if (trimmedId === userId) {
+                const score = parseInt(trimmedScore, 10);
                 // Validate score is between 1-10
                 if (score >= 1 && score <= 10) {
+                    console.log(`✅ Found personality score for user ${userId}: ${score}/10`);
                     return score;
                 }
             }
@@ -183,18 +188,19 @@ You manage several key systems in the Discord server:
 
 // Function to get or create conversation history for a user
 function getConversationHistory(userId) {
-    if (!conversationHistory.has(userId)) {
-        // Get user's personality score
-        const personalityScore = getUserPersonalityScore(userId);
-        const personalityInstruction = getPersonalityInstruction(personalityScore);
+    // Always check personality score (in case it changed in the file)
+    const personalityScore = getUserPersonalityScore(userId);
+    const personalityInstruction = getPersonalityInstruction(personalityScore);
 
-        // Create custom system prompt with personality override
-        const customPrompt = `${BOBBY_SYSTEM_PROMPT}
+    // Create custom system prompt with personality override
+    const customPrompt = `${BOBBY_SYSTEM_PROMPT}
 
 ${personalityInstruction}
 
 **IMPORTANT: Follow the personality instructions above for THIS specific user.**`;
 
+    if (!conversationHistory.has(userId)) {
+        // Create new conversation with personality
         conversationHistory.set(userId, [
             { role: 'system', content: customPrompt }
         ]);
@@ -203,7 +209,12 @@ ${personalityInstruction}
         if (personalityScore !== 5) {
             console.log(`👤 User ${userId} has custom personality score: ${personalityScore}/10`);
         }
+    } else {
+        // Update the system prompt in case personality score changed
+        const history = conversationHistory.get(userId);
+        history[0] = { role: 'system', content: customPrompt };
     }
+
     return conversationHistory.get(userId);
 }
 
@@ -226,11 +237,17 @@ async function getBobbyResponse(userId, userMessage) {
         throw new Error('OpenAI API key not configured');
     }
 
-    // Get conversation history
+    // Get conversation history (this also updates personality)
     const history = getConversationHistory(userId);
 
     // Add user message to history
     addToHistory(userId, 'user', userMessage);
+
+    // Debug: Log personality score
+    const currentScore = getUserPersonalityScore(userId);
+    if (currentScore !== 5) {
+        console.log(`🎭 Responding to user ${userId} with personality score: ${currentScore}/10`);
+    }
 
     try {
         // Call OpenAI API with GPT-4 Mini
@@ -305,6 +322,7 @@ function detectIntent(message) {
 module.exports = (client) => {
     console.log('🤖 Bobby Conversation Handler (OpenAI GPT-4 Mini) initialized');
 
+    // Single consolidated messageCreate listener to avoid memory leaks
     client.on('messageCreate', async (message) => {
         // Ignore bot messages
         if (message.author.bot) return;
@@ -314,74 +332,16 @@ module.exports = (client) => {
 
         const userMessage = message.content;
         const userMessageLower = userMessage.toLowerCase();
+        const args = userMessage.split(' ');
+        const command = args[0].toLowerCase();
 
-        // Skip if message starts with ! (command)
-        if (userMessage.startsWith('!')) return;
-
-        // Only respond if "bobby" is mentioned in the message
-        if (!userMessageLower.includes('bobby')) return;
-
-        // Show typing indicator
-        await message.channel.sendTyping();
-
-        try {
-            // Check if OpenAI is configured
-            if (!openai) {
-                console.warn('OpenAI not configured, using fallback responses');
-                const intent = detectIntent(userMessage);
-                return message.reply(getFallbackResponse(intent));
-            }
-
-            // Get AI-generated response
-            const response = await getBobbyResponse(message.author.id, userMessage);
-
-            // Send response
-            // If response is very long, use an embed
-            if (response.length > 400) {
-                const embed = new EmbedBuilder()
-                    .setColor('#5865F2')
-                    .setAuthor({
-                        name: 'Bobby',
-                        iconURL: client.user.displayAvatarURL()
-                    })
-                    .setDescription(response)
-                    .setFooter({ text: 'Powered by AI • Type !help for commands' })
-                    .setTimestamp();
-
-                return message.reply({ embeds: [embed] });
-            } else {
-                // For shorter responses, just reply normally
-                return message.reply(response);
-            }
-
-        } catch (error) {
-            console.error('Error generating Bobby response:', error);
-
-            // Use intelligent fallback based on message content
-            const intent = detectIntent(userMessage);
-            return message.reply(getFallbackResponse(intent));
-        }
-    });
-
-    // Optional: Command to clear conversation history
-    client.on('messageCreate', async (message) => {
-        if (message.author.bot) return;
-        if (!message.guild) return;
-
-        if (message.content.toLowerCase() === '!resetbobby' || message.content.toLowerCase() === '!clearbobby') {
+        // Handle !resetbobby and !clearbobby commands
+        if (command === '!resetbobby' || command === '!clearbobby') {
             conversationHistory.delete(message.author.id);
             return message.reply('🔄 Your conversation history with Bobby has been reset! Start fresh!');
         }
-    });
 
-    // Optional: Magic 8-Ball command (legacy support)
-    client.on('messageCreate', async (message) => {
-        if (message.author.bot) return;
-        if (!message.guild) return;
-
-        const args = message.content.split(' ');
-        const command = args[0].toLowerCase();
-
+        // Handle Magic 8-Ball commands (!ask, !8ball, !magic8ball)
         if (command === '!ask' || command === '!8ball' || command === '!magic8ball') {
             const question = args.slice(1).join(' ');
 
@@ -426,6 +386,53 @@ module.exports = (client) => {
                 const fallback = fallbacks[Math.floor(Math.random() * fallbacks.length)];
                 return message.reply(`🎱 ${fallback}`);
             }
+        }
+
+        // Skip if message starts with ! (other commands)
+        if (userMessage.startsWith('!')) return;
+
+        // Only respond if "bobby" is mentioned in the message
+        if (!userMessageLower.includes('bobby')) return;
+
+        // Show typing indicator
+        await message.channel.sendTyping();
+
+        try {
+            // Check if OpenAI is configured
+            if (!openai) {
+                console.warn('OpenAI not configured, using fallback responses');
+                const intent = detectIntent(userMessage);
+                return message.reply(getFallbackResponse(intent));
+            }
+
+            // Get AI-generated response
+            const response = await getBobbyResponse(message.author.id, userMessage);
+
+            // Send response
+            // If response is very long, use an embed
+            if (response.length > 400) {
+                const embed = new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setAuthor({
+                        name: 'Bobby',
+                        iconURL: client.user.displayAvatarURL()
+                    })
+                    .setDescription(response)
+                    .setFooter({ text: 'Powered by AI • Type !help for commands' })
+                    .setTimestamp();
+
+                return message.reply({ embeds: [embed] });
+            } else {
+                // For shorter responses, just reply normally
+                return message.reply(response);
+            }
+
+        } catch (error) {
+            console.error('Error generating Bobby response:', error);
+
+            // Use intelligent fallback based on message content
+            const intent = detectIntent(userMessage);
+            return message.reply(getFallbackResponse(intent));
         }
     });
 };

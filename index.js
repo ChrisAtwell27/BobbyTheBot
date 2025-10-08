@@ -20,8 +20,8 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
-// Increase max listeners to prevent warnings
-client.setMaxListeners(25);
+// Increase max listeners to prevent warnings (we have many event handlers)
+client.setMaxListeners(30);
 
 // Import and initialize event handlers
 require('./events/messageReactionHandler')(client);

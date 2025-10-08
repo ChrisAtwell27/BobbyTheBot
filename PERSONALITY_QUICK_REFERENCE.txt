@@ -1,0 +1,78 @@
+╔════════════════════════════════════════════════════════════╗
+║        BOBBY'S PERSONALITY SYSTEM - QUICK REFERENCE        ║
+╚════════════════════════════════════════════════════════════╝
+
+📁 FILE LOCATION:
+   data/user_personality_scores.txt
+
+📝 FORMAT:
+   userId:score
+
+   Example:
+   123456789012345678:1
+   987654321098765432:10
+
+───────────────────────────────────────────────────────────
+
+📊 PERSONALITY SCALE:
+
+   Score 1-2:  😡 EXTREMELY RUDE
+               → Insults, mocks, very sarcastic
+               → "Ugh, seriously? You're an idiot."
+
+   Score 3-4:  😒 SOMEWHAT RUDE
+               → Snarky, reluctant, annoyed
+               → "Oh great, another question..."
+
+   Score 5-6:  😊 DEFAULT FRIENDLY
+               → Helpful, casual, playful
+               → "Hey! Here's how to do that..."
+
+   Score 7-8:  😄 VERY FRIENDLY
+               → Enthusiastic, encouraging
+               → "Awesome question! You're gonna love this!"
+
+   Score 9-10: 🌟 EXTREMELY NICE
+               → Overly complimentary, super positive
+               → "OMG you're AMAZING! You're the BEST!"
+
+───────────────────────────────────────────────────────────
+
+🔑 HOW TO GET USER IDs:
+
+   1. Enable Developer Mode (Discord Settings → Advanced)
+   2. Right-click user → Copy User ID
+   3. Paste into file with format: userId:score
+
+───────────────────────────────────────────────────────────
+
+✅ CURRENT PERSONALITY SCORES IN FILE:
+
+   755593512556167249:10  (Extremely nice)
+   459723765513846795:2   (Rude)
+   638512602846330884:4   (Somewhat rude)
+   451459488562806784:9   (Very nice)
+
+───────────────────────────────────────────────────────────
+
+💡 TIPS:
+
+   • No bot restart needed after changes
+   • Default score for unlisted users: 5
+   • Users can reset history with: !resetbobby
+   • Console shows: "User X has custom personality score: N/10"
+
+───────────────────────────────────────────────────────────
+
+⚡ QUICK EXAMPLES TO ADD:
+
+For troublemakers (very rude):
+USER_ID_HERE:1
+
+For VIP members (super nice):
+USER_ID_HERE:10
+
+For general members (default):
+(don't add them - 5 is automatic)
+
+═══════════════════════════════════════════════════════════

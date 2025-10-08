@@ -6,10 +6,14 @@ inhouse_config.json
 last_voting_date.txt
 pet_items.txt
 thin_ice.txt
+user_personality_scores.txt
 valorant_inhouse_events.json
 valorant_users.json
 virtual_pets.txt
 wordle_scores.txt
 /node_modules
+.env
 .claude
 .claude/settings.local.json
+/.claude
+/node_modules
