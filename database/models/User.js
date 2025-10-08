@@ -43,6 +43,7 @@ const userSchema = new mongoose.Schema({
     },
     // Virtual pet data
     pet: {
+        id: String,
         name: String,
         type: String,
         emoji: String,
@@ -58,6 +59,14 @@ const userSchema = new mongoose.Schema({
             type: Number,
             default: 100
         },
+        energy: {
+            type: Number,
+            default: 100
+        },
+        cleanliness: {
+            type: Number,
+            default: 100
+        },
         level: {
             type: Number,
             default: 1
@@ -66,15 +75,46 @@ const userSchema = new mongoose.Schema({
             type: Number,
             default: 0
         },
+        experience: {
+            type: Number,
+            default: 0
+        },
+        age: {
+            type: Number,
+            default: 0
+        },
+        created: {
+            type: Number,
+            default: Date.now
+        },
+        lastStatUpdate: {
+            type: Number,
+            default: Date.now
+        },
         lastFed: Date,
         lastPlayed: Date,
         lastTrained: Date,
+        personality: String,
+        isSleeping: {
+            type: Boolean,
+            default: false
+        },
+        sleepStartTime: Number,
+        stats: {
+            type: Map,
+            of: Number,
+            default: new Map()
+        },
         inventory: {
             type: Map,
             of: Number,
             default: new Map()
         },
-        adoptedAt: Date
+        adoptedAt: Date,
+        achievements: {
+            type: [String],
+            default: []
+        }
     },
     // Valorant stats
     valorantRank: String,

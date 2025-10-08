@@ -18,3 +18,6 @@ wordle_scores.txt
 /.claude
 /node_modules
 user_memories.txt
+.claude/settings.local.json
+node_modules/.package-lock.json
+node_modules/form-data/lib/browser.js

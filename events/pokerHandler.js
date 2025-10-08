@@ -1,10 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
-const fs = require('fs');
-const path = require('path');
-
-const bobbyBucksFilePath = path.join(__dirname, '../data/bobby_bucks.txt');
+const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 
 // Store active poker lobbies and games
 const activeLobbies = new Map();
@@ -394,7 +391,7 @@ module.exports = (client) => {
         // Create poker lobby
         if (command === '!poker' || command === '!holdem') {
             const userId = message.author.id;
-            const userBalance = getBobbyBucks(userId);
+            const userBalance = await getBobbyBucks(userId);
             
             // Parse buy-in amount
             let buyIn = parseInt(args[1]) || 100;
@@ -445,7 +442,7 @@ module.exports = (client) => {
             };
 
             // Deduct buy-in from creator
-            updateBobbyBucks(userId, -buyIn);
+            await updateBobbyBucks(userId, -buyIn);
 
             // Create lobby embed and buttons
             const embed = createLobbyEmbed(lobby);
@@ -461,16 +458,16 @@ module.exports = (client) => {
                 activeLobbies.set(lobbyId, lobby);
 
                 // Auto-delete lobby after timeout
-                setTimeout(() => {
+                setTimeout(async () => {
                     const currentLobby = activeLobbies.get(lobbyId);
                     if (currentLobby && !currentLobby.gameStarted) {
                         // Refund all players
-                        currentLobby.players.forEach(player => {
-                            updateBobbyBucks(player.id, currentLobby.buyIn);
-                        });
-                        
+                        for (const player of currentLobby.players) {
+                            await updateBobbyBucks(player.id, currentLobby.buyIn);
+                        }
+
                         activeLobbies.delete(lobbyId);
-                        
+
                         client.channels.fetch(currentLobby.channelId).then(channel => {
                             channel.messages.fetch(currentLobby.messageId).then(msg => {
                                 const timeoutEmbed = new EmbedBuilder()
@@ -478,9 +475,9 @@ module.exports = (client) => {
                                     .setTitle('⏰ Poker Lobby Expired')
                                     .setDescription('The lobby timed out. All buy-ins have been refunded.')
                                     .setTimestamp();
-                                
-                                msg.edit({ 
-                                    embeds: [timeoutEmbed], 
+
+                                msg.edit({
+                                    embeds: [timeoutEmbed],
                                     components: []
                                 }).catch(() => {});
                             }).catch(() => {});
@@ -490,7 +487,7 @@ module.exports = (client) => {
 
             } catch (error) {
                 console.error('Error creating poker lobby:', error);
-                updateBobbyBucks(userId, buyIn); // Refund on error
+                await updateBobbyBucks(userId, buyIn); // Refund on error
             }
         }
     });
@@ -527,7 +524,7 @@ module.exports = (client) => {
         }
 
         const userId = interaction.user.id;
-        const userBalance = getBobbyBucks(userId);
+        const userBalance = await getBobbyBucks(userId);
 
         if (action === 'pokerjoin') {
             if (lobby.players.some(player => player.id === userId)) {
@@ -559,7 +556,7 @@ module.exports = (client) => {
                 chips: lobby.buyIn
             });
 
-            updateBobbyBucks(userId, -lobby.buyIn);
+            await updateBobbyBucks(userId, -lobby.buyIn);
 
             const canStart = lobby.players.length >= MIN_PLAYERS;
             const embed = createLobbyEmbed(lobby);
@@ -579,7 +576,7 @@ module.exports = (client) => {
                 });
             }
 
-            updateBobbyBucks(userId, lobby.buyIn); // Refund
+            await updateBobbyBucks(userId, lobby.buyIn); // Refund
             lobby.players.splice(playerIndex, 1);
 
             if (lobby.ownerId === userId && lobby.players.length > 0) {
@@ -1027,11 +1024,11 @@ module.exports = (client) => {
             const winner = game.players.sort((a, b) => b.chips - a.chips)[0];
             
             // Pay out chips as Honey
-            game.players.forEach(player => {
+            for (const player of game.players) {
                 if (player.chips > 0) {
-                    updateBobbyBucks(player.id, player.chips);
+                    await updateBobbyBucks(player.id, player.chips);
                 }
-            });
+            }
 
             const endEmbed = new EmbedBuilder()
                 .setColor('#ffd700')
@@ -1177,35 +1174,6 @@ module.exports = (client) => {
             new ActionRowBuilder().addComponents(viewButton, foldButton, callButton),
             new ActionRowBuilder().addComponents(raiseButton, allInButton)
         ];
-    }
-
-    // Honey helper functions
-    function getBobbyBucks(userId) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
-        }
-        const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        return userRecord ? parseInt(userRecord.split(':')[1], 10) : 0;
-    }
-
-    function updateBobbyBucks(userId, amount) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
-        }
-
-        let data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-
-        if (userRecord) {
-            const currentBalance = parseInt(userRecord.split(':')[1], 10);
-            const newBalance = currentBalance + amount;
-            data = data.replace(userRecord, `${userId}:${newBalance}`);
-        } else {
-            data += `\n${userId}:${amount}`;
-        }
-
-        fs.writeFileSync(bobbyBucksFilePath, data.trim(), 'utf-8');
     }
 
     client.once('ready', () => {

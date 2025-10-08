@@ -2,9 +2,9 @@
 const { createCanvas, loadImage } = require('canvas');
 const fs = require('fs');
 const path = require('path');
+const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
+const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 
-const eggBucksFilePath = path.join(__dirname, '../data/bobby_bucks.txt');
-const houseFilePath = path.join(__dirname, '../data/house.txt');
 const blackjackStreaksFilePath = path.join(__dirname, '../data/blackjack_streaks.txt');
 
 // Multi-deck shoe configuration
@@ -56,13 +56,13 @@ module.exports = (client) => {
 
             const betAmount = parseInt(args[1], 10);
             const userId = message.author.id;
-            const balance = getEggBucks(userId);
+            const balance = await getBobbyBucks(userId);
 
             if (balance < betAmount) {
                 return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
             }
 
-            startBlackjackGame(message, userId, betAmount);
+            await startBlackjackGame(message, userId, betAmount);
         }
     });
 
@@ -269,8 +269,8 @@ module.exports = (client) => {
 
     async function startBlackjackGame(message, userId, betAmount) {
         // CRITICAL FIX: Deduct the initial bet from player's balance when game starts
-        updateEggBucks(userId, -betAmount);
-        
+        await updateBobbyBucks(userId, -betAmount);
+
         // Get current streak and deck status
         const currentStreak = getStreak(userId);
         const deckStatus = getDeckStatus();
@@ -280,9 +280,9 @@ module.exports = (client) => {
 
         let playerScore = calculateHandValue(playerHand);
         let dealerScore = calculateHandValue(dealerHand);
-        
+
         // Check if split is possible
-        const canSplit = playerHand[0].value === playerHand[1].value && getEggBucks(userId) >= betAmount;
+        const canSplit = playerHand[0].value === playerHand[1].value && await getBobbyBucks(userId) >= betAmount;
 
         // Create initial game visualization
         const gameCanvas = await createGameTable(
@@ -311,7 +311,7 @@ module.exports = (client) => {
             .addFields(
                 { name: '🎯 Your Hand', value: `${displayHandEmoji(playerHand)}\n**Score:** ${playerScore}`, inline: true },
                 { name: '🎭 Dealer\'s Hand', value: `${displayHandEmoji([dealerHand[0]])} 🎴\n**Score:** ${calculateHandValue([dealerHand[0]])} + ?`, inline: true },
-                { name: '💰 Game Info', value: `**Your Balance:** 🍯${getEggBucks(userId)}\n**House Edge:** ${getHouseBalance()}`, inline: true }
+                { name: '💰 Game Info', value: `**Your Balance:** 🍯${await getBobbyBucks(userId)}\n**House Edge:** ${await getHouseBalance()}`, inline: true }
             )
             .setFooter({ text: 'Choose your action wisely! 🎲' })
             .setTimestamp();
@@ -320,7 +320,7 @@ module.exports = (client) => {
         if (playerScore === 21) {
             if (dealerScore === 21) {
                 // Tie - return the bet (no streak bonus or penalty)
-                updateEggBucks(userId, betAmount);
+                await updateBobbyBucks(userId, betAmount);
                 
                 const finalCanvas = await createGameTable(playerHand, dealerHand, playerScore, dealerScore, 'tie', message.author.username, betAmount, false, currentStreak, deckStatus);
                 const finalAttachment = new AttachmentBuilder(finalCanvas.toBuffer(), { name: 'blackjack-result.png' });
@@ -343,7 +343,7 @@ module.exports = (client) => {
                 const baseWinnings = Math.floor(betAmount * 2.5);
                 const streakBonus = calculateStreakBonus(baseWinnings, currentStreak);
                 const totalWinnings = baseWinnings + streakBonus;
-                updateEggBucks(userId, totalWinnings);
+                await updateBobbyBucks(userId, totalWinnings);
                 updateStreak(userId, true); // Increment streak
                 
                 const finalCanvas = await createGameTable(playerHand, dealerHand, playerScore, dealerScore, 'win', message.author.username, betAmount, false, currentStreak + 1, deckStatus);
@@ -358,7 +358,7 @@ module.exports = (client) => {
                     .setImage('attachment://blackjack-result.png')
                     .addFields(
                         { name: '🎯 Final Result', value: `**You:** ${playerScore}\n**Dealer:** ${dealerScore}`, inline: true },
-                        { name: '💰 Payout', value: `**Won:** 🍯${totalWinnings}\n**New Balance:** 🍯${getEggBucks(userId)}\n**Streak:** ${currentStreak + 1} wins`, inline: true }
+                        { name: '💰 Payout', value: `**Won:** 🍯${totalWinnings}\n**New Balance:** 🍯${await getBobbyBucks(userId)}\n**Streak:** ${currentStreak + 1} wins`, inline: true }
                     )
                     .setFooter({ text: 'Blackjack pays 3:2!' })
                     .setTimestamp();
@@ -384,7 +384,7 @@ module.exports = (client) => {
             .setLabel('Double Down')
             .setStyle('Secondary')
             .setEmoji('⚡')
-            .setDisabled(getEggBucks(userId) < betAmount);
+            .setDisabled(await getBobbyBucks(userId) < betAmount);
             
         const splitButton = new ButtonBuilder()
             .setCustomId('split')
@@ -413,7 +413,7 @@ module.exports = (client) => {
 
                 if (playerScore > 21) {
                     // Player busts - house keeps the bet (already deducted)
-                    updateHouse(betAmount);
+                    await updateHouse(betAmount);
                     updateStreak(userId, false); // Reset streak
                     
                     const finalCanvas = await createGameTable(playerHand, dealerHand, playerScore, dealerScore, 'bust', message.author.username, betAmount, false, 0, deckStatus);
@@ -426,7 +426,7 @@ module.exports = (client) => {
                         .setImage('attachment://blackjack-result.png')
                         .addFields(
                             { name: '🎯 Final Result', value: `**You:** ${playerScore} (BUST)\n**Dealer:** ${calculateHandValue([dealerHand[0]])} + ?`, inline: true },
-                            { name: '💰 Loss', value: `**Lost:** 🍯${betAmount}\n**New Balance:** 🍯${getEggBucks(userId)}\n**Streak:** Reset`, inline: true }
+                            { name: '💰 Loss', value: `**Lost:** 🍯${betAmount}\n**New Balance:** 🍯${await getBobbyBucks(userId)}\n**Streak:** Reset`, inline: true }
                         )
                         .setFooter({ text: 'Better luck next time!' })
                         .setTimestamp();
@@ -446,7 +446,7 @@ module.exports = (client) => {
                         .addFields(
                             { name: '🎯 Your Hand', value: `${displayHandEmoji(playerHand)}\n**Score:** ${playerScore}`, inline: true },
                             { name: '🎭 Dealer\'s Hand', value: `${displayHandEmoji([dealerHand[0]])} 🎴\n**Score:** ${calculateHandValue([dealerHand[0]])} + ?`, inline: true },
-                            { name: '💰 Game Info', value: `**Your Balance:** 🍯${getEggBucks(userId)}\n**House Edge:** ${getHouseBalance()}`, inline: true }
+                            { name: '💰 Game Info', value: `**Your Balance:** 🍯${await getBobbyBucks(userId)}\n**House Edge:** ${await getHouseBalance()}`, inline: true }
                         )
                         .setFooter({ text: 'Choose your action wisely! 🎲' })
                         .setTimestamp();
@@ -458,13 +458,13 @@ module.exports = (client) => {
                 
                 if (interaction.customId === 'double') {
                     actualBet = betAmount * 2;
-                    updateEggBucks(userId, -betAmount); // Take the extra bet
+                    await updateBobbyBucks(userId, -betAmount); // Take the extra bet
                     playerHand.push(drawCard(gameShoe));
                     playerScore = calculateHandValue(playerHand);
                     
                     if (playerScore > 21) {
                         // Player busts after doubling - house keeps both bets
-                        updateHouse(actualBet);
+                        await updateHouse(actualBet);
                         updateStreak(userId, false); // Reset streak
                         
                         const finalCanvas = await createGameTable(playerHand, dealerHand, playerScore, dealerScore, 'bust', message.author.username, actualBet, false, 0, deckStatus);
@@ -477,7 +477,7 @@ module.exports = (client) => {
                             .setImage('attachment://blackjack-result.png')
                             .addFields(
                                 { name: '🎯 Final Result', value: `**You:** ${playerScore} (BUST)\n**Dealer:** ${calculateHandValue([dealerHand[0]])} + ?`, inline: true },
-                                { name: '💰 Loss', value: `**Lost:** 🍯${actualBet}\n**New Balance:** 🍯${getEggBucks(userId)}\n**Streak:** Reset`, inline: true }
+                                { name: '💰 Loss', value: `**Lost:** 🍯${actualBet}\n**New Balance:** 🍯${await getBobbyBucks(userId)}\n**Streak:** Reset`, inline: true }
                             )
                             .setFooter({ text: 'Double down gone wrong!' })
                             .setTimestamp();
@@ -504,7 +504,7 @@ module.exports = (client) => {
                     const baseWinnings = actualBet * 2;
                     const streakBonus = calculateStreakBonus(baseWinnings, currentStreak);
                     const totalWinnings = baseWinnings + streakBonus;
-                    updateEggBucks(userId, totalWinnings);
+                    await updateBobbyBucks(userId, totalWinnings);
                     updateStreak(userId, true); // Increment streak
                     newStreak = currentStreak + 1;
                     resultMessage = streakBonus > 0 ? `🎉 You won 🍯${totalWinnings}! (🍯${streakBonus} streak bonus)` : `🎉 You won 🍯${totalWinnings}!`;
@@ -512,13 +512,13 @@ module.exports = (client) => {
                     gameState = 'win';
                 } else if (playerScore === dealerScore) {
                     // Tie - return the bet (no streak change)
-                    updateEggBucks(userId, actualBet);
+                    await updateBobbyBucks(userId, actualBet);
                     resultMessage = `🤝 It's a tie! You get your 🍯${actualBet} back.`;
                     resultColor = '#ffaa00';
                     gameState = 'tie';
                 } else {
                     // Dealer wins - house keeps the bet (already deducted)
-                    updateHouse(actualBet);
+                    await updateHouse(actualBet);
                     updateStreak(userId, false); // Reset streak
                     newStreak = 0;
                     resultMessage = `😢 You lost 🍯${actualBet}. Better luck next time!`;
@@ -536,7 +536,7 @@ module.exports = (client) => {
                     .setImage('attachment://blackjack-result.png')
                     .addFields(
                         { name: '🎯 Final Result', value: `**You:** ${playerScore}\n**Dealer:** ${dealerScore}`, inline: true },
-                        { name: '💰 Your Stats', value: `**New Balance:** 🍯${getEggBucks(userId)}\n**Win Streak:** ${newStreak}\n**House Balance:** 🍯${getHouseBalance()}`, inline: true }
+                        { name: '💰 Your Stats', value: `**New Balance:** 🍯${await getBobbyBucks(userId)}\n**Win Streak:** ${newStreak}\n**House Balance:** 🍯${await getHouseBalance()}`, inline: true }
                     )
                     .setFooter({ text: 'Thanks for playing! 🎲' })
                     .setTimestamp();
@@ -546,8 +546,8 @@ module.exports = (client) => {
             } else if (interaction.customId === 'surrender') {
                 // Surrender - return half the bet
                 const refund = Math.floor(betAmount / 2);
-                updateEggBucks(userId, refund);
-                updateHouse(betAmount - refund);
+                await updateBobbyBucks(userId, refund);
+                await updateHouse(betAmount - refund);
                 updateStreak(userId, false); // Reset streak
                 
                 const finalCanvas = await createGameTable(playerHand, dealerHand, playerScore, dealerScore, 'lose', message.author.username, betAmount, false, 0, deckStatus);
@@ -560,7 +560,7 @@ module.exports = (client) => {
                     .setImage('attachment://blackjack-result.png')
                     .addFields(
                         { name: '🎯 Your Hand', value: `${displayHandEmoji(playerHand)}\n**Score:** ${playerScore}`, inline: true },
-                        { name: '💰 Refund', value: `**Returned:** 🍯${refund}\n**New Balance:** 🍯${getEggBucks(userId)}`, inline: true }
+                        { name: '💰 Refund', value: `**Returned:** 🍯${refund}\n**New Balance:** 🍯${await getBobbyBucks(userId)}`, inline: true }
                     )
                     .setFooter({ text: 'Sometimes the best move is to fold!' })
                     .setTimestamp();
@@ -569,7 +569,7 @@ module.exports = (client) => {
                 await interaction.update({ embeds: [gameEmbed], files: [finalAttachment], components: [] });
             } else if (interaction.customId === 'split') {
                 // Split hands - requires additional bet
-                updateEggBucks(userId, -betAmount); // Take second bet
+                await updateBobbyBucks(userId, -betAmount); // Take second bet
                 
                 const hand1 = [playerHand[0], drawCard(gameShoe)];
                 const hand2 = [playerHand[1], drawCard(gameShoe)];
@@ -725,43 +725,6 @@ module.exports = (client) => {
         return hand.map(card => `${card.value}${suitEmojis[card.suit]}`).join(' ');
     }
 
-    // Functions to handle Honey
-    function getEggBucks(userId) {
-        if (!fs.existsSync(eggBucksFilePath)) {
-            fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
-        }
-        const data = fs.readFileSync(eggBucksFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        return userRecord ? parseInt(userRecord.split(':')[1], 10) : 0;
-    }
-
-    function updateEggBucks(userId, amount) {
-        let data = fs.readFileSync(eggBucksFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        if (userRecord) {
-            const currentBalance = parseInt(userRecord.split(':')[1], 10);
-            const newBalance = currentBalance + amount;
-            data = data.replace(userRecord, `${userId}:${newBalance}`);
-        } else {
-            data += `${userId}:${amount}\n`;
-        }
-        fs.writeFileSync(eggBucksFilePath, data, 'utf-8');
-    }
-
-    // Functions to handle the House
-    function getHouseBalance() {
-        if (!fs.existsSync(houseFilePath)) {
-            fs.writeFileSync(houseFilePath, '0', 'utf-8');
-        }
-        return parseInt(fs.readFileSync(houseFilePath, 'utf-8'), 10);
-    }
-
-    function updateHouse(amount) {
-        const houseBalance = getHouseBalance();
-        const newBalance = houseBalance + amount;
-        fs.writeFileSync(houseFilePath, newBalance.toString(), 'utf-8');
-    }
-    
     // Streak tracking functions
     function getStreak(userId) {
         if (!fs.existsSync(blackjackStreaksFilePath)) {
@@ -829,23 +792,23 @@ module.exports = (client) => {
         let payout = 0;
         
         if (playerScore > 21) {
-            updateHouse(betAmount);
+            await updateHouse(betAmount);
             resultMessage = `💥 Hand ${handNumber} Bust! Lost 🍯${betAmount}`;
             gameState = 'bust';
         } else if (dealerScore > 21 || playerScore > dealerScore) {
             const baseWinnings = betAmount * 2;
             const streakBonus = calculateStreakBonus(baseWinnings, currentStreak);
             payout = baseWinnings + streakBonus;
-            updateEggBucks(userId, payout);
+            await updateBobbyBucks(userId, payout);
             won = true;
             resultMessage = `🎉 Hand ${handNumber} Wins! Won 🍯${payout}`;
             gameState = 'win';
         } else if (playerScore === dealerScore) {
-            updateEggBucks(userId, betAmount);
+            await updateBobbyBucks(userId, betAmount);
             resultMessage = `🤝 Hand ${handNumber} Push! Returned 🍯${betAmount}`;
             gameState = 'tie';
         } else {
-            updateHouse(betAmount);
+            await updateHouse(betAmount);
             resultMessage = `😢 Hand ${handNumber} Loses! Lost 🍯${betAmount}`;
             gameState = 'lose';
         }
@@ -868,7 +831,7 @@ module.exports = (client) => {
             .addFields(
                 { name: '🎯 Your Hand', value: `${displayHandEmoji(playerHand)}\n**Score:** ${playerScore}`, inline: true },
                 { name: '🎭 Dealer', value: `${displayHandEmoji(dealerHand)}\n**Score:** ${dealerScore}`, inline: true },
-                { name: '💰 Balance', value: `🍯${getEggBucks(userId)}`, inline: true }
+                { name: '💰 Balance', value: `🍯${await getBobbyBucks(userId)}`, inline: true }
             )
             .setTimestamp();
         

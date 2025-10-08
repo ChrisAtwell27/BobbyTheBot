@@ -1,8 +1,9 @@
 ﻿const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
-const { getPet, savePet, deletePet, getPetInventory, savePetInventory, getTopPets } = require('../database/helpers/petHelpers');
+const { getPet: getPetFromDB, savePet: savePetToDB, deletePet: deletePetFromDB, getPetInventory: getPetInventoryFromDB, savePetInventory: savePetInventoryToDB, getTopPets: getTopPetsFromDB } = require('../database/helpers/petHelpers');
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
+const User = require('../database/models/User');
 
 // Active games tracker
 const activeGames = new Map();
@@ -201,10 +202,7 @@ async function loadImageFromURL(url) {
 }
 
 module.exports = (client) => {
-    // Initialize pet decay system
-    setInterval(() => {
-        updateAllPetsDecay();
-    }, 300000); // Update every 5 minutes
+    // Pet decay system removed - stats are updated on-demand when pet is fetched
 
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
@@ -307,7 +305,6 @@ module.exports = (client) => {
                 );
 
             // Row 3: Social & Info
-            const allPets = getAllPets(userId);
             const socialRow = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
@@ -328,15 +325,7 @@ module.exports = (client) => {
                         .setStyle(ButtonStyle.Secondary)
                 );
 
-            // Add switch pet button if user has multiple pets
-            if (allPets.length > 1) {
-                socialRow.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`pet_switch_${userId}`)
-                        .setLabel(`🔄 Switch Pet (${allPets.length})`)
-                        .setStyle(ButtonStyle.Success)
-                );
-            }
+            // Multi-pet feature removed (MongoDB supports single pet only)
 
             const mood = getPetMood(pet);
             const personality = pet.personality ? PERSONALITIES[pet.personality] : null;
@@ -363,7 +352,7 @@ module.exports = (client) => {
                     },
                     {
                         name: '🏆 Progress',
-                        value: `Achievements: **${getPetAchievements(userId).length}/10**\nRaces Won: **${pet.stats?.race_wins || 0}**\nTreasures: **${pet.stats?.treasures_found || 0}**\nPlaydates: **${pet.stats?.playdates || 0}**`,
+                        value: `Achievements: **${(await getPetAchievements(userId)).length}/10**\nRaces Won: **${pet.stats?.race_wins || 0}**\nTreasures: **${pet.stats?.treasures_found || 0}**\nPlaydates: **${pet.stats?.playdates || 0}**`,
                         inline: true
                     }
                 )
@@ -382,7 +371,7 @@ module.exports = (client) => {
                 return message.channel.send('❌ You need a pet to use the pet shop! Use `!adopt` to get one.');
             }
 
-            const balance = getBobbyBucks(userId);
+            const balance = await getBobbyBucks(userId);
 
             // Create item buttons organized by category
             const foodItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'food');
@@ -475,13 +464,13 @@ module.exports = (client) => {
                 return message.channel.send(`❌ Invalid food item! Available food:\n${availableFood}`);
             }
 
-            const balance = getBobbyBucks(userId);
+            const balance = await getBobbyBucks(userId);
             if (balance < food.cost) {
                 return message.channel.send(`❌ You need ??{food.cost} to buy ${food.name}! You have ??{balance}.`);
             }
 
             // Process feeding
-            updateBobbyBucks(userId, -food.cost);
+            await updateBobbyBucks(userId, -food.cost);
             pet.hunger = Math.min(100, pet.hunger + food.hunger);
             pet.happiness = Math.min(100, pet.happiness + (food.happiness || 0));
             pet.experience += 5;
@@ -628,7 +617,7 @@ module.exports = (client) => {
             }
 
             const trainingCost = 100;
-            const balance = getBobbyBucks(userId);
+            const balance = await getBobbyBucks(userId);
             
             if (balance < trainingCost) {
                 return message.channel.send(`❌ Training costs ??{trainingCost}! You have ??{balance}.`);
@@ -643,7 +632,7 @@ module.exports = (client) => {
             }
 
             // Process training
-            updateBobbyBucks(userId, -trainingCost);
+            await updateBobbyBucks(userId, -trainingCost);
             pet.experience += 15;
             pet.energy = Math.max(0, pet.energy - 20);
             pet.happiness = Math.min(100, pet.happiness + 10);
@@ -827,13 +816,13 @@ module.exports = (client) => {
             }
 
             const raceCost = 50;
-            const balance = getBobbyBucks(userId);
+            const balance = await getBobbyBucks(userId);
 
             if (balance < raceCost) {
                 return message.channel.send(`❌ Racing costs ??${raceCost}! You have ??${balance}.`);
             }
 
-            updateBobbyBucks(userId, -raceCost);
+            await updateBobbyBucks(userId, -raceCost);
 
             // Calculate race performance
             const baseSpeed = (pet.energy / 100) * (pet.health / 100) * pet.level;
@@ -873,7 +862,7 @@ module.exports = (client) => {
             }
 
             if (reward > 0) {
-                updateBobbyBucks(userId, reward);
+                await updateBobbyBucks(userId,reward);
             }
 
             await savePet(userId, pet);
@@ -923,7 +912,7 @@ module.exports = (client) => {
             await savePet(userId, pet);
 
             if (event.reward && event.reward.type === 'bobby_bucks') {
-                updateBobbyBucks(userId, event.reward.amount);
+                await updateBobbyBucks(userId,event.reward.amount);
             }
 
             const adventureCard = await createAdventureCard(pet, event);
@@ -953,7 +942,7 @@ module.exports = (client) => {
                 return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
             }
 
-            const userAchievements = getPetAchievements(userId);
+            const userAchievements = await getPetAchievements(userId);
             const earnedAchievements = Object.entries(ACHIEVEMENTS)
                 .filter(([key]) => userAchievements.includes(key))
                 .map(([key, ach]) => `${ach.emoji} **${ach.name}** - ${ach.description}`)
@@ -1072,7 +1061,7 @@ module.exports = (client) => {
 
             const petType = interaction.values[0];
             const pet = PET_TYPES[petType];
-            const balance = getBobbyBucks(userId);
+            const balance = await getBobbyBucks(userId);
 
             if (balance < pet.cost) {
                 return interaction.reply({
@@ -1081,28 +1070,19 @@ module.exports = (client) => {
                 });
             }
 
-            const existingPets = getAllPets(userId);
-            const maxPets = 5; // Maximum pets per user
+            const existingPet = await getPet(userId);
 
-            if (existingPets.length >= maxPets) {
+            if (existingPet) {
                 return interaction.reply({
-                    content: `❌ You've reached the maximum of ${maxPets} pets! You'll need to release one before adopting another.`,
+                    content: `❌ You already have a pet! You can only have one pet at a time. Release your current pet first if you want to adopt a new one.`,
                     ephemeral: true
                 });
             }
 
             // Create new pet
-            const petNumber = existingPets.filter(p => p.type === petType).length + 1;
-            const newPet = createNewPet(petType, `${pet.name}-${petNumber}`);
+            const newPet = createNewPet(petType, pet.name);
 
-            // If this is the first pet, mark it as active
-            if (existingPets.length === 0) {
-                newPet.isActive = true;
-            } else {
-                newPet.isActive = false;
-            }
-
-            updateBobbyBucks(userId, -pet.cost);
+            await updateBobbyBucks(userId, -pet.cost);
             await savePet(userId, newPet);
 
             const adoptionCard = await createAdoptionCard(interaction.user, newPet);
@@ -1149,7 +1129,7 @@ module.exports = (client) => {
                 );
 
             const row = new ActionRowBuilder().addComponents(itemSelectMenu);
-            const balance = getBobbyBucks(userId);
+            const balance = await getBobbyBucks(userId);
 
             const embed = new EmbedBuilder()
                 .setTitle(`🛒 Pet Shop - ${category.charAt(0).toUpperCase() + category.slice(1)} Items`)
@@ -1179,7 +1159,7 @@ module.exports = (client) => {
 
             const itemKey = interaction.values[0];
             const item = PET_ITEMS[itemKey];
-            const balance = getBobbyBucks(userId);
+            const balance = await getBobbyBucks(userId);
 
             if (balance < item.cost) {
                 return interaction.reply({
@@ -1189,7 +1169,7 @@ module.exports = (client) => {
             }
 
             // Purchase item
-            updateBobbyBucks(userId, -item.cost);
+            await updateBobbyBucks(userId, -item.cost);
             const inventory = await getPetInventory(userId);
             inventory[itemKey] = (inventory[itemKey] || 0) + 1;
             await savePetInventory(userId, inventory);
@@ -1244,7 +1224,7 @@ module.exports = (client) => {
                     pet.experience += 15;
 
                     const reward = Math.floor(Math.random() * 100) + 50;
-                    updateBobbyBucks(userId, reward);
+                    await updateBobbyBucks(userId,reward);
                     await savePet(userId, pet);
 
                     return interaction.reply({
@@ -1296,7 +1276,7 @@ module.exports = (client) => {
                 pet.stats = pet.stats || {};
                 pet.stats.treasures_found = (pet.stats.treasures_found || 0) + 1;
 
-                updateBobbyBucks(userId, reward);
+                await updateBobbyBucks(userId,reward);
                 await savePet(userId, pet);
                 checkAchievements(userId, pet, interaction.channel);
 
@@ -1373,7 +1353,7 @@ module.exports = (client) => {
             }
 
             const pet = await getPet(userId);
-            const userAchievements = getPetAchievements(userId);
+            const userAchievements = await getPetAchievements(userId);
             const earnedAchievements = Object.entries(ACHIEVEMENTS)
                 .filter(([key]) => userAchievements.includes(key))
                 .map(([, ach]) => `${ach.emoji} **${ach.name}** - ${ach.description}`)
@@ -1431,7 +1411,7 @@ module.exports = (client) => {
             }
 
             // Open shop in the same message
-            const balance = getBobbyBucks(userId);
+            const balance = await getBobbyBucks(userId);
 
             const foodItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'food');
             const toyItems = Object.entries(PET_ITEMS).filter(([, item]) => item.type === 'toy');
@@ -1576,7 +1556,7 @@ module.exports = (client) => {
                     },
                     {
                         name: '🏆 Progress',
-                        value: `Achievements: **${getPetAchievements(userId).length}/10**\nRaces Won: **${pet.stats?.race_wins || 0}**\nTreasures: **${pet.stats?.treasures_found || 0}**\nPlaydates: **${pet.stats?.playdates || 0}**`,
+                        value: `Achievements: **${(await getPetAchievements(userId)).length}/10**\nRaces Won: **${pet.stats?.race_wins || 0}**\nTreasures: **${pet.stats?.treasures_found || 0}**\nPlaydates: **${pet.stats?.playdates || 0}**`,
                         inline: true
                     }
                 )
@@ -1586,82 +1566,7 @@ module.exports = (client) => {
             return interaction.update({ embeds: [embed], files: [attachment], components: [careRow, gamesRow, socialRow] });
         }
 
-        // Handle pet switch button
-        if (interaction.isButton() && interaction.customId.startsWith('pet_switch_')) {
-            const userId = interaction.customId.split('_')[2];
-
-            if (interaction.user.id !== userId) {
-                return interaction.reply({ content: '❌ This is not your pet menu!', ephemeral: true });
-            }
-
-            const allPets = getAllPets(userId);
-            if (allPets.length === 0) {
-                return interaction.reply({ content: '❌ You don\'t have any pets!', ephemeral: true });
-            }
-
-            // Create pet selector
-            const petSelectMenu = new StringSelectMenuBuilder()
-                .setCustomId(`pet_select_${userId}`)
-                .setPlaceholder('Choose which pet to switch to!')
-                .addOptions(
-                    allPets.map(p => ({
-                        label: `${p.name} (${PET_TYPES[p.type].name}) - Lv${p.level}`,
-                        description: `${p.isActive ? '✓ Currently Active' : 'Switch to this pet'} • ${Math.floor((p.hunger + p.happiness + p.health)/3)}% Health`,
-                        value: p.id
-                    }))
-                );
-
-            const row = new ActionRowBuilder().addComponents(petSelectMenu);
-
-            const embed = new EmbedBuilder()
-                .setTitle('🔄 Switch Active Pet')
-                .setColor('#5a6c8a')
-                .setDescription(`**You have ${allPets.length} pet${allPets.length > 1 ? 's' : ''}!**\n\nSelect which pet you want to interact with:`)
-                .addFields(
-                    allPets.map(p => {
-                        const mood = getPetMood(p);
-                        return {
-                            name: `${p.isActive ? '✅ ' : ''}${p.name} ${p.isSleeping ? '😴' : mood.emoji}`,
-                            value: `**${PET_TYPES[p.type].name}** • Level ${p.level}\n${p.isSleeping ? 'Sleeping...' : mood.name}\nHunger: ${p.hunger}% • Happiness: ${p.happiness}%`,
-                            inline: true
-                        };
-                    })
-                )
-                .setFooter({ text: 'Select a pet from the menu above to make it active!' })
-                .setTimestamp();
-
-            await interaction.update({ embeds: [embed], components: [row] });
-            return;
-        }
-
-        // Handle pet selection from switch menu
-        if (interaction.isStringSelectMenu() && interaction.customId.startsWith('pet_select_')) {
-            const userId = interaction.customId.split('_')[2];
-
-            if (interaction.user.id !== userId) {
-                return interaction.reply({ content: '❌ This is not your pet menu!', ephemeral: true });
-            }
-
-            const selectedPetId = interaction.values[0];
-            const allPets = getAllPets(userId);
-
-            // Set all pets to inactive
-            allPets.forEach(p => p.isActive = false);
-
-            // Set selected pet to active
-            const selectedPet = allPets.find(p => p.id === selectedPetId);
-            if (selectedPet) {
-                selectedPet.isActive = true;
-                saveAllPets(userId, allPets);
-
-                return interaction.reply({
-                    content: `✅ Switched to **${selectedPet.name}**! Use \`!pet\` to view their dashboard.`,
-                    ephemeral: true
-                });
-            } else {
-                return interaction.reply({ content: '❌ Pet not found!', ephemeral: true });
-            }
-        }
+        // Pet switch functionality removed (single pet only)
 
         // Handle pet care buttons
         if (interaction.isButton() && interaction.customId.startsWith('pet_')) {
@@ -1781,152 +1686,69 @@ module.exports = (client) => {
         }
     });
 
-    // Pet management functions
+    // Pet management functions - MongoDB wrappers
 
-    // Get all pets for a user
-    function getAllPets(userId) {
-        if (!fs.existsSync(petsFilePath)) {
-            fs.writeFileSync(petsFilePath, '', 'utf-8');
-            return [];
+    // Get pet for a user (MongoDB supports single pet only)
+    async function getPet(userId, petId = null) {
+        const pet = await getPetFromDB(userId);
+        if (!pet) return null;
+
+        // Apply time-based stat updates
+        const updatedPet = updatePetStatsOverTime(pet);
+
+        // Save the updated stats back
+        if (updatedPet !== pet) {
+            await savePetToDB(userId, updatedPet);
         }
-        const data = fs.readFileSync(petsFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(`${userId}|`));
-        if (userRecord) {
-            try {
-                let pets = JSON.parse(userRecord.substring(userRecord.indexOf('|') + 1));
 
-                // Ensure pets is an array (backward compatibility)
-                if (!Array.isArray(pets)) {
-                    pets = [pets];
+        return updatedPet;
+    }
+
+    // Save pet for a user
+    async function savePet(userId, pet) {
+        await savePetToDB(userId, pet);
+    }
+
+    // Get pet inventory
+    async function getPetInventory(userId) {
+        return await getPetInventoryFromDB(userId);
+    }
+
+    // Save pet inventory
+    async function savePetInventory(userId, inventory) {
+        await savePetInventoryToDB(userId, inventory);
+    }
+
+    // Get top pets (uses MongoDB helper)
+    async function getTopPets(guild, limit = 10) {
+        const topPets = await getTopPetsFromDB(limit);
+        const results = [];
+
+        for (const petData of topPets) {
+            try {
+                let member = guild.members.cache.get(petData.userId);
+                if (!member) {
+                    member = await guild.members.fetch(petData.userId);
                 }
 
-                // Apply time-based stat updates to all pets
-                pets = pets.map(pet => updatePetStatsOverTime(pet));
-
-                // Save the updated stats back
-                saveAllPets(userId, pets);
-
-                return pets;
+                results.push({
+                    userId: petData.userId,
+                    username: member.user.username,
+                    pet: {
+                        name: petData.petName,
+                        type: petData.petType,
+                        emoji: petData.petEmoji,
+                        level: petData.level,
+                        xp: petData.xp
+                    },
+                    score: petData.level * 10 + petData.xp
+                });
             } catch (e) {
-                return [];
+                continue;
             }
         }
-        return [];
-    }
 
-    // Get active/primary pet for a user (first pet or user's selected pet)
-    function getPet(userId, petId = null) {
-        const pets = getAllPets(userId);
-        if (pets.length === 0) return null;
-
-        if (petId) {
-            return pets.find(p => p.id === petId) || pets[0];
-        }
-
-        // Return the active pet or first pet
-        return pets.find(p => p.isActive) || pets[0];
-    }
-
-    // Save all pets for a user
-    function saveAllPets(userId, pets) {
-        if (!fs.existsSync(petsFilePath)) {
-            fs.writeFileSync(petsFilePath, '', 'utf-8');
-        }
-        let data = fs.readFileSync(petsFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(`${userId}|`));
-        const petData = `${userId}|${JSON.stringify(pets)}`;
-
-        if (userRecord) {
-            data = data.replace(userRecord, petData);
-        } else {
-            data += `\n${petData}`;
-        }
-
-        fs.writeFileSync(petsFilePath, data.trim(), 'utf-8');
-    }
-
-    // Save a single pet (updates the pet in the array)
-    function savePet(userId, pet) {
-        let pets = getAllPets(userId);
-
-        // Ensure pets is an array
-        if (!Array.isArray(pets)) {
-            pets = [pets];
-        }
-
-        const petIndex = pets.findIndex(p => p.id === pet.id);
-        if (petIndex >= 0) {
-            pets[petIndex] = pet;
-        } else {
-            pets.push(pet);
-        }
-
-        saveAllPets(userId, pets);
-    }
-
-    function getPetInventory(userId) {
-        if (!fs.existsSync(petItemsFilePath)) {
-            fs.writeFileSync(petItemsFilePath, '', 'utf-8');
-            return {};
-        }
-        const data = fs.readFileSync(petItemsFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(`${userId}|`));
-        if (userRecord) {
-            try {
-                return JSON.parse(userRecord.substring(userRecord.indexOf('|') + 1));
-            } catch (e) {
-                return {};
-            }
-        }
-        return {};
-    }
-
-    function savePetInventory(userId, inventory) {
-        if (!fs.existsSync(petItemsFilePath)) {
-            fs.writeFileSync(petItemsFilePath, '', 'utf-8');
-        }
-        let data = fs.readFileSync(petItemsFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(`${userId}|`));
-        const inventoryData = `${userId}|${JSON.stringify(inventory)}`;
-        
-        if (userRecord) {
-            data = data.replace(userRecord, inventoryData);
-        } else {
-            data += `\n${inventoryData}`;
-        }
-        
-        fs.writeFileSync(petItemsFilePath, data.trim(), 'utf-8');
-    }
-
-    function getBobbyBucks(userId) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            return 0;
-        }
-        const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        return userRecord ? parseInt(userRecord.split(':')[1], 10) : 0;
-    }
-
-    function updateBobbyBucks(userId, amount) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
-        }
-
-        let data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        let newBalance;
-
-        if (userRecord) {
-            const currentBalance = parseInt(userRecord.split(':')[1], 10);
-            newBalance = currentBalance + amount;
-            data = data.replace(userRecord, `${userId}:${newBalance}`);
-        } else {
-            newBalance = amount;
-            data += `\n${userId}:${newBalance}`;
-        }
-
-        fs.writeFileSync(bobbyBucksFilePath, data.trim(), 'utf-8');
-        return newBalance;
+        return results;
     }
 
     function updatePetStatsOverTime(pet) {
@@ -1999,76 +1821,7 @@ module.exports = (client) => {
         return pet;
     }
 
-    function updateAllPetsDecay() {
-        if (!fs.existsSync(petsFilePath)) return;
-
-        const data = fs.readFileSync(petsFilePath, 'utf-8').trim();
-        if (!data) return;
-
-        const lines = data.split('\n').filter(line => line.includes('|'));
-        let updatedData = '';
-
-        lines.forEach(line => {
-            const separatorIndex = line.indexOf('|');
-            if (separatorIndex === -1) return;
-
-            const userId = line.substring(0, separatorIndex);
-            const petDataStr = line.substring(separatorIndex + 1);
-
-            try {
-                let pet = JSON.parse(petDataStr);
-                pet = updatePetStatsOverTime(pet);
-                updatedData += `${userId}|${JSON.stringify(pet)}\n`;
-            } catch (e) {
-                updatedData += line + '\n';
-            }
-        });
-
-        fs.writeFileSync(petsFilePath, updatedData.trim(), 'utf-8');
-    }
-
-    async function getTopPets(guild, limit = 10) {
-        if (!fs.existsSync(petsFilePath)) return [];
-        
-        const data = fs.readFileSync(petsFilePath, 'utf-8').trim();
-        if (!data) return [];
-        
-        const pets = [];
-        const lines = data.split('\n').filter(line => line.includes('|'));
-        
-        for (const line of lines) {
-            const separatorIndex = line.indexOf('|');
-            if (separatorIndex === -1) continue;
-            
-            const userId = line.substring(0, separatorIndex);
-            const petDataStr = line.substring(separatorIndex + 1);
-            
-            try {
-                const pet = JSON.parse(petDataStr);
-                let member = guild.members.cache.get(userId);
-                if (!member) {
-                    try {
-                        member = await guild.members.fetch(userId);
-                    } catch (e) {
-                        continue;
-                    }
-                }
-                
-                // Calculate overall score
-                const score = pet.happiness + pet.health + (pet.level * 10);
-                pets.push({
-                    userId,
-                    username: member.user.username,
-                    pet,
-                    score
-                });
-            } catch (e) {
-                continue;
-            }
-        }
-        
-        return pets.sort((a, b) => b.score - a.score).slice(0, limit);
-    }
+    // updateAllPetsDecay removed - MongoDB handles persistence, decay applied on fetch
 
     function getPetStatus(pet) {
         const avgStat = (pet.hunger + pet.happiness + pet.health + pet.energy + pet.cleanliness) / 5;
@@ -3343,46 +3096,23 @@ module.exports = (client) => {
         return results.length > 0 ? results.join('\n') : 'Nothing happened...';
     }
 
-    function getPetAchievements(userId) {
-        if (!fs.existsSync(petAchievementsFilePath)) {
-            fs.writeFileSync(petAchievementsFilePath, '', 'utf-8');
-            return [];
-        }
-
-        const data = fs.readFileSync(petAchievementsFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(`${userId}|`));
-
-        if (userRecord) {
-            try {
-                return JSON.parse(userRecord.substring(userRecord.indexOf('|') + 1));
-            } catch (e) {
-                return [];
-            }
-        }
-
-        return [];
+    // Get pet achievements (stored in pet object)
+    async function getPetAchievements(userId) {
+        const pet = await getPetFromDB(userId);
+        return pet?.achievements || [];
     }
 
-    function savePetAchievements(userId, achievements) {
-        if (!fs.existsSync(petAchievementsFilePath)) {
-            fs.writeFileSync(petAchievementsFilePath, '', 'utf-8');
+    // Save pet achievements (stored in pet object)
+    async function savePetAchievements(userId, achievements) {
+        const pet = await getPetFromDB(userId);
+        if (pet) {
+            pet.achievements = achievements;
+            await savePetToDB(userId, pet);
         }
-
-        let data = fs.readFileSync(petAchievementsFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(`${userId}|`));
-        const achievementData = `${userId}|${JSON.stringify(achievements)}`;
-
-        if (userRecord) {
-            data = data.replace(userRecord, achievementData);
-        } else {
-            data += `\n${achievementData}`;
-        }
-
-        fs.writeFileSync(petAchievementsFilePath, data.trim(), 'utf-8');
     }
 
     async function checkAchievements(userId, pet, channel) {
-        const userAchievements = getPetAchievements(userId);
+        const userAchievements = await getPetAchievements(userId);
         const newAchievements = [];
 
         for (const [key, achievement] of Object.entries(ACHIEVEMENTS)) {
@@ -3417,12 +3147,12 @@ module.exports = (client) => {
             if (unlocked) {
                 userAchievements.push(key);
                 newAchievements.push({ key, achievement });
-                updateBobbyBucks(userId, achievement.reward);
+                await updateBobbyBucks(userId, achievement.reward);
             }
         }
 
         if (newAchievements.length > 0) {
-            savePetAchievements(userId, userAchievements);
+            await savePetAchievements(userId, userAchievements);
 
             // Display achievement cards
             if (channel) {

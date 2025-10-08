@@ -3,9 +3,8 @@ const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-
-const eggBucksFilePath = path.join(__dirname, '../data/bobby_bucks.txt');
-const houseFilePath = path.join(__dirname, '../data/house.txt');
+const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
+const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 
 // Store active gladiator matches
 const activeMatches = new Map();
@@ -239,10 +238,10 @@ async function createArenaVisualization(match, combatLog = []) {
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 14px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(`Pot: ??{match.pot.toLocaleString()}`, 400, 500);
+    ctx.fillText(`Pot: 🍯{match.pot.toLocaleString()}`, 400, 500);
     
     if (match.spectatorBets && Object.keys(match.spectatorBets).length > 0) {
-        ctx.fillText(`Spectator Bets: ??{Object.values(match.spectatorBets).reduce((sum, bet) => sum + bet.amount, 0).toLocaleString()}`, 400, 520);
+        ctx.fillText(`Spectator Bets: 🍯{Object.values(match.spectatorBets).reduce((sum, bet) => sum + bet.amount, 0).toLocaleString()}`, 400, 520);
     }
     
     return canvas.toBuffer();
@@ -416,7 +415,7 @@ module.exports = (client) => {
                             { name: 'Example', value: '`!gladiator @friend 100 WARRIOR`', inline: false },
                             { name: 'Classes', value: Object.entries(GLADIATOR_CLASSES).map(([key, data]) => 
                                 `**${key}** ${data.emoji} - ${data.description}`).join('\n'), inline: false },
-                            { name: 'Bet Range', value: `??{MIN_BET} - ??{MAX_BET.toLocaleString()}`, inline: true }
+                            { name: 'Bet Range', value: `🍯{MIN_BET} - 🍯{MAX_BET.toLocaleString()}`, inline: true }
                         )
                         .setTimestamp()]
                 });
@@ -440,7 +439,7 @@ module.exports = (client) => {
             }
 
             if (isNaN(betAmount) || betAmount < MIN_BET || betAmount > MAX_BET) {
-                return message.channel.send(`❌ Bet amount must be between ??{MIN_BET} and ??{MAX_BET.toLocaleString()}!`);
+                return message.channel.send(`❌ Bet amount must be between 🍯{MIN_BET} and 🍯{MAX_BET.toLocaleString()}!`);
             }
 
             if (!GLADIATOR_CLASSES[gladiatorClass]) {
@@ -448,11 +447,11 @@ module.exports = (client) => {
             }
 
             // Check balances
-            const challengerBalance = getEggBucks(message.author.id);
-            const challengedBalance = getEggBucks(challengedUser.id);
+            const challengerBalance = await getBobbyBucks(message.author.id);
+            const challengedBalance = await getBobbyBucks(challengedUser.id);
 
             if (challengerBalance < betAmount) {
-                return message.channel.send(`❌ You don't have enough Honey! You need ??{betAmount}, but only have ??{challengerBalance}.`);
+                return message.channel.send(`❌ You don't have enough Honey! You need 🍯{betAmount}, but only have 🍯{challengerBalance}.`);
             }
 
             if (challengedBalance < betAmount) {
@@ -539,14 +538,14 @@ module.exports = (client) => {
             const user = message.mentions.users.first() || message.author;
             
             // This would require a persistent stats system - for now just show basic info
-            const balance = getEggBucks(userId);
+            const balance = await getBobbyBucks(userId);
             
             const statsEmbed = new EmbedBuilder()
                 .setColor('#FFD700')
                 .setTitle(`⚔️ ${user.displayName || user.username}'s Arena Stats`)
                 .setDescription('*Gladiator statistics coming soon!*')
                 .addFields(
-                    { name: '💰 Current Balance', value: `??{balance.toLocaleString()}`, inline: true },
+                    { name: '💰 Current Balance', value: `🍯{balance.toLocaleString()}`, inline: true },
                     { name: '🏆 Arena Status', value: 'Ready for Combat', inline: true }
                 )
                 .setTimestamp();
@@ -660,7 +659,7 @@ module.exports = (client) => {
                     .addFields(
                         { name: '⚔️ Challenger', value: `${challenge.challenger.displayName}\n${GLADIATOR_CLASSES[challenge.challenger.gladiatorClass].emoji} ${challenge.challenger.gladiatorClass}`, inline: true },
                         { name: '🛡️ Defender', value: `${challenge.challenged.displayName}\n${GLADIATOR_CLASSES[selectedClass].emoji} ${selectedClass}`, inline: true },
-                        { name: '💰 Prize Pot', value: `??{(challenge.betAmount * 2).toLocaleString()}`, inline: true }
+                        { name: '💰 Prize Pot', value: `🍯{(challenge.betAmount * 2).toLocaleString()}`, inline: true }
                     )
                     .setTimestamp();
                 
@@ -753,8 +752,8 @@ module.exports = (client) => {
         activeChallenges.delete(challenge.id);
         
         // Lock both players' bets
-        updateEggBucks(challenge.challenger.id, -challenge.betAmount);
-        updateEggBucks(challenge.challenged.id, -challenge.betAmount);
+        await updateBobbyBucks(challenge.challenger.id, -challenge.betAmount);
+        await updateBobbyBucks(challenge.challenged.id, -challenge.betAmount);
         
         // Create match
         const matchId = `match_${Date.now()}`;
@@ -916,8 +915,8 @@ module.exports = (client) => {
         const houseCut = Math.floor(match.pot * 0.05);
         const winnings = match.pot - houseCut;
         
-        updateEggBucks(winner.id, winnings);
-        updateHouse(houseCut);
+        await updateBobbyBucks(winner.id, winnings);
+        await updateHouse(houseCut);
         
         // Create victory visualization
         const victoryEmbed = await createVictoryEmbed(match, winner, loser, winnings);
@@ -950,8 +949,8 @@ module.exports = (client) => {
                 .setTitle('🏆 VICTORY IN THE ARENA!')
                 .setDescription(`You have emerged victorious from gladiator combat!`)
                 .addFields(
-                    { name: '💰 Winnings', value: `??{winnings.toLocaleString()}`, inline: true },
-                    { name: '💳 New Balance', value: `??{getEggBucks(winner.id).toLocaleString()}`, inline: true }
+                    { name: '💰 Winnings', value: `🍯{winnings.toLocaleString()}`, inline: true },
+                    { name: '💳 New Balance', value: `🍯${(await getBobbyBucks(winner.id)).toLocaleString()}`, inline: true }
                 )
                 .setTimestamp();
             
@@ -1018,8 +1017,8 @@ module.exports = (client) => {
             .setTitle('⚔️ GLADIATOR CHALLENGE!')
             .setDescription(`**${challenge.challenger.displayName}** challenges **${challenge.challenged.displayName}** to combat in the arena!`)
             .addFields(
-                { name: '💰 Bet Amount', value: `??{challenge.betAmount.toLocaleString()} each`, inline: true },
-                { name: '🏆 Total Pot', value: `??{(challenge.betAmount * 2).toLocaleString()}`, inline: true },
+                { name: '💰 Bet Amount', value: `🍯{challenge.betAmount.toLocaleString()} each`, inline: true },
+                { name: '🏆 Total Pot', value: `🍯{(challenge.betAmount * 2).toLocaleString()}`, inline: true },
                 { name: '⚔️ Challenger Class', value: `${challengerClass.emoji} ${challengerClass.name}`, inline: true }
             )
             .setFooter({ text: 'The challenged player must accept and choose their class!' })
@@ -1043,7 +1042,7 @@ module.exports = (client) => {
         ctx.fillStyle = '#FFFFFF';
         ctx.font = 'bold 16px Arial';
         ctx.fillText('A challenge has been issued!', 200, 100);
-        ctx.fillText(`Pot: ??{(challenge.betAmount * 2).toLocaleString()}`, 200, 130);
+        ctx.fillText(`Pot: 🍯{(challenge.betAmount * 2).toLocaleString()}`, 200, 130);
         
         const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'challenge.png' });
         embed.setImage('attachment://challenge.png');
@@ -1100,7 +1099,7 @@ module.exports = (client) => {
             .setTitle('⚔️ GLADIATOR COMBAT IN PROGRESS')
             .setDescription(`**Turn ${match.turnCount}** - ${currentPlayer.displayName}'s turn`)
             .addFields(
-                { name: '💰 Prize Pot', value: `??{match.pot.toLocaleString()}`, inline: true },
+                { name: '💰 Prize Pot', value: `🍯{match.pot.toLocaleString()}`, inline: true },
                 { name: '⏱️ Turn Timer', value: `${TURN_TIMEOUT/1000} seconds`, inline: true },
                 { name: '📊 Combat Stats', value: `${match.combatLog.length} attacks made`, inline: true }
             )
@@ -1159,7 +1158,7 @@ module.exports = (client) => {
             .addFields(
                 { name: '🏆 Winner', value: `${winner.displayName} (${GLADIATOR_CLASSES[winner.gladiatorClass].emoji} ${winner.gladiatorClass})`, inline: true },
                 { name: '💀 Defeated', value: `${loser.displayName} (${GLADIATOR_CLASSES[loser.gladiatorClass].emoji} ${loser.gladiatorClass})`, inline: true },
-                { name: '💰 Winnings', value: `??{winnings.toLocaleString()}`, inline: true },
+                { name: '💰 Winnings', value: `🍯{winnings.toLocaleString()}`, inline: true },
                 { name: '⚔️ Combat Summary', value: `${match.turnCount} turns • ${match.combatLog.length} attacks`, inline: true },
                 { name: '🏥 Final Health', value: `Winner: ${winner.health}/${winner.maxHealth} HP`, inline: true },
                 { name: '⏱️ Match Duration', value: `${Math.floor((Date.now() - match.startTime) / 1000)} seconds`, inline: true }
@@ -1192,7 +1191,7 @@ module.exports = (client) => {
         
         ctx.font = '18px Arial';
         ctx.fillText(`Defeats ${loser.displayName}`, 300, 150);
-        ctx.fillText(`Wins ??{winnings.toLocaleString()}`, 300, 180);
+        ctx.fillText(`Wins 🍯{winnings.toLocaleString()}`, 300, 180);
         
         // Champion laurel wreath effect
         ctx.strokeStyle = '#228B22';
@@ -1237,48 +1236,6 @@ module.exports = (client) => {
         embed.setImage('attachment://victory.png');
         
         return { embed, files: [attachment] };
-    }
-
-    // Honey helper functions
-    function getEggBucks(userId) {
-        if (!fs.existsSync(eggBucksFilePath)) {
-            fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
-        }
-        const data = fs.readFileSync(eggBucksFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        return userRecord ? parseInt(userRecord.split(':')[1], 10) : 0;
-    }
-
-    function updateEggBucks(userId, amount) {
-        if (!fs.existsSync(eggBucksFilePath)) {
-            fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
-        }
-
-        let data = fs.readFileSync(eggBucksFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-
-        if (userRecord) {
-            const currentBalance = parseInt(userRecord.split(':')[1], 10);
-            const newBalance = currentBalance + amount;
-            data = data.replace(userRecord, `${userId}:${newBalance}`);
-        } else {
-            data += `\n${userId}:${amount}`;
-        }
-
-        fs.writeFileSync(eggBucksFilePath, data.trim(), 'utf-8');
-    }
-
-    function updateHouse(amount) {
-        const houseBalance = getHouseBalance();
-        const newBalance = houseBalance + amount;
-        fs.writeFileSync(houseFilePath, newBalance.toString(), 'utf-8');
-    }
-
-    function getHouseBalance() {
-        if (!fs.existsSync(houseFilePath)) {
-            fs.writeFileSync(houseFilePath, '0', 'utf-8');
-        }
-        return parseInt(fs.readFileSync(houseFilePath, 'utf-8'), 10);
     }
 
     // Clean up on startup

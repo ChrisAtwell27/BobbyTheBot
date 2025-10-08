@@ -3,8 +3,7 @@ const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-
-const eggBucksFilePath = path.join(__dirname, '../data/bobby_bucks.txt');
+const { getBobbyBucks, updateBobbyBucks, setBobbyBucks } = require('../database/helpers/economyHelpers');
 
 // Store active Russian Roulette lobbies
 const activeLobbies = new Map();
@@ -148,7 +147,7 @@ async function createRouletteTableVisualization(lobby) {
                 // Player balance
                 ctx.fillStyle = '#ffd700';
                 ctx.font = 'bold 10px Arial';
-                ctx.fillText(`??{player.balance.toLocaleString()}`, posX, posY + 58);
+                ctx.fillText(`🍯{player.balance.toLocaleString()}`, posX, posY + 58);
                 
             } catch (error) {
                 console.error('Error loading avatar:', error);
@@ -305,7 +304,7 @@ async function createDeathResultVisualization(victim, survivors, totalPot, winni
     
     ctx.fillStyle = '#ff6666';
     ctx.font = 'bold 18px Arial';
-    ctx.fillText(`Lost: ??{victim.lostAmount.toLocaleString()}`, 300, 235);
+    ctx.fillText(`Lost: 🍯{victim.lostAmount.toLocaleString()}`, 300, 235);
     
     // Results box
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
@@ -322,8 +321,8 @@ async function createDeathResultVisualization(victim, survivors, totalPot, winni
     ctx.fillText('💰 SPOILS OF SURVIVAL 💰', 300, 290);
     
     ctx.font = '16px Arial';
-    ctx.fillText(`Total Pot: ??{totalPot.toLocaleString()}`, 300, 320);
-    ctx.fillText(`Each Survivor Wins: ??{winnings.toLocaleString()}`, 300, 345);
+    ctx.fillText(`Total Pot: 🍯{totalPot.toLocaleString()}`, 300, 320);
+    ctx.fillText(`Each Survivor Wins: 🍯{winnings.toLocaleString()}`, 300, 345);
     
     // Survivors list
     ctx.font = 'bold 14px Arial';
@@ -350,7 +349,7 @@ module.exports = (client) => {
         // Russian Roulette command
         if (command === '!russianroulette' || command === '!rr') {
             const userId = message.author.id;
-            const userBalance = getEggBucks(userId);
+            const userBalance = await getBobbyBucks(userId);
             
             // Check if user has any money
             if (userBalance <= 0) {
@@ -467,7 +466,7 @@ module.exports = (client) => {
         }
 
         const userId = interaction.user.id;
-        const userBalance = getEggBucks(userId);
+        const userBalance = await getBobbyBucks(userId);
 
         if (action === 'rrjoin') {
             // Check if user already in lobby
@@ -588,7 +587,7 @@ module.exports = (client) => {
             .setDescription('**FINAL WARNING:** One player will lose ALL their money!\nThe pot will be split among survivors!')
             .addFields(
                 { name: '💀 Players at Risk', value: lobby.players.map(p => p.displayName || p.username).join('\n'), inline: true },
-                { name: '💰 Total at Stake', value: `??{lobby.players.reduce((total, player) => total + player.balance, 0).toLocaleString()}`, inline: true }
+                { name: '💰 Total at Stake', value: `🍯{lobby.players.reduce((total, player) => total + player.balance, 0).toLocaleString()}`, inline: true }
             )
             .setTimestamp();
 
@@ -641,12 +640,11 @@ module.exports = (client) => {
         const winningsPerSurvivor = Math.floor(victimLoss / survivors.length);
 
         // Update balances
-        setEggBucks(victim.id, 0); // Victim loses everything
-        
-        survivors.forEach(survivor => {
-            const currentBalance = getEggBucks(survivor.id);
-            updateEggBucks(survivor.id, winningsPerSurvivor);
-        });
+        await setBobbyBucks(victim.id, 0); // Victim loses everything
+
+        for (const survivor of survivors) {
+            await updateBobbyBucks(survivor.id, winningsPerSurvivor);
+        }
 
         // Create dramatic result visualization
         try {
@@ -665,9 +663,9 @@ module.exports = (client) => {
                 .setImage('attachment://death-result.png')
                 .addFields(
                     { name: '💀 Victim', value: `${victim.displayName || victim.username}`, inline: true },
-                    { name: '💸 Lost', value: `??{victimLoss.toLocaleString()}`, inline: true },
+                    { name: '💸 Lost', value: `🍯{victimLoss.toLocaleString()}`, inline: true },
                     { name: '🏆 Survivors', value: `${survivors.length}`, inline: true },
-                    { name: '💰 Each Survivor Won', value: `??{winningsPerSurvivor.toLocaleString()}`, inline: true },
+                    { name: '💰 Each Survivor Won', value: `🍯{winningsPerSurvivor.toLocaleString()}`, inline: true },
                     { name: '🎯 Survival Rate', value: `${((survivors.length / lobby.players.length) * 100).toFixed(1)}%`, inline: true },
                     { name: '🔫 Odds Beaten', value: `${lobby.players.length}:1`, inline: true }
                 )
@@ -689,8 +687,8 @@ module.exports = (client) => {
                 .setDescription(`**${victim.displayName || victim.username}** was eliminated!`)
                 .addFields(
                     { name: '💀 Victim', value: victim.displayName || victim.username, inline: true },
-                    { name: '💸 Lost', value: `??{victimLoss.toLocaleString()}`, inline: true },
-                    { name: '💰 Survivor Winnings', value: `??{winningsPerSurvivor.toLocaleString()} each`, inline: true },
+                    { name: '💸 Lost', value: `🍯{victimLoss.toLocaleString()}`, inline: true },
+                    { name: '💰 Survivor Winnings', value: `🍯{winningsPerSurvivor.toLocaleString()} each`, inline: true },
                     { name: '🏆 Survivors', value: survivors.map(s => s.displayName || s.username).join('\n'), inline: false }
                 )
                 .setTimestamp();
@@ -707,8 +705,8 @@ module.exports = (client) => {
                     .setTitle('🏆 YOU SURVIVED RUSSIAN ROULETTE!')
                     .setDescription(`You have survived the deadly game and claimed your share of ${victim.displayName || victim.username}'s fortune!`)
                     .addFields(
-                        { name: '💰 Winnings', value: `??{winningsPerSurvivor.toLocaleString()}`, inline: true },
-                        { name: '💳 New Balance', value: `??{getEggBucks(survivor.id).toLocaleString()}`, inline: true }
+                        { name: '💰 Winnings', value: `🍯{winningsPerSurvivor.toLocaleString()}`, inline: true },
+                        { name: '💳 New Balance', value: `🍯${(await getBobbyBucks(survivor.id)).toLocaleString()}`, inline: true }
                     )
                     .setTimestamp();
                 
@@ -726,7 +724,7 @@ module.exports = (client) => {
                 .setTitle('💀 YOU HAVE BEEN ELIMINATED')
                 .setDescription('The chamber was not empty. Your fortune has been claimed by the survivors.')
                 .addFields(
-                    { name: '💸 Lost', value: `??{victimLoss.toLocaleString()}`, inline: true },
+                    { name: '💸 Lost', value: `🍯{victimLoss.toLocaleString()}`, inline: true },
                     { name: '💳 Current Balance', value: 'B0', inline: true }
                 )
                 .setFooter({ text: 'Better luck next time... if there is one.' })
@@ -756,13 +754,13 @@ module.exports = (client) => {
             .setImage('attachment://roulette-table.png')
             .addFields(
                 { name: '👥 Players', value: `${lobby.players.length}/${MAX_PLAYERS}`, inline: true },
-                { name: '💰 Total at Stake', value: `??{totalPot.toLocaleString()}`, inline: true },
+                { name: '💰 Total at Stake', value: `🍯{totalPot.toLocaleString()}`, inline: true },
                 { name: '📊 Required', value: `${MIN_PLAYERS}-${MAX_PLAYERS} players`, inline: true },
                 { 
                     name: '🎭 Players in Lobby', 
                     value: lobby.players.length > 0 ? 
                         lobby.players.map((player, index) => 
-                            `${index + 1}. **${player.displayName || player.username}** (??{player.balance.toLocaleString()})`
+                            `${index + 1}. **${player.displayName || player.username}** (🍯{player.balance.toLocaleString()})`
                         ).join('\n') : 'None', 
                     inline: false 
                 }
@@ -804,52 +802,6 @@ module.exports = (client) => {
             .setDisabled(!canStart || gameStarted);
 
         return new ActionRowBuilder().addComponents(joinButton, leaveButton, startButton);
-    }
-
-    // Honey helper functions
-    function getEggBucks(userId) {
-        if (!fs.existsSync(eggBucksFilePath)) {
-            fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
-        }
-        const data = fs.readFileSync(eggBucksFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        return userRecord ? parseInt(userRecord.split(':')[1], 10) : 0;
-    }
-
-    function updateEggBucks(userId, amount) {
-        if (!fs.existsSync(eggBucksFilePath)) {
-            fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
-        }
-
-        let data = fs.readFileSync(eggBucksFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-
-        if (userRecord) {
-            const currentBalance = parseInt(userRecord.split(':')[1], 10);
-            const newBalance = currentBalance + amount;
-            data = data.replace(userRecord, `${userId}:${newBalance}`);
-        } else {
-            data += `\n${userId}:${amount}`;
-        }
-
-        fs.writeFileSync(eggBucksFilePath, data.trim(), 'utf-8');
-    }
-
-    function setEggBucks(userId, amount) {
-        if (!fs.existsSync(eggBucksFilePath)) {
-            fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
-        }
-
-        let data = fs.readFileSync(eggBucksFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-
-        if (userRecord) {
-            data = data.replace(userRecord, `${userId}:${amount}`);
-        } else {
-            data += `\n${userId}:${amount}`;
-        }
-
-        fs.writeFileSync(eggBucksFilePath, data.trim(), 'utf-8');
     }
 
     // Clean up old lobbies on startup
