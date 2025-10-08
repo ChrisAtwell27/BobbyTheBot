@@ -567,9 +567,7 @@ async function handleTeamStatsCommand(message) {
 }
 
 module.exports = (client) => {
-    // Initialize the API handler first
-    apiHandler.init(client);
-
+    // API handler is initialized in index.js
     // Only add event listeners if not already added for team builder
     if (!client._valorantTeamHandlerInitialized) {
         console.log('Enhanced Valorant Team Builder with Persistent Rank Integration loaded!');

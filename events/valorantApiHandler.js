@@ -781,25 +781,25 @@ module.exports = {
         }
 
         async function handleRegistrationSubmission(interaction) {
+            // Defer immediately to avoid token expiration
+            await interaction.deferReply({ ephemeral: true });
+
             const username = interaction.fields.getTextInputValue('valorant_username');
             const region = interaction.fields.getTextInputValue('valorant_region').toLowerCase();
 
             if (!username.includes('#') || username.split('#').length !== 2) {
-                return interaction.reply({
-                    content: '❌ Invalid username format! Please use the format: Username#Tag (e.g., Player#1234)',
-                    ephemeral: true
+                return interaction.editReply({
+                    content: '❌ Invalid username format! Please use the format: Username#Tag (e.g., Player#1234)'
                 });
             }
 
             if (!VALID_REGIONS.includes(region)) {
-                return interaction.reply({
-                    content: `❌ Invalid region! Valid regions are: ${VALID_REGIONS.join(', ').toUpperCase()}`,
-                    ephemeral: true
+                return interaction.editReply({
+                    content: `❌ Invalid region! Valid regions are: ${VALID_REGIONS.join(', ').toUpperCase()}`
                 });
             }
 
             const [name, tag] = username.split('#');
-            await interaction.deferReply({ ephemeral: true });
 
             try {
                 console.log(`Testing account: ${name}#${tag} in region ${region}`);

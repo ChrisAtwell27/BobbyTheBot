@@ -550,9 +550,7 @@ async function formatInhouseMembersList(inhouse) {
 }
 
 module.exports = (client) => {
-    // Initialize the API handler first
-    apiHandler.init(client);
-
+    // API handler is initialized in index.js
     // Only add event listeners if not already added for in-house builder
     if (!client._valorantInhouseHandlerInitialized) {
         console.log('Valorant In-House Match Builder with Team Balancing loaded!');
