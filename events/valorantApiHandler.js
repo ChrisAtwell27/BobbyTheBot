@@ -640,6 +640,16 @@ module.exports = {
             });
 
             client.on('interactionCreate', async (interaction) => {
+                // Early return if not a valorant interaction
+                if (interaction.isButton() && !interaction.customId.startsWith('valstats_') &&
+                    !interaction.customId.startsWith('valmatches_') &&
+                    !interaction.customId.startsWith('valweapon_')) {
+                    return;
+                }
+                if (interaction.isModalSubmit() && !interaction.customId.startsWith('valstats_registration_')) {
+                    return;
+                }
+
                 if (interaction.isButton()) {
                     if (interaction.customId.startsWith('valstats_register_')) {
                         const userId = interaction.customId.split('_')[2];
@@ -650,6 +660,7 @@ module.exports = {
                             });
                         }
                         await showRegistrationModal(interaction);
+                        return;
                     }
 
                     if (interaction.customId.startsWith('valstats_refresh_')) {
@@ -670,10 +681,11 @@ module.exports = {
                         }
 
                         await interaction.deferUpdate();
-                        await showUserStats({ 
-                            channel: interaction.channel, 
-                            author: interaction.user 
+                        await showUserStats({
+                            channel: interaction.channel,
+                            author: interaction.user
                         }, registration);
+                        return;
                     }
 
                     if (interaction.customId.startsWith('valmatches_refresh_')) {
@@ -694,10 +706,11 @@ module.exports = {
                         }
 
                         await interaction.deferUpdate();
-                        await showUserMatches({ 
-                            channel: interaction.channel, 
-                            author: interaction.user 
+                        await showUserMatches({
+                            channel: interaction.channel,
+                            author: interaction.user
                         }, registration);
+                        return;
                     }
 
                     if (interaction.customId.startsWith('valstats_details_')) {
@@ -719,6 +732,7 @@ module.exports = {
                 if (interaction.isModalSubmit()) {
                     if (interaction.customId.startsWith('valstats_registration_')) {
                         await handleRegistrationSubmission(interaction);
+                        return;
                     }
                 }
             });
@@ -753,31 +767,42 @@ module.exports = {
         }
 
         async function showRegistrationModal(interaction) {
-            const modal = new ModalBuilder()
-                .setCustomId(`valstats_registration_${interaction.user.id}`)
-                .setTitle('🎯 Valorant Account Registration');
+            try {
+                const modal = new ModalBuilder()
+                    .setCustomId(`valstats_registration_${interaction.user.id}`)
+                    .setTitle('🎯 Valorant Account Registration');
 
-            const usernameInput = new TextInputBuilder()
-                .setCustomId('valorant_username')
-                .setLabel('Valorant Username and Tag')
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder('e.g., PlayerName#1234')
-                .setRequired(true)
-                .setMaxLength(50);
+                const usernameInput = new TextInputBuilder()
+                    .setCustomId('valorant_username')
+                    .setLabel('Valorant Username and Tag')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('e.g., PlayerName#1234')
+                    .setRequired(true)
+                    .setMaxLength(50);
 
-            const regionInput = new TextInputBuilder()
-                .setCustomId('valorant_region')
-                .setLabel('Region')
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder('e.g., na, eu, ap, kr, latam, br')
-                .setRequired(true)
-                .setMaxLength(10);
+                const regionInput = new TextInputBuilder()
+                    .setCustomId('valorant_region')
+                    .setLabel('Region')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('e.g., na, eu, ap, kr, latam, br')
+                    .setRequired(true)
+                    .setMaxLength(10);
 
-            const firstRow = new ActionRowBuilder().addComponents(usernameInput);
-            const secondRow = new ActionRowBuilder().addComponents(regionInput);
+                const firstRow = new ActionRowBuilder().addComponents(usernameInput);
+                const secondRow = new ActionRowBuilder().addComponents(regionInput);
 
-            modal.addComponents(firstRow, secondRow);
-            await interaction.showModal(modal);
+                modal.addComponents(firstRow, secondRow);
+                await interaction.showModal(modal);
+            } catch (error) {
+                console.error('Error showing registration modal:', error);
+                // If modal fails (token expired), try to reply with error
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.reply({
+                        content: '❌ The interaction timed out. Please try clicking the Register Now button again.',
+                        ephemeral: true
+                    }).catch(() => console.error('Could not send error message'));
+                }
+            }
         }
 
         async function handleRegistrationSubmission(interaction) {
