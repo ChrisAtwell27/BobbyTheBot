@@ -26,5 +26,8 @@ module.exports = {
     loggingChannelId: '1276266582234103808', // Replace with your logging channel ID
     alertChannelId: '1276267465227108455', // Replace with your alert channel ID
     alertKeywords: ['ban', 'kick', 'trouble'],// Replace with the keywords you want to monitor
-    geminiApiKey: "AIzaSyDhIE3XJ4AQetznuZ5l2cQnlxV2ZV1u_9A"
+
+    // API Keys - Use environment variables (preferred for security)
+    geminiApiKey: process.env.GEMINI_API_KEY,
+    openaiApiKey: process.env.OPENAI_API_KEY // Always use environment variable for OpenAI key
 };

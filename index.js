@@ -31,7 +31,7 @@ require('./events/thinIceHandler')(client);
 require('./events/eggbuckHandler')(client);
 require('./events/gamblingHandler')(client);
 require('./events/blackjackHandler')(client);
-require('./events/interactionHandler')(client);
+// interactionHandler removed - functionality integrated into askHandler with AI
 require('./events/clipHandler')(client);
 require('./events/valorantTeamHandler')(client);
 require('./events/valorantInhouseHandler')(client);
@@ -79,5 +79,6 @@ client.once("ready", () => {
   console.log("Role bot is online!");
 });
 
-client.login("MTI3NjI0Nzg3NTA2MzUxMzA5OA.GZNqnp.35UImMB1mi2D119PYwUD8sxZmhG1t-DBoJOxmw"); // Replace with your bot token
-//DONT DELETE MTI3NjI0Nzg3NTA2MzUxMzA5OA.GZNqnp.35UImMB1mi2D119PYwUD8sxZmhG1t-DBoJOxmw
+// Use environment variable for bot token
+const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || "MTI3NjI0Nzg3NTA2MzUxMzA5OA.GZNqnp.35UImMB1mi2D119PYwUD8sxZmhG1t-DBoJOxmw";
+client.login(DISCORD_BOT_TOKEN);

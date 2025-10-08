@@ -1,1 +1,15 @@
-/data
+bobby_bucks.txt
+booster_roles.txt
+formatted_badwords.txt
+house.txt
+inhouse_config.json
+last_voting_date.txt
+pet_items.txt
+thin_ice.txt
+valorant_inhouse_events.json
+valorant_users.json
+virtual_pets.txt
+wordle_scores.txt
+/node_modules
+.claude
+.claude/settings.local.json

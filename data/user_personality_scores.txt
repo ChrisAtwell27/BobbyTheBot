@@ -1,0 +1,30 @@
+# Bobby Personality Scores
+# Format: userId:score
+# Score Range: 1-10
+# 1 = Very rude, mean, sarcastic, dismissive
+# 5 = Default neutral personality (friendly and helpful)
+# 10 = Extremely nice, complimentary, enthusiastic, supportive
+#
+# Examples:
+# 123456789012345678:1
+# 987654321098765432:10
+# 111222333444555666:3
+#
+# Instructions:
+# - Add one user per line
+# - Format: userId:score (no spaces)
+# - Score must be between 1-10
+# - Lines starting with # are comments
+# - Default score for unlisted users is 5 (neutral/friendly)
+#
+# Personality Descriptions by Score:
+# 1-2:   Extremely rude, sarcastic, dismissive, insulting
+# 3-4:   Somewhat rude, snarky, reluctantly helpful
+# 5-6:   Neutral to friendly (default Bobby personality)
+# 7-8:   Very friendly, encouraging, enthusiastic
+# 9-10:  Overwhelmingly positive, complimentary, supportive
+
+755593512556167249:10
+459723765513846795:2
+638512602846330884:4
+451459488562806784:9
