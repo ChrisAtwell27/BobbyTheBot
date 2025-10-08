@@ -1088,11 +1088,10 @@ module.exports = (client) => {
             const adoptionCard = await createAdoptionCard(interaction.user, newPet);
             const attachment = new AttachmentBuilder(adoptionCard.toBuffer(), { name: 'adoption-success.png' });
 
-            const totalPets = existingPets.length + 1;
             const embed = new EmbedBuilder()
                 .setTitle('🎉 Congratulations on Your New Pet!')
                 .setColor('#8fbc8f')
-                .setDescription(`**Welcome ${newPet.name} to the family!**\n\nYou now have **${totalPets}** pet${totalPets > 1 ? 's' : ''}!${totalPets > 1 ? '\n\n💡 Use the **Switch Pet** button in your pet dashboard to manage multiple pets!' : ''}`)
+                .setDescription(`**Welcome ${newPet.name} to the family!**`)
                 .setImage('attachment://adoption-success.png')
                 .addFields(
                     { name: '🏷️ Pet Type', value: pet.name, inline: true },
@@ -3003,13 +3002,13 @@ module.exports = (client) => {
             lastCared: Date.now(),
             lastTraining: 0,
             lastAdventure: 0,
-            stats: {
-                care_count: 0,
-                train_count: 0,
-                race_wins: 0,
-                treasures_found: 0,
-                playdates: 0
-            }
+            stats: new Map([
+                ['care_count', 0],
+                ['train_count', 0],
+                ['race_wins', 0],
+                ['treasures_found', 0],
+                ['playdates', 0]
+            ])
         };
     }
 
