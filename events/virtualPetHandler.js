@@ -339,7 +339,7 @@ module.exports = (client) => {
             }
 
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}`)
+                .setTitle(`${PET_TYPES[pet.petType].emoji} ${pet.name}`)
                 .setColor(petStatus.color)
                 .setDescription(`**${petStatus.message}**\n${mood.emoji} *${mood.messages[Math.floor(Math.random() * mood.messages.length)]}*${sleepInfo}`)
                 .setImage('attachment://pet-status.png')
@@ -481,7 +481,7 @@ module.exports = (client) => {
             const attachment = new AttachmentBuilder(feedingCard.toBuffer(), { name: 'feeding-card.png' });
 
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} Feeding Time!`)
+                .setTitle(`${PET_TYPES[pet.petType].emoji} Feeding Time!`)
                 .setColor('#8fbc8f')
                 .setDescription(`**${pet.name} enjoyed the ${food.name}!**`)
                 .setImage('attachment://feeding-card.png')
@@ -510,7 +510,7 @@ module.exports = (client) => {
             const attachment = new AttachmentBuilder(inventoryCard.toBuffer(), { name: 'pet-inventory.png' });
 
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Inventory`)
+                .setTitle(`${PET_TYPES[pet.petType].emoji} ${pet.name}'s Inventory`)
                 .setColor('#9370db')
                 .setDescription('**Items owned by your pet**')
                 .setImage('attachment://pet-inventory.png')
@@ -653,7 +653,7 @@ module.exports = (client) => {
             const levelUpText = pet.level > oldLevel ? `\n🎉 **LEVEL UP!** ${pet.name} is now level ${pet.level}!` : '';
 
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} Training Session Complete!`)
+                .setTitle(`${PET_TYPES[pet.petType].emoji} Training Session Complete!`)
                 .setColor('#6495ed')
                 .setDescription(`**${pet.name} completed training!**${levelUpText}`)
                 .setImage('attachment://training-card.png')
@@ -685,7 +685,7 @@ module.exports = (client) => {
             const mood = getPetMood(pet);
 
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Emotional State`)
+                .setTitle(`${PET_TYPES[pet.petType].emoji} ${pet.name}'s Emotional State`)
                 .setColor(getPetStatus(pet).color)
                 .setDescription(`**${pet.name} ${mood.messages[Math.floor(Math.random() * mood.messages.length)]}**`)
                 .setImage('attachment://pet-mood.png')
@@ -732,7 +732,7 @@ module.exports = (client) => {
                 );
 
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} Fetch Game Started!`)
+                .setTitle(`${PET_TYPES[pet.petType].emoji} Fetch Game Started!`)
                 .setColor('#4169e1')
                 .setDescription(`**Watch where the ball goes and click the arrows in order!**\n\n🎾 Ball path: ${sequence.join(' → ')}\n\n⏱️ You have 30 seconds!`)
                 .setFooter({ text: 'Click the arrows in the correct sequence!' });
@@ -794,7 +794,7 @@ module.exports = (client) => {
             ];
 
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} Treasure Hunt!`)
+                .setTitle(`${PET_TYPES[pet.petType].emoji} Treasure Hunt!`)
                 .setColor('#daa520')
                 .setDescription(`**${pet.name} is searching for treasure!**\n\nClick a spot to dig! You have 3 tries.\n💎 Find the treasure for a big reward!`)
                 .setFooter({ text: 'Choose wisely! Only 3 attempts!' });
@@ -921,7 +921,7 @@ module.exports = (client) => {
             const embed = new EmbedBuilder()
                 .setTitle(`🗺️ Adventure Time!`)
                 .setColor('#228b22')
-                .setDescription(`**${pet.name} went on an adventure!**\n\n${PET_TYPES[pet.type].emoji} ${pet.name} ${event.message}`)
+                .setDescription(`**${pet.name} went on an adventure!**\n\n${PET_TYPES[pet.petType].emoji} ${pet.name} ${event.message}`)
                 .setImage('attachment://adventure.png')
                 .addFields(
                     { name: '✨ Results', value: getEventResults(event, pet), inline: false },
@@ -955,7 +955,7 @@ module.exports = (client) => {
                 .join('\n');
 
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Achievements`)
+                .setTitle(`${PET_TYPES[pet.petType].emoji} ${pet.name}'s Achievements`)
                 .setColor('#9370db')
                 .setDescription(`**Earned: ${userAchievements.length}/${Object.keys(ACHIEVEMENTS).length}**`)
                 .addFields(
@@ -1043,7 +1043,7 @@ module.exports = (client) => {
             pet.name = newName;
             await savePet(userId, pet);
 
-            return message.channel.send(`✅ Successfully renamed your pet from **${oldName}** to **${newName}**! ${PET_TYPES[pet.type].emoji}`);
+            return message.channel.send(`✅ Successfully renamed your pet from **${oldName}** to **${newName}**! ${PET_TYPES[pet.petType].emoji}`);
         }
     });
 
@@ -1331,7 +1331,7 @@ module.exports = (client) => {
                 );
 
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Emotional State`)
+                .setTitle(`${PET_TYPES[pet.petType].emoji} ${pet.name}'s Emotional State`)
                 .setColor(getPetStatus(pet).color)
                 .setDescription(`**${pet.name} ${mood.messages[Math.floor(Math.random() * mood.messages.length)]}**`)
                 .setImage('attachment://pet-mood.png')
@@ -1373,7 +1373,7 @@ module.exports = (client) => {
                 );
 
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Achievements`)
+                .setTitle(`${PET_TYPES[pet.petType].emoji} ${pet.name}'s Achievements`)
                 .setColor('#9370db')
                 .setDescription(`**Progress: ${userAchievements.length}/${Object.keys(ACHIEVEMENTS).length} Unlocked**`)
                 .addFields(
@@ -1542,7 +1542,7 @@ module.exports = (client) => {
             }
 
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}`)
+                .setTitle(`${PET_TYPES[pet.petType].emoji} ${pet.name}`)
                 .setColor(petStatus.color)
                 .setDescription(`**${petStatus.message}**\n${mood.emoji} *${mood.messages[Math.floor(Math.random() * mood.messages.length)]}*${sleepInfo}`)
                 .setImage('attachment://pet-status.png')
@@ -1661,7 +1661,7 @@ module.exports = (client) => {
             const levelUpText = pet.level > oldLevel ? `\n🎉 **LEVEL UP!** ${pet.name} is now level ${pet.level}!` : '';
 
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} Pet Care`)
+                .setTitle(`${PET_TYPES[pet.petType].emoji} Pet Care`)
                 .setColor('#8fbc8f')
                 .setDescription(`${response}${levelUpText}`)
                 .setImage('attachment://pet-care.png')
@@ -1757,7 +1757,7 @@ module.exports = (client) => {
 
         if (minutesPassed < 1) return pet; // No update needed if less than 1 minute
 
-        const petType = PET_TYPES[pet.type];
+        const petType = PET_TYPES[pet.petType];
         const personality = pet.personality ? PERSONALITIES[pet.personality] : null;
 
         // Calculate decay/growth per minute
@@ -2114,7 +2114,7 @@ module.exports = (client) => {
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 48px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(PET_TYPES[pet.type].name.toUpperCase(), 350, 120);
+        ctx.fillText(PET_TYPES[pet.petType].name.toUpperCase(), 350, 120);
 
         // Level indicator
         ctx.font = '24px Arial';
@@ -2301,7 +2301,7 @@ module.exports = (client) => {
         ctx.fillText('ADOPTION SUCCESS!', 200, 50);
         
         // Pet icon (using custom drawing instead of emoji)
-        drawPetIcon(ctx, pet.type, 200, 150, 80);
+        drawPetIcon(ctx, pet.petType, 200, 150, 80);
         
         // Pet name
         ctx.font = 'bold 24px Arial';
@@ -2332,7 +2332,7 @@ module.exports = (client) => {
         ctx.fillText('FEEDING TIME!', 200, 40);
         
         // Pet and food (using custom drawing instead of emojis)
-        drawPetIcon(ctx, pet.type, 150, 120, 50);
+        drawPetIcon(ctx, pet.petType, 150, 120, 50);
 
         // Food label (emoji removed for better rendering)
         ctx.fillStyle = '#2c3e50';
@@ -2419,7 +2419,7 @@ module.exports = (client) => {
         ctx.fillText('ITEM USED!', 175, 30);
         
         // Pet and item (using custom drawing instead of emojis)
-        drawPetIcon(ctx, pet.type, 125, 90, 40);
+        drawPetIcon(ctx, pet.petType, 125, 90, 40);
 
         // Item label (emoji removed for better rendering)
         ctx.fillStyle = '#2c3e50';
@@ -2499,7 +2499,7 @@ module.exports = (client) => {
         ctx.fillText(`${icons[action]} PET CARE`, 175, 30);
         
         // Pet (using custom drawing instead of emoji)
-        drawPetIcon(ctx, pet.type, 175, 100, 60);
+        drawPetIcon(ctx, pet.petType, 175, 100, 60);
         
         // Pet name
         ctx.font = 'bold 18px Arial';
@@ -2537,7 +2537,7 @@ module.exports = (client) => {
         ctx.fillText('TRAINING COMPLETE!', 200, 40);
         
         // Pet (using custom drawing instead of emoji)
-        drawPetIcon(ctx, pet.type, 200, 120, 60);
+        drawPetIcon(ctx, pet.petType, 200, 120, 60);
         
         // Training info
         ctx.font = 'bold 18px Arial';
@@ -2598,7 +2598,7 @@ module.exports = (client) => {
             ctx.fillText(index + 1, 55, y);
             
             // Pet icon (using custom drawing instead of emoji)
-            drawPetIcon(ctx, entry.pet.type, 110, y, 20);
+            drawPetIcon(ctx, entry.pet.petType, 110, y, 20);
             
             // Pet and owner info
             ctx.fillStyle = '#2c3e50';
@@ -2733,7 +2733,7 @@ module.exports = (client) => {
         ctx.fillText(pet.name.toUpperCase(), 300, 160);
 
         ctx.font = '32px Arial';
-        ctx.fillText(PET_TYPES[pet.type].name, 300, 200);
+        ctx.fillText(PET_TYPES[pet.petType].name, 300, 200);
         ctx.shadowBlur = 0;
 
         // Result text
@@ -2813,7 +2813,7 @@ module.exports = (client) => {
         ctx.fillText(pet.name, 300, 180);
 
         ctx.font = '28px Arial';
-        ctx.fillText(PET_TYPES[pet.type].name, 300, 215);
+        ctx.fillText(PET_TYPES[pet.petType].name, 300, 215);
 
         // Event result box
         ctx.shadowBlur = 0;
@@ -2983,7 +2983,7 @@ module.exports = (client) => {
 
         return {
             id: `${Date.now()}_${Math.random().toString(36).substring(2, 11)}`, // Unique ID
-            type: type,
+            petType: type,
             name: name,
             personality: randomPersonality,
             hunger: 100,

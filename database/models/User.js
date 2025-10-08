@@ -45,7 +45,7 @@ const userSchema = new mongoose.Schema({
     pet: {
         id: String,
         name: String,
-        type: String,
+        petType: String,  // Renamed from 'type' to avoid Mongoose conflict
         emoji: String,
         hunger: {
             type: Number,
@@ -155,6 +155,11 @@ const userSchema = new mongoose.Schema({
 userSchema.index({ balance: -1 }); // For baltop
 userSchema.index({ dailyMessageCount: -1 }); // For activetop
 userSchema.index({ 'pet.level': -1 }); // For pet leaderboard
+
+// Delete existing model if it exists (prevents caching issues)
+if (mongoose.models.User) {
+    delete mongoose.models.User;
+}
 
 const User = mongoose.model('User', userSchema);
 

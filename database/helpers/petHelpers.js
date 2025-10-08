@@ -83,12 +83,12 @@ async function getTopPets(limit = 10) {
         const users = await User.find({ 'pet.level': { $exists: true, $gt: 0 } })
             .sort({ 'pet.level': -1, 'pet.xp': -1 })
             .limit(limit)
-            .select('userId pet.name pet.type pet.emoji pet.level pet.xp');
+            .select('userId pet.name pet.petType pet.emoji pet.level pet.xp');
 
         return users.map(user => ({
             userId: user.userId,
             petName: user.pet.name,
-            petType: user.pet.type,
+            petType: user.pet.petType,
             petEmoji: user.pet.emoji,
             level: user.pet.level,
             xp: user.pet.xp
