@@ -263,7 +263,7 @@ module.exports = (client) => {
         if (args[0] === '!pet') {
             const userId = message.author.id;
             const pet = getPet(userId);
-            
+
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet yet! Use `!adopt` to get one.');
             }
@@ -271,41 +271,102 @@ module.exports = (client) => {
             const petCard = await createPetCard(message.author, pet);
             const attachment = new AttachmentBuilder(petCard.toBuffer(), { name: 'pet-status.png' });
 
-            const actionRow = new ActionRowBuilder()
+            // Row 1: Basic Care
+            const careRow = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
                         .setCustomId(`pet_feed_${userId}`)
-                        .setLabel('🍽️ Feed')
+                        .setLabel('Feed')
+                        .setEmoji('🍽️')
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId(`pet_play_${userId}`)
-                        .setLabel('🎾 Play')
+                        .setLabel('Play')
+                        .setEmoji('🎾')
                         .setStyle(ButtonStyle.Success),
                     new ButtonBuilder()
                         .setCustomId(`pet_clean_${userId}`)
-                        .setLabel('🛁 Clean')
+                        .setLabel('Clean')
+                        .setEmoji('🛁')
                         .setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder()
                         .setCustomId(`pet_sleep_${userId}`)
-                        .setLabel('😴 Sleep')
+                        .setLabel('Sleep')
+                        .setEmoji('😴')
                         .setStyle(ButtonStyle.Secondary)
                 );
 
+            // Row 2: Games & Activities
+            const gamesRow = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`pet_mood_${userId}`)
+                        .setLabel('Mood')
+                        .setEmoji('😊')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId(`pet_race_${userId}`)
+                        .setLabel('Race')
+                        .setEmoji('🏁')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`pet_treasure_${userId}`)
+                        .setLabel('Treasure')
+                        .setEmoji('💎')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`pet_adventure_${userId}`)
+                        .setLabel('Adventure')
+                        .setEmoji('🗺️')
+                        .setStyle(ButtonStyle.Success)
+                );
+
+            // Row 3: Social & Info
+            const socialRow = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`pet_train_${userId}`)
+                        .setLabel('Train')
+                        .setEmoji('🎓')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId(`pet_achievements_${userId}`)
+                        .setLabel('Achievements')
+                        .setEmoji('🏆')
+                        .setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder()
+                        .setCustomId(`pet_shop_${userId}`)
+                        .setLabel('Shop')
+                        .setEmoji('🛒')
+                        .setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder()
+                        .setCustomId(`pet_inventory_${userId}`)
+                        .setLabel('Inventory')
+                        .setEmoji('🎒')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+
+            const mood = getPetMood(pet);
+            const personality = pet.personality ? PERSONALITIES[pet.personality] : null;
             const petStatus = getPetStatus(pet);
+
             const embed = new EmbedBuilder()
-                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name} - Pet Status`)
+                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name} - Pet Dashboard`)
                 .setColor(petStatus.color)
-                .setDescription(`**${petStatus.message}**`)
+                .setDescription(`**${petStatus.message}**\n${mood.emoji} *${mood.messages[Math.floor(Math.random() * mood.messages.length)]}*`)
                 .setImage('attachment://pet-status.png')
                 .addFields(
                     { name: '📊 Stats', value: getStatsDisplay(pet), inline: true },
+                    { name: '🎭 Personality', value: personality ? `${personality.emoji} ${pet.personality}` : '🎲 Random', inline: true },
+                    { name: '⭐ Level', value: `Level ${pet.level}\n${pet.experience}/100 XP`, inline: true },
                     { name: '🎂 Age', value: `${pet.age} days old`, inline: true },
-                    { name: '⭐ Level', value: `Level ${pet.level} (${pet.experience}/100 XP)`, inline: true }
+                    { name: '🏆 Achievements', value: `${getPetAchievements(userId).length}/${Object.keys(ACHIEVEMENTS).length} unlocked`, inline: true },
+                    { name: '📈 Stats', value: `Races Won: ${pet.stats?.race_wins || 0}\nTreasures: ${pet.stats?.treasures_found || 0}\nPlaydates: ${pet.stats?.playdates || 0}`, inline: true }
                 )
-                .setFooter({ text: 'Take good care of your pet for bonus XP!' })
+                .setFooter({ text: '💡 Use the buttons below to interact with your pet!' })
                 .setTimestamp();
 
-            return message.channel.send({ embeds: [embed], files: [attachment], components: [actionRow] });
+            return message.channel.send({ embeds: [embed], files: [attachment], components: [careRow, gamesRow, socialRow] });
         }
 
         // Pet shop command
@@ -1204,6 +1265,88 @@ module.exports = (client) => {
             }
         }
 
+        // Handle dashboard button actions
+        if (interaction.isButton() && interaction.customId.startsWith('pet_mood_')) {
+            const userId = interaction.customId.split('_')[2];
+            if (interaction.user.id !== userId) {
+                return interaction.reply({ content: '❌ This is not your pet!', ephemeral: true });
+            }
+
+            const pet = getPet(userId);
+            if (!pet) {
+                return interaction.reply({ content: '❌ You don\'t have a pet!', ephemeral: true });
+            }
+
+            const moodCard = await createMoodCard(pet, interaction.user);
+            const attachment = new AttachmentBuilder(moodCard.toBuffer(), { name: 'pet-mood.png' });
+            const mood = getPetMood(pet);
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Emotional State`)
+                .setColor(getPetStatus(pet).color)
+                .setDescription(`**${pet.name} ${mood.messages[Math.floor(Math.random() * mood.messages.length)]}**`)
+                .setImage('attachment://pet-mood.png')
+                .setTimestamp();
+
+            return interaction.reply({ embeds: [embed], files: [attachment], ephemeral: false });
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('pet_achievements_')) {
+            const userId = interaction.customId.split('_')[2];
+            if (interaction.user.id !== userId) {
+                return interaction.reply({ content: '❌ This is not your pet!', ephemeral: true });
+            }
+
+            const pet = getPet(userId);
+            const userAchievements = getPetAchievements(userId);
+            const earnedAchievements = Object.entries(ACHIEVEMENTS)
+                .filter(([key]) => userAchievements.includes(key))
+                .map(([, ach]) => `${ach.emoji} **${ach.name}**`)
+                .join('\n') || 'No achievements yet!';
+
+            const nextAchievements = Object.entries(ACHIEVEMENTS)
+                .filter(([key]) => !userAchievements.includes(key))
+                .slice(0, 3)
+                .map(([, ach]) => `${ach.emoji} **${ach.name}** - ${ach.description}`)
+                .join('\n');
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Achievements`)
+                .setColor('#9370db')
+                .setDescription(`**Earned: ${userAchievements.length}/${Object.keys(ACHIEVEMENTS).length}**`)
+                .addFields(
+                    { name: '🏆 Unlocked', value: earnedAchievements, inline: false },
+                    { name: '🎯 Next Goals', value: nextAchievements || 'All done!', inline: false }
+                )
+                .setTimestamp();
+
+            return interaction.reply({ embeds: [embed], ephemeral: true });
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('pet_race_')) {
+            return interaction.reply({ content: '🏁 Use the `!race` command to start a race!', ephemeral: true });
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('pet_treasure_')) {
+            return interaction.reply({ content: '💎 Use the `!treasure` command to start treasure hunting!', ephemeral: true });
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('pet_adventure_')) {
+            return interaction.reply({ content: '🗺️ Use the `!adventure` command to go on an adventure!', ephemeral: true });
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('pet_train_')) {
+            return interaction.reply({ content: '🎓 Use the `!train` command to train your pet!', ephemeral: true });
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('pet_shop_')) {
+            return interaction.reply({ content: '🛒 Use the `!petshop` command to visit the shop!', ephemeral: true });
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('pet_inventory_')) {
+            return interaction.reply({ content: '🎒 Use the `!inventory` command to check your items!', ephemeral: true });
+        }
+
         // Handle pet care buttons
         if (interaction.isButton() && interaction.customId.startsWith('pet_')) {
             const [, action, userId] = interaction.customId.split('_');
@@ -1658,12 +1801,17 @@ module.exports = (client) => {
         ctx.textAlign = 'center';
         ctx.fillText(`Owner: ${user.username}`, 80, 165);
 
-        // Pet emoji (large) with glow effect
+        // Pet type name (large) with glow effect since emojis don't render well
         ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
         ctx.shadowBlur = 20;
-        ctx.font = '80px Arial';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 48px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(PET_TYPES[pet.type].emoji, 350, 150);
+        ctx.fillText(PET_TYPES[pet.type].name.toUpperCase(), 350, 120);
+
+        // Level indicator
+        ctx.font = '24px Arial';
+        ctx.fillText(`Level ${pet.level}`, 350, 150);
         ctx.shadowBlur = 0;
 
         // Personality badge
@@ -2199,15 +2347,14 @@ module.exports = (client) => {
         ctx.fillText(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Mood`, 250, 40);
         ctx.shadowBlur = 0;
 
-        // Large mood emoji
-        ctx.font = '100px Arial';
-        ctx.fillText(mood.emoji, 250, 150);
-
-        // Mood name
+        // Large mood text (emojis don't render well in canvas)
         const moodName = Object.keys(MOODS).find(k => MOODS[k].emoji === mood.emoji);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 32px Arial';
-        ctx.fillText(moodName.toUpperCase(), 250, 200);
+
+        ctx.font = '32px Arial';
+        ctx.fillText('Feeling', 250, 100);
+
+        ctx.font = 'bold 42px Arial';
+        ctx.fillText(moodName.toUpperCase(), 250, 140);
 
         // Personality badge
         if (pet.personality) {
@@ -2259,22 +2406,26 @@ module.exports = (client) => {
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, 600, 400);
 
-        // Decorative elements
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-        for (let i = 0; i < 20; i++) {
+        // Decorative circles instead of emojis
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        for (let i = 0; i < 30; i++) {
             const x = Math.random() * 600;
             const y = Math.random() * 400;
-            const size = Math.random() * 30 + 10;
-            ctx.font = `${size}px Arial`;
-            ctx.fillText(result === 'win' ? '⭐' : '🎮', x, y);
+            const size = Math.random() * 15 + 5;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
         }
 
-        // Pet emoji (large)
+        // Pet name (large) - emojis don't render well
         ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
         ctx.shadowBlur = 15;
-        ctx.font = '120px Arial';
+        ctx.font = 'bold 56px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(PET_TYPES[pet.type].emoji, 300, 180);
+        ctx.fillText(pet.name.toUpperCase(), 300, 160);
+
+        ctx.font = '32px Arial';
+        ctx.fillText(PET_TYPES[pet.type].name, 300, 200);
         ctx.shadowBlur = 0;
 
         // Result text
@@ -2322,15 +2473,19 @@ module.exports = (client) => {
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, 600, 400);
 
-        // Adventure elements
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-        const adventureEmojis = ['🌲', '🗻', '🏔️', '🌳', '🍃'];
-        for (let i = 0; i < 25; i++) {
+        // Adventure elements - trees as triangles
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        for (let i = 0; i < 20; i++) {
             const x = Math.random() * 600;
             const y = Math.random() * 400;
-            const size = Math.random() * 20 + 15;
-            ctx.font = `${size}px Arial`;
-            ctx.fillText(adventureEmojis[Math.floor(Math.random() * adventureEmojis.length)], x, y);
+            const size = Math.random() * 20 + 10;
+
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x - size, y + size * 2);
+            ctx.lineTo(x + size, y + size * 2);
+            ctx.closePath();
+            ctx.fill();
         }
 
         // Title banner
@@ -2344,10 +2499,13 @@ module.exports = (client) => {
         ctx.shadowBlur = 10;
         ctx.fillText('🗺️ ADVENTURE COMPLETE! 🗺️', 300, 70);
 
-        // Pet with event indicator
+        // Pet info
         ctx.shadowBlur = 20;
-        ctx.font = '100px Arial';
-        ctx.fillText(PET_TYPES[pet.type].emoji, 300, 200);
+        ctx.font = 'bold 48px Arial';
+        ctx.fillText(pet.name, 300, 180);
+
+        ctx.font = '28px Arial';
+        ctx.fillText(PET_TYPES[pet.type].name, 300, 215);
 
         // Event result box
         ctx.shadowBlur = 0;
@@ -2384,14 +2542,15 @@ module.exports = (client) => {
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, 700, 400);
 
-        // Hearts decoration
+        // Hearts decoration - using circles
         ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
         for (let i = 0; i < 30; i++) {
             const x = Math.random() * 700;
             const y = Math.random() * 400;
-            const size = Math.random() * 25 + 15;
-            ctx.font = `${size}px Arial`;
-            ctx.fillText('💕', x, y);
+            const size = Math.random() * 12 + 5;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
         }
 
         // Title
@@ -2407,16 +2566,20 @@ module.exports = (client) => {
 
         // Pet 1
         ctx.shadowBlur = 15;
-        ctx.font = '90px Arial';
-        ctx.fillText(PET_TYPES[pet1.type].emoji, 180, 200);
+        ctx.font = 'bold 36px Arial';
+        ctx.fillText(pet1.name, 180, 180);
+        ctx.font = '20px Arial';
+        ctx.fillText(PET_TYPES[pet1.type].name, 180, 210);
 
-        // Heart between
-        ctx.font = '50px Arial';
-        ctx.fillText('💝', 350, 200);
+        // Heart between - using text
+        ctx.font = 'bold 36px Arial';
+        ctx.fillText('❤', 350, 195);
 
         // Pet 2
-        ctx.font = '90px Arial';
-        ctx.fillText(PET_TYPES[pet2.type].emoji, 520, 200);
+        ctx.font = 'bold 36px Arial';
+        ctx.fillText(pet2.name, 520, 180);
+        ctx.font = '20px Arial';
+        ctx.fillText(PET_TYPES[pet2.type].name, 520, 210);
 
         // Names
         ctx.shadowBlur = 0;
@@ -2480,11 +2643,11 @@ module.exports = (client) => {
         ctx.shadowBlur = 15;
         ctx.fillText('🏆 ACHIEVEMENT UNLOCKED! 🏆', 300, 90);
 
-        // Achievement emoji
+        // Achievement icon - using text instead of emoji
         ctx.shadowBlur = 20;
-        ctx.font = '100px Arial';
+        ctx.font = 'bold 48px Arial';
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(achievement.emoji, 300, 190);
+        ctx.fillText('ACHIEVEMENT', 300, 180);
 
         // Achievement name
         ctx.shadowBlur = 10;
