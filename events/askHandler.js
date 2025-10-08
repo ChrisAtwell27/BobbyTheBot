@@ -27,7 +27,7 @@ if (OPENAI_API_KEY) {
 
 // Conversation history storage (in-memory, per user)
 const conversationHistory = new Map();
-const MAX_HISTORY_LENGTH = 10; // Keep last 10 messages per user
+const MAX_HISTORY_LENGTH = 5; // Keep last 5 message pairs per user (user message + Bobby's response)
 
 // Function to get user's memory/personal details
 function getUserMemory(userId) {
