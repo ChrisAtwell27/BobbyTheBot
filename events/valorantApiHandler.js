@@ -1,15 +1,14 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
-const fs = require('fs');
-const path = require('path');
+const { saveValorantUser, getValorantUser, getAllValorantUsers, removeValorantUser } = require('../database/helpers/valorantHelpers');
 
 // ===============================================
 // VALORANT STATS & API HANDLER
 // ===============================================
 // This handler manages Valorant account registration and stats display
 // Commands: !valstats, !valprofile (user), !valtest, !valreset (admin)
-// 
+//
 // IMPORTANT: This is separate from the Valorant TEAM BUILDER
 // Team Builder uses: !valorant, @Valorant role, valorant_ button prefixes
 // This handler uses: !valstats, !valprofile, valstats_ button prefixes
@@ -18,16 +17,6 @@ const path = require('path');
 // API Configuration
 const API_KEY = 'HDEV-c58e378a-b84e-45bd-bced-aae3e742c2c3';
 const BASE_URL = 'https://api.henrikdev.xyz/valorant';
-
-// File paths for persistent storage
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const USERS_FILE = path.join(DATA_DIR, 'valorant_users.json');
-
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    console.log('Created data directory:', DATA_DIR);
-}
 
 // Store user registrations (loaded from file)
 let userRegistrations = new Map();
@@ -65,56 +54,35 @@ const RANK_MAPPING = {
     27: { name: 'Radiant', color: '#FFFF99', image: 'Radiant_Rank.png' }
 };
 
-// Function to load user registrations from file
-function loadUserRegistrations() {
+// Function to load user registrations from MongoDB
+async function loadUserRegistrations() {
     try {
-        if (fs.existsSync(USERS_FILE)) {
-            const fileData = fs.readFileSync(USERS_FILE, 'utf8');
-            const data = JSON.parse(fileData);
-            
-            // Convert object back to Map
-            userRegistrations = new Map(Object.entries(data));
-            console.log(`Loaded ${userRegistrations.size} registered Valorant users from file`);
-            
-            // Log loaded users for debugging
-            userRegistrations.forEach((userData, userId) => {
-                console.log(`- ${userData.name}#${userData.tag} (${userData.region}) - Discord ID: ${userId}`);
-            });
-        } else {
-            console.log('No existing Valorant users file found, starting fresh');
-            userRegistrations = new Map();
-        }
+        userRegistrations = await getAllValorantUsers();
+        console.log(`Loaded ${userRegistrations.size} registered Valorant users from MongoDB`);
+
+        // Log loaded users for debugging
+        userRegistrations.forEach((userData, userId) => {
+            console.log(`- ${userData.name}#${userData.tag} (${userData.region}) - Discord ID: ${userId}`);
+        });
     } catch (error) {
         console.error('Error loading user registrations:', error);
         userRegistrations = new Map();
     }
 }
 
-// Function to save user registrations to file
-function saveUserRegistrations() {
-    try {
-        // Convert Map to object for JSON storage
-        const dataObject = Object.fromEntries(userRegistrations);
-        fs.writeFileSync(USERS_FILE, JSON.stringify(dataObject, null, 2), 'utf8');
-        console.log(`Saved ${userRegistrations.size} registered Valorant users to file`);
-    } catch (error) {
-        console.error('Error saving user registrations:', error);
-    }
-}
-
 // Function to add a new user registration
-function addUserRegistration(userId, userData) {
+async function addUserRegistration(userId, userData) {
+    await saveValorantUser(userId, userData);
     userRegistrations.set(userId, userData);
-    saveUserRegistrations();
     console.log(`Added registration for user ${userId}: ${userData.name}#${userData.tag} (${userData.region})`);
 }
 
 // Function to remove a user registration
-function removeUserRegistration(userId) {
+async function removeUserRegistration(userId) {
     const userData = userRegistrations.get(userId);
     if (userData) {
+        await removeValorantUser(userId);
         userRegistrations.delete(userId);
-        saveUserRegistrations();
         console.log(`Removed registration for user ${userId}: ${userData.name}#${userData.tag}`);
         return true;
     }
@@ -549,13 +517,15 @@ module.exports = {
     getAllRegisteredUsers,
     
     // Initialize function to set up event handlers
-    init: (client) => {
+    init: async (client) => {
         // Only add event listeners if not already added
         if (!client._valorantApiHandlerInitialized) {
-            console.log('Valorant API Handler with Persistent Storage loaded successfully!');
+            console.log('Valorant API Handler with MongoDB Storage loaded successfully!');
             console.log(`Registered regions: ${VALID_REGIONS.join(', ')}`);
             console.log('Commands: !valstats, !valprofile, !valmatches, !valtest (admin), !valreset (admin), !vallist (admin)');
-            console.log(`Data file: ${USERS_FILE}`);
+
+            // Load registrations from MongoDB
+            await loadUserRegistrations();
             console.log(`Loaded ${userRegistrations.size} registered users`);
 
             client.on('messageCreate', async (message) => {
@@ -593,7 +563,7 @@ module.exports = {
                 if (command === '!valreset' && message.member.permissions.has('ADMINISTRATOR')) {
                     const targetUser = message.mentions.users.first();
                     if (targetUser) {
-                        if (removeUserRegistration(targetUser.id)) {
+                        if (await removeUserRegistration(targetUser.id)) {
                             message.reply(`✅ Reset Valorant registration for ${targetUser.username}`);
                         } else {
                             message.reply(`❌ ${targetUser.username} was not registered`);
@@ -849,7 +819,7 @@ module.exports = {
                     registeredAt: new Date().toISOString()
                 };
 
-                addUserRegistration(interaction.user.id, userData);
+                await addUserRegistration(interaction.user.id, userData);
 
                 const successEmbed = new EmbedBuilder()
                     .setTitle('✅ Registration Successful!')

@@ -1,12 +1,9 @@
-﻿const fs = require('fs');
-const path = require('path');
-const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+﻿const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 const { topEggRoleId } = require('../data/config');
-
-const bobbyBucksFilePath = path.join(__dirname, '../data/bobby_bucks.txt');
-const houseFilePath = path.join(__dirname, '../data/house.txt');
+const { getBobbyBucks, updateBobbyBucks, setBobbyBucks, getTopBalances, getTotalEconomy, getUserRank } = require('../database/helpers/economyHelpers');
+const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 
 // Function to load image from URL
 async function loadImageFromURL(url) {
@@ -56,7 +53,8 @@ module.exports = (client) => {
                 user = message.author;
             }
             
-            const balance = getBobbyBucks(userId);
+            const balance = await getBobbyBucks(userId);
+            const rank = await getUserRank(userId) || 'N/A';
             const balanceCard = await createBalanceCard(user, balance);
             const attachment = new AttachmentBuilder(balanceCard.toBuffer(), { name: 'balance-card.png' });
 
@@ -68,7 +66,7 @@ module.exports = (client) => {
                 .addFields(
                     { name: '🍯 Current Balance', value: `**🍯${balance.toLocaleString()}**`, inline: true },
                     { name: '🏛️ Account Status', value: balance > 1000 ? '🌟 **Premium Hive**' : '🐝 **Standard Hive**', inline: true },
-                    { name: '📊 Hive Rank', value: `#${getCachedRank(userId, message.guild)}`, inline: true }
+                    { name: '📊 Hive Rank', value: `#${rank}`, inline: true }
                 )
                 .setFooter({ text: 'Honey Bank - Sweet savings guaranteed! 🍯' })
                 .setTimestamp();
@@ -78,14 +76,17 @@ module.exports = (client) => {
 
         // Enhanced leaderboard command
         if (args[0] === '!baltop') {
-            const topBalances = await getTopBalances(message.guild, 10);
-            
+            const topBalances = await getTopBalances(10);
+
             if (topBalances.length === 0) {
                 return message.channel.send('No balances found.');
             }
-            
+
             const leaderboardImage = await createLeaderboard(topBalances, message.guild);
             const attachment = new AttachmentBuilder(leaderboardImage.toBuffer(), { name: 'leaderboard.png' });
+
+            const totalEconomy = await getTotalEconomy();
+            const houseBalance = await getHouseBalance();
 
             const embed = new EmbedBuilder()
                 .setTitle('🍯 Honey Leaderboard - Top Beekeepers')
@@ -93,8 +94,8 @@ module.exports = (client) => {
                 .setDescription('**🐝 Top 10 Honey Collectors**')
                 .setImage('attachment://leaderboard.png')
                 .addFields(
-                    { name: '🍯 Total Honey Supply', value: `🍯${getTotalEconomy().toLocaleString()}`, inline: true },
-                    { name: '🏦 Hive Reserve', value: `🍯${getHouseBalance().toLocaleString()}`, inline: true },
+                    { name: '🍯 Total Honey Supply', value: `🍯${totalEconomy.toLocaleString()}`, inline: true },
+                    { name: '🏦 Hive Reserve', value: `🍯${houseBalance.toLocaleString()}`, inline: true },
                     { name: '🐝 Active Beekeepers', value: `${topBalances.length} members`, inline: true }
                 )
                 .setFooter({ text: 'Sweet rankings updated in real-time! 🍯' })
@@ -117,9 +118,9 @@ module.exports = (client) => {
                 return message.channel.send('Invalid user or amount specified.');
             }
 
-            const oldBalance = getBobbyBucks(userId);
-            updateBobbyBucks(userId, amount);
-            const newBalance = getBobbyBucks(userId);
+            const oldBalance = await getBobbyBucks(userId);
+            await updateBobbyBucks(userId, amount);
+            const newBalance = await getBobbyBucks(userId);
 
             const transactionReceipt = await createTransactionReceipt(mentionedUser, amount, oldBalance, newBalance, 'AWARD', message.author);
             const attachment = new AttachmentBuilder(transactionReceipt.toBuffer(), { name: 'transaction-receipt.png' });
@@ -144,7 +145,7 @@ module.exports = (client) => {
         if (args[0] === '!spend' && args[1]) {
             const userId = message.author.id;
             const amount = parseInt(args[1], 10);
-            const balance = getBobbyBucks(userId);
+            const balance = await getBobbyBucks(userId);
 
             if (isNaN(amount) || amount <= 0) {
                 return message.channel.send('Invalid amount specified.');
@@ -152,8 +153,8 @@ module.exports = (client) => {
 
             if (balance >= amount) {
                 const oldBalance = balance;
-                updateBobbyBucks(userId, -amount);
-                const newBalance = getBobbyBucks(userId);
+                await updateBobbyBucks(userId, -amount);
+                const newBalance = await getBobbyBucks(userId);
 
                 const transactionReceipt = await createTransactionReceipt(message.author, amount, oldBalance, newBalance, 'SPEND', message.author);
                 const attachment = new AttachmentBuilder(transactionReceipt.toBuffer(), { name: 'spending-receipt.png' });
@@ -212,7 +213,7 @@ module.exports = (client) => {
                 let membersAwarded = 0;
                 allMembers.forEach(member => {
                     if (!member.user.bot) {
-                        updateBobbyBucks(member.id, amount);
+                        await updateBobbyBucks(member.id, amount);
                         membersAwarded++;
                     }
                 });
@@ -262,7 +263,7 @@ module.exports = (client) => {
                 return message.channel.send('❌ Invalid amount specified. Amount must be a positive number.');
             }
 
-            const senderBalance = getBobbyBucks(senderId);
+            const senderBalance = await getBobbyBucks(senderId);
 
             if (senderBalance < amount) {
                 const insufficientFunds = await createInsufficientFundsCard(message.author, senderBalance, amount);
@@ -286,13 +287,13 @@ module.exports = (client) => {
 
             // Process the transfer
             const senderOldBalance = senderBalance;
-            const recipientOldBalance = getBobbyBucks(mentionedUser.id);
+            const recipientOldBalance = await getBobbyBucks(mentionedUser.id);
             
-            updateBobbyBucks(senderId, -amount); // Deduct from sender
-            updateBobbyBucks(mentionedUser.id, amount); // Add to recipient
+            await updateBobbyBucks(senderId, -amount); // Deduct from sender
+            await updateBobbyBucks(mentionedUser.id, amount); // Add to recipient
             
-            const senderNewBalance = getBobbyBucks(senderId);
-            const recipientNewBalance = getBobbyBucks(mentionedUser.id);
+            const senderNewBalance = await getBobbyBucks(senderId);
+            const recipientNewBalance = await getBobbyBucks(mentionedUser.id);
 
             // Create payment receipt
             const paymentReceipt = await createPaymentReceipt(message.author, mentionedUser, amount, senderOldBalance, senderNewBalance, recipientOldBalance, recipientNewBalance);
@@ -317,7 +318,7 @@ module.exports = (client) => {
         // Command to beg for Honey with interactive tip jar
         if (args[0] === '!beg') {
             const userId = message.author.id;
-            const balance = getBobbyBucks(userId);
+            const balance = await getBobbyBucks(userId);
             
             // Create tip jar visualization
             const tipJarImage = await createTipJarCard(message.author, balance);
@@ -394,7 +395,7 @@ module.exports = (client) => {
             }
 
             // Check if donor has enough money (at least 1 Honey)
-            const donorBalance = getBobbyBucks(donorId);
+            const donorBalance = await getBobbyBucks(donorId);
             if (donorBalance < 1) {
                 return interaction.reply({
                     content: '❌ You need at least 1 Honey to donate!',
@@ -410,13 +411,13 @@ module.exports = (client) => {
             
             // Process the donation
             const donorOldBalance = donorBalance;
-            const beggarOldBalance = getBobbyBucks(beggarId);
+            const beggarOldBalance = await getBobbyBucks(beggarId);
             
-            updateBobbyBucks(donorId, -actualDonation);
-            updateBobbyBucks(beggarId, actualDonation);
+            await updateBobbyBucks(donorId, -actualDonation);
+            await updateBobbyBucks(beggarId, actualDonation);
             
-            const donorNewBalance = getBobbyBucks(donorId);
-            const beggarNewBalance = getBobbyBucks(beggarId);
+            const donorNewBalance = await getBobbyBucks(donorId);
+            const beggarNewBalance = await getBobbyBucks(beggarId);
 
             // Get user objects
             const beggar = await interaction.guild.members.fetch(beggarId);
@@ -470,7 +471,7 @@ module.exports = (client) => {
     // Award 500 Honey to new members on join (silent)
     client.on('guildMemberAdd', async (member) => {
         if (member.user.bot) return; // Don't award bots
-        updateBobbyBucks(member.id, 500);
+        await updateBobbyBucks(member.id, 500);
         // Silent bonus - no notification sent
     });
 
@@ -755,62 +756,72 @@ module.exports = (client) => {
     async function createLeaderboard(topBalances, guild) {
         const canvas = createCanvas(600, 400 + (topBalances.length * 35));
         const ctx = canvas.getContext('2d');
-        
+
+        // Fetch usernames for all entries
+        for (const entry of topBalances) {
+            try {
+                const member = await guild.members.fetch(entry.userId);
+                entry.username = member.user.username;
+            } catch (error) {
+                entry.username = `Unknown User`;
+            }
+        }
+
         // Background
         const gradient = ctx.createLinearGradient(0, 0, 600, canvas.height);
         gradient.addColorStop(0, '#2c1810');
         gradient.addColorStop(1, '#1a0f08');
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, 600, canvas.height);
-        
+
         // Header
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 32px Arial';
         ctx.textAlign = 'center';
         ctx.fillText('🏆 Honey LEADERBOARD', 300, 50);
-        
+
         // Server name
         ctx.fillStyle = '#ffffff';
         ctx.font = '18px Arial';
         ctx.fillText(guild.name, 300, 80);
-        
+
         // Header bar
         ctx.fillStyle = '#ffd700';
         ctx.fillRect(20, 100, 560, 3);
-        
+
         // Leaderboard entries
         for (let i = 0; i < topBalances.length; i++) {
             const entry = topBalances[i];
             const y = 140 + (i * 35);
-            
+
             // Rank background
             let rankColor = '#4a4a4a';
             if (i === 0) rankColor = '#ffd700'; // Gold
             else if (i === 1) rankColor = '#c0c0c0'; // Silver
             else if (i === 2) rankColor = '#cd7f32'; // Bronze
-            
+
             ctx.fillStyle = rankColor;
             ctx.fillRect(30, y - 20, 40, 30);
-            
+
             // Rank number
             ctx.fillStyle = '#000000';
             ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
             const rankIcon = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`;
             ctx.fillText(rankIcon, 50, y - 5);
-            
+
             // Username
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 20px Arial';
             ctx.textAlign = 'left';
             ctx.fillText(entry.username, 90, y - 5);
-            
+
             // Balance
             ctx.fillStyle = '#ffd700';
             ctx.font = 'bold 18px Arial';
             ctx.textAlign = 'right';
             ctx.fillText(`🍯${entry.balance.toLocaleString()}`, 570, y - 5);
-            
+
             // Separator line
             if (i < topBalances.length - 1) {
                 ctx.strokeStyle = '#444444';
@@ -821,7 +832,7 @@ module.exports = (client) => {
                 ctx.stroke();
             }
         }
-        
+
         return canvas;
     }
 
@@ -1058,162 +1069,12 @@ module.exports = (client) => {
         return canvas;
     }
 
-    // Function to get a user's Honey balance
-    function getBobbyBucks(userId) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
-        }
-        const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        return userRecord ? parseInt(userRecord.split(':')[1], 10) : 0;
-    }
-
-    // Function to update a user's Honey balance
-    function updateBobbyBucks(userId, amount) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
-        }
-
-        let data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        let newBalance;
-
-        if (userRecord) {
-            const currentBalance = parseInt(userRecord.split(':')[1], 10);
-            newBalance = currentBalance + amount;
-            data = data.replace(userRecord, `${userId}:${newBalance}`);
-        } else {
-            newBalance = amount;
-            data += `\n${userId}:${newBalance}`;
-        }
-
-        fs.writeFileSync(bobbyBucksFilePath, data.trim(), 'utf-8');
-        return newBalance;
-    }
-
-    // Function to set a user's Honey balance directly
-    function setBobbyBucks(userId, amount) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            fs.writeFileSync(bobbyBucksFilePath, '', 'utf-8');
-        }
-
-        let data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-
-        if (userRecord) {
-            data = data.replace(userRecord, `${userId}:${amount}`);
-        } else {
-            data += `\n${userId}:${amount}`;
-        }
-
-        fs.writeFileSync(bobbyBucksFilePath, data.trim(), 'utf-8');
-    }
-
-    // Functions to handle the House balance
-    function getHouseBalance() {
-        if (!fs.existsSync(houseFilePath)) {
-            fs.writeFileSync(houseFilePath, '0', 'utf-8');
-        }
-        return parseInt(fs.readFileSync(houseFilePath, 'utf-8'), 10);
-    }
-
-    function updateHouse(amount) {
-        const houseBalance = getHouseBalance();
-        const newBalance = houseBalance + amount;
-        fs.writeFileSync(houseFilePath, newBalance.toString(), 'utf-8');
-    }
-
-    // Function to get top balances for leaderboard (fetches usernames for top N)
-    async function getTopBalances(guild, limit = 10) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            return [];
-        }
-        const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
-        if (!data) return [];
-        const balances = [];
-        const lines = data.split('\n').filter(line => line.includes(':'));
-        for (const line of lines) {
-            const [userId, balance] = line.split(':');
-            balances.push({
-                userId: userId,
-                balance: parseInt(balance, 10)
-            });
-        }
-        // Sort by balance descending
-        balances.sort((a, b) => b.balance - a.balance);
-        // Fetch usernames for top N
-        for (let i = 0; i < Math.min(limit, balances.length); i++) {
-            let member = guild.members.cache.get(balances[i].userId);
-            if (!member) {
-                try {
-                    member = await guild.members.fetch(balances[i].userId);
-                } catch (e) {
-                    member = null;
-                }
-            }
-            balances[i].username = member ? member.user.username : `Unknown (${balances[i].userId})`;
-            balances[i].isBot = member ? member.user.bot : false;
-        }
-        // For others, use cache only
-        for (let i = limit; i < balances.length; i++) {
-            let member = guild.members.cache.get(balances[i].userId);
-            balances[i].username = member ? member.user.username : `Unknown (${balances[i].userId})`;
-            balances[i].isBot = member ? member.user.bot : false;
-        }
-        // Only show non-bots
-        return balances.filter(b => !b.isBot).slice(0, limit);
-    }
-
-    // Fast rank lookup using cache only
-    function getCachedRank(userId, guild) {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            return 1;
-        }
-        const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
-        if (!data) return 1;
-        const balances = [];
-        const lines = data.split('\n').filter(line => line.includes(':'));
-        for (const line of lines) {
-            const [uid, balance] = line.split(':');
-            const member = guild.members.cache.get(uid);
-            if (member && !member.user.bot) {
-                balances.push({ userId: uid, balance: parseInt(balance, 10) });
-            }
-        }
-        balances.sort((a, b) => b.balance - a.balance);
-        const userIndex = balances.findIndex(user => user.userId === userId);
-        return userIndex === -1 ? balances.length + 1 : userIndex + 1;
-    }
-
-    // Get user rank
-    async function getUserRank(userId, guild) {
-        const allBalances = await getTopBalances(guild, 1000);
-        const userIndex = allBalances.findIndex(user => user.userId === userId);
-        return userIndex === -1 ? allBalances.length + 1 : userIndex + 1;
-    }
-
-    // Get total economy value
-    function getTotalEconomy() {
-        if (!fs.existsSync(bobbyBucksFilePath)) {
-            return 0;
-        }
-
-        const data = fs.readFileSync(bobbyBucksFilePath, 'utf-8').trim();
-        if (!data) return 0;
-
-        const lines = data.split('\n').filter(line => line.includes(':'));
-        return lines.reduce((total, line) => {
-            const [, balance] = line.split(':');
-            return total + parseInt(balance, 10);
-        }, 0);
-    }
-
     // Get economy statistics
     async function getEconomyStats(guild) {
-        const balances = await getTopBalances(guild, 1000);
-        const totalEconomy = getTotalEconomy();
-        const houseBalance = getHouseBalance();
-        
+        const balances = await getTopBalances(1000);
+        const totalEconomy = await getTotalEconomy();
+        const houseBalance = await getHouseBalance();
+
         return {
             totalEconomy,
             houseBalance,

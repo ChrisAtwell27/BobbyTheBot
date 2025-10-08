@@ -1,17 +1,10 @@
 const OpenAI = require('openai');
 const { EmbedBuilder } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
+const User = require('../database/models/User');
 
 // OpenAI API configuration - Uses environment variable
 // Set OPENAI_API_KEY in DigitalOcean or .env file
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
-// Personality scores file path
-const personalityScoresFilePath = path.join(__dirname, '../data/user_personality_scores.txt');
-
-// User memories file path
-const userMemoriesFilePath = path.join(__dirname, '../data/user_memories.txt');
 
 // Initialize OpenAI client
 let openai = null;
@@ -29,80 +22,47 @@ if (OPENAI_API_KEY) {
 const conversationHistory = new Map();
 const MAX_HISTORY_LENGTH = 5; // Keep last 5 message pairs per user (user message + Bobby's response)
 
-// Function to get user's memory/personal details
-function getUserMemory(userId) {
+// Function to get or create user in database
+async function getOrCreateUser(userId) {
     try {
-        if (!fs.existsSync(userMemoriesFilePath)) {
-            return null; // No memories file
+        let user = await User.findOne({ userId });
+        if (!user) {
+            user = new User({ userId });
+            await user.save();
+            console.log(`👤 Created new user record for ${userId}`);
         }
-
-        const data = fs.readFileSync(userMemoriesFilePath, 'utf-8');
-        const lines = data.split('\n');
-
-        for (const line of lines) {
-            // Skip comments and empty lines
-            if (line.trim().startsWith('#') || !line.trim()) continue;
-
-            const [id, memory] = line.split('|');
-            const trimmedId = id ? id.trim() : '';
-
-            if (trimmedId === userId) {
-                const trimmedMemory = memory ? memory.trim() : '';
-                if (trimmedMemory) {
-                    console.log(`🧠 Found memory for user ${userId}: ${trimmedMemory.substring(0, 50)}...`);
-                    return trimmedMemory;
-                }
-            }
-        }
-
-        return null; // No memory found for this user
+        return user;
     } catch (error) {
-        console.error('Error reading user memories:', error);
+        console.error('Error getting/creating user:', error);
+        return null;
+    }
+}
+
+// Function to get user's memory/personal details
+async function getUserMemory(userId) {
+    try {
+        const user = await User.findOne({ userId });
+        if (user && user.memory) {
+            console.log(`🧠 Found memory for user ${userId}: ${user.memory.substring(0, 50)}...`);
+            return user.memory;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error reading user memory:', error);
         return null;
     }
 }
 
 // Function to save/update user memory
-function saveUserMemory(userId, memory) {
+async function saveUserMemory(userId, memory) {
     try {
-        let data = '';
-        let userFound = false;
-
-        // Read existing file if it exists
-        if (fs.existsSync(userMemoriesFilePath)) {
-            data = fs.readFileSync(userMemoriesFilePath, 'utf-8');
+        let user = await User.findOne({ userId });
+        if (!user) {
+            user = new User({ userId, memory });
+        } else {
+            user.memory = memory;
         }
-
-        const lines = data.split('\n');
-        const updatedLines = [];
-
-        // Update existing or keep other lines
-        for (const line of lines) {
-            if (line.trim().startsWith('#') || !line.trim()) {
-                updatedLines.push(line);
-                continue;
-            }
-
-            const [id] = line.split('|');
-            const trimmedId = id ? id.trim() : '';
-
-            if (trimmedId === userId) {
-                // Update this user's memory
-                updatedLines.push(`${userId}|${memory}`);
-                userFound = true;
-            } else {
-                // Keep other users' memories
-                updatedLines.push(line);
-            }
-        }
-
-        // Add new user if not found
-        if (!userFound) {
-            updatedLines.push(`${userId}|${memory}`);
-        }
-
-        // Write back to file
-        fs.writeFileSync(userMemoriesFilePath, updatedLines.join('\n'), 'utf-8');
+        await user.save();
         console.log(`💾 Saved memory for user ${userId}: ${memory.substring(0, 50)}...`);
         return true;
     } catch (error) {
@@ -112,37 +72,16 @@ function saveUserMemory(userId, memory) {
 }
 
 // Function to get user's personality score (1-10, default 5)
-function getUserPersonalityScore(userId) {
+async function getUserPersonalityScore(userId) {
     try {
-        if (!fs.existsSync(personalityScoresFilePath)) {
-            return 5; // Default neutral score
+        const user = await User.findOne({ userId });
+        if (user && user.personalityScore) {
+            console.log(`✅ Found personality score for user ${userId}: ${user.personalityScore}/10`);
+            return user.personalityScore;
         }
-
-        const data = fs.readFileSync(personalityScoresFilePath, 'utf-8');
-        const lines = data.split('\n');
-
-        for (const line of lines) {
-            // Skip comments and empty lines
-            if (line.trim().startsWith('#') || !line.trim()) continue;
-
-            const [id, scoreStr] = line.split(':');
-            // Trim whitespace from both id and score
-            const trimmedId = id ? id.trim() : '';
-            const trimmedScore = scoreStr ? scoreStr.trim() : '';
-
-            if (trimmedId === userId) {
-                const score = parseInt(trimmedScore, 10);
-                // Validate score is between 1-10
-                if (score >= 1 && score <= 10) {
-                    console.log(`✅ Found personality score for user ${userId}: ${score}/10`);
-                    return score;
-                }
-            }
-        }
-
-        return 5; // Default if user not found
+        return 5; // Default neutral score
     } catch (error) {
-        console.error('Error reading personality scores:', error);
+        console.error('Error reading personality score:', error);
         return 5; // Default on error
     }
 }
@@ -349,13 +288,13 @@ IMPORTANT: Place [SAVE_MEMORY: ...] at the END of your response. It will be hidd
 Keep the memory description concise but clear. Update/append to existing memories when new info comes in.`;
 
 // Function to get or create conversation history for a user
-function getConversationHistory(userId) {
-    // Always check personality score (in case it changed in the file)
-    const personalityScore = getUserPersonalityScore(userId);
+async function getConversationHistory(userId) {
+    // Always check personality score (in case it changed in the database)
+    const personalityScore = await getUserPersonalityScore(userId);
     const personalityInstruction = getPersonalityInstruction(personalityScore);
 
     // Get user's personal memories
-    const userMemory = getUserMemory(userId);
+    const userMemory = await getUserMemory(userId);
 
     // Create custom system prompt with personality override and memories
     let customPrompt = `${BOBBY_SYSTEM_PROMPT}
@@ -394,8 +333,8 @@ ${userMemory}
 }
 
 // Function to add message to conversation history
-function addToHistory(userId, role, content) {
-    const history = getConversationHistory(userId);
+async function addToHistory(userId, role, content) {
+    const history = await getConversationHistory(userId);
     history.push({ role, content });
 
     // Keep only system message + last N messages
@@ -413,13 +352,13 @@ async function getBobbyResponse(userId, userMessage) {
     }
 
     // Get conversation history (this also updates personality)
-    const history = getConversationHistory(userId);
+    const history = await getConversationHistory(userId);
 
     // Add user message to history
-    addToHistory(userId, 'user', userMessage);
+    await addToHistory(userId, 'user', userMessage);
 
     // Debug: Log personality score
-    const currentScore = getUserPersonalityScore(userId);
+    const currentScore = await getUserPersonalityScore(userId);
     if (currentScore !== 5) {
         console.log(`🎭 Responding to user ${userId} with personality score: ${currentScore}/10`);
     }
@@ -446,7 +385,7 @@ async function getBobbyResponse(userId, userMessage) {
             const newMemories = memoryMatches.map(match => match[1].trim());
 
             // Get existing memory
-            const existingMemory = getUserMemory(userId);
+            const existingMemory = await getUserMemory(userId);
 
             // Combine memories
             let updatedMemory;
@@ -458,8 +397,8 @@ async function getBobbyResponse(userId, userMessage) {
                 updatedMemory = newMemories.join('. ');
             }
 
-            // Save to file
-            const saved = saveUserMemory(userId, updatedMemory);
+            // Save to database
+            const saved = await saveUserMemory(userId, updatedMemory);
             if (saved) {
                 console.log(`🤖 Bobby auto-saved memory for user ${userId}`);
             }
@@ -469,7 +408,7 @@ async function getBobbyResponse(userId, userMessage) {
         }
 
         // Add Bobby's response to history (without the memory markers)
-        addToHistory(userId, 'assistant', response);
+        await addToHistory(userId, 'assistant', response);
 
         return response;
     } catch (error) {
@@ -559,7 +498,7 @@ module.exports = (client) => {
                 return message.channel.send('❌ Memory is too long! Please keep it under 500 characters.');
             }
 
-            const success = saveUserMemory(message.author.id, memoryText);
+            const success = await saveUserMemory(message.author.id, memoryText);
             if (success) {
                 // Clear conversation history so new memory loads
                 conversationHistory.delete(message.author.id);
@@ -571,7 +510,7 @@ module.exports = (client) => {
 
         // Handle !mymemory command - shows what Bobby remembers about you
         if (command === '!mymemory' || command === '!whatdoyouknow') {
-            const memory = getUserMemory(message.author.id);
+            const memory = await getUserMemory(message.author.id);
             if (memory) {
                 return message.channel.send(`🧠 Here's what I remember about you:\n"${memory}"\n\nUse \`!setmemory\` to update this!`);
             } else {
@@ -581,9 +520,9 @@ module.exports = (client) => {
 
         // Handle !forgetme command - clears user's memory
         if (command === '!forgetme' || command === '!clearmemory') {
-            const memory = getUserMemory(message.author.id);
+            const memory = await getUserMemory(message.author.id);
             if (memory) {
-                saveUserMemory(message.author.id, '');
+                await saveUserMemory(message.author.id, '');
                 conversationHistory.delete(message.author.id);
                 return message.channel.send('🗑️ I\'ve forgotten everything about you. Use `!setmemory` if you want me to remember something new!');
             } else {

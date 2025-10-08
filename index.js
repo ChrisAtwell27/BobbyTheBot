@@ -1,7 +1,9 @@
+require('dotenv').config();
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const { connectToDatabase } = require('./database/connection');
 
 // Load configuration values
 const { loggingChannelId, alertChannelId, alertKeywords } = require('./data/config');
@@ -75,8 +77,15 @@ server.listen(PORT, () => {
 });
 
 // Start the bot
-client.once("ready", () => {
+client.once("ready", async () => {
   console.log("Role bot is online!");
+
+  // Connect to MongoDB
+  try {
+    await connectToDatabase();
+  } catch (error) {
+    console.error('Failed to connect to MongoDB, continuing without database persistence');
+  }
 });
 
 // Use environment variable for bot token

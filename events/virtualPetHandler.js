@@ -1,14 +1,8 @@
-﻿const fs = require('fs');
-const path = require('path');
-const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
+﻿const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
-
-const petsFilePath = path.join(__dirname, '../data/virtual_pets.txt');
-const petItemsFilePath = path.join(__dirname, '../data/pet_items.txt');
-const bobbyBucksFilePath = path.join(__dirname, '../data/bobby_bucks.txt');
-const petAchievementsFilePath = path.join(__dirname, '../data/pet_achievements.txt');
-const petEventsFilePath = path.join(__dirname, '../data/pet_events.txt');
+const { getPet, savePet, deletePet, getPetInventory, savePetInventory, getTopPets } = require('../database/helpers/petHelpers');
+const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 
 // Active games tracker
 const activeGames = new Map();
@@ -221,7 +215,7 @@ module.exports = (client) => {
         // Adopt a pet command
         if (args[0] === '!adopt') {
             const userId = message.author.id;
-            const currentPet = getPet(userId);
+            const currentPet = await getPet(userId);
             
             if (currentPet) {
                 return message.channel.send('❌ You already have a pet! Use `!pet` to check on them.');
@@ -261,7 +255,7 @@ module.exports = (client) => {
         // Check pet status
         if (args[0] === '!pet') {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
 
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet yet! Use `!adopt` to get one.');
@@ -382,7 +376,7 @@ module.exports = (client) => {
         // Pet shop command - IMPROVED!
         if (args[0] === '!petshop' || args[0] === '!shop') {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
 
             if (!pet) {
                 return message.channel.send('❌ You need a pet to use the pet shop! Use `!adopt` to get one.');
@@ -464,7 +458,7 @@ module.exports = (client) => {
         // Feed pet with specific food
         if (args[0] === '!feed' && args[1]) {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
             const foodKey = args[1].toLowerCase();
             
             if (!pet) {
@@ -492,7 +486,7 @@ module.exports = (client) => {
             pet.happiness = Math.min(100, pet.happiness + (food.happiness || 0));
             pet.experience += 5;
             pet.lastFed = Date.now();
-            savePet(userId, pet);
+            await savePet(userId, pet);
 
             const feedingCard = await createFeedingCard(message.author, pet, food);
             const attachment = new AttachmentBuilder(feedingCard.toBuffer(), { name: 'feeding-card.png' });
@@ -516,13 +510,13 @@ module.exports = (client) => {
         // Pet inventory command
         if (args[0] === '!petinventory' || args[0] === '!petinv') {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
             
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
             }
 
-            const inventory = getPetInventory(userId);
+            const inventory = await getPetInventory(userId);
             const inventoryCard = await createInventoryCard(message.author, pet, inventory);
             const attachment = new AttachmentBuilder(inventoryCard.toBuffer(), { name: 'pet-inventory.png' });
 
@@ -544,14 +538,14 @@ module.exports = (client) => {
         // Use item command
         if (args[0] === '!use' && args[1]) {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
             const itemKey = args[1].toLowerCase();
             
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
             }
 
-            const inventory = getPetInventory(userId);
+            const inventory = await getPetInventory(userId);
             if (!inventory[itemKey] || inventory[itemKey] <= 0) {
                 return message.channel.send(`❌ You don't have any ${itemKey} in your inventory!`);
             }
@@ -574,10 +568,10 @@ module.exports = (client) => {
             // Remove item from inventory (unless permanent)
             if (!item.permanent) {
                 inventory[itemKey]--;
-                savePetInventory(userId, inventory);
+                await savePetInventory(userId, inventory);
             }
 
-            savePet(userId, pet);
+            await savePet(userId, pet);
 
             const useCard = await createItemUseCard(message.author, pet, item);
             const attachment = new AttachmentBuilder(useCard.toBuffer(), { name: 'item-use.png' });
@@ -627,7 +621,7 @@ module.exports = (client) => {
         // Pet training command
         if (args[0] === '!train') {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
             
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet to train! Use `!adopt` to get one.');
@@ -662,7 +656,7 @@ module.exports = (client) => {
                 pet.level++;
             }
             
-            savePet(userId, pet);
+            await savePet(userId, pet);
 
             const trainingCard = await createTrainingCard(message.author, pet, oldLevel);
             const attachment = new AttachmentBuilder(trainingCard.toBuffer(), { name: 'training-card.png' });
@@ -690,7 +684,7 @@ module.exports = (client) => {
         // Pet mood/emotion check
         if (args[0] === '!petmood' || args[0] === '!mood') {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
 
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
@@ -715,7 +709,7 @@ module.exports = (client) => {
         // Mini-game: Fetch
         if (args[0] === '!fetch') {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
 
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
@@ -769,7 +763,7 @@ module.exports = (client) => {
         // Mini-game: Treasure Hunt
         if (args[0] === '!treasure' || args[0] === '!hunt') {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
 
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
@@ -822,7 +816,7 @@ module.exports = (client) => {
         // Mini-game: Pet Race
         if (args[0] === '!race') {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
 
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
@@ -882,7 +876,7 @@ module.exports = (client) => {
                 updateBobbyBucks(userId, reward);
             }
 
-            savePet(userId, pet);
+            await savePet(userId, pet);
             checkAchievements(userId, pet, message.channel);
 
             const embed = new EmbedBuilder()
@@ -903,7 +897,7 @@ module.exports = (client) => {
         // Pet adventure command
         if (args[0] === '!adventure' || args[0] === '!explore') {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
 
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
@@ -926,7 +920,7 @@ module.exports = (client) => {
 
             pet.energy = Math.max(0, pet.energy - 40);
             pet.lastAdventure = Date.now();
-            savePet(userId, pet);
+            await savePet(userId, pet);
 
             if (event.reward && event.reward.type === 'bobby_bucks') {
                 updateBobbyBucks(userId, event.reward.amount);
@@ -953,7 +947,7 @@ module.exports = (client) => {
         // Pet achievements command
         if (args[0] === '!petach' || args[0] === '!achievements') {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
 
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
@@ -988,7 +982,7 @@ module.exports = (client) => {
         // Pet playdate command
         if (args[0] === '!playdate') {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
 
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
@@ -1003,7 +997,7 @@ module.exports = (client) => {
                 return message.channel.send('❌ Your pet can\'t have a playdate with themselves!');
             }
 
-            const targetPet = getPet(targetUser.id);
+            const targetPet = await getPet(targetUser.id);
             if (!targetPet) {
                 return message.channel.send('❌ That user doesn\'t have a pet!');
             }
@@ -1025,8 +1019,8 @@ module.exports = (client) => {
             targetPet.stats = targetPet.stats || {};
             targetPet.stats.playdates = (targetPet.stats.playdates || 0) + 1;
 
-            savePet(userId, pet);
-            savePet(targetUser.id, targetPet);
+            await savePet(userId, pet);
+            await savePet(targetUser.id, targetPet);
 
             checkAchievements(userId, pet, message.channel);
             checkAchievements(targetUser.id, targetPet, message.channel);
@@ -1048,7 +1042,7 @@ module.exports = (client) => {
         // Rename pet command
         if (args[0] === '!renamepet' && args[1]) {
             const userId = message.author.id;
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
 
             if (!pet) {
                 return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
@@ -1058,7 +1052,7 @@ module.exports = (client) => {
             const oldName = pet.name;
 
             pet.name = newName;
-            savePet(userId, pet);
+            await savePet(userId, pet);
 
             return message.channel.send(`✅ Successfully renamed your pet from **${oldName}** to **${newName}**! ${PET_TYPES[pet.type].emoji}`);
         }
@@ -1109,7 +1103,7 @@ module.exports = (client) => {
             }
 
             updateBobbyBucks(userId, -pet.cost);
-            savePet(userId, newPet);
+            await savePet(userId, newPet);
 
             const adoptionCard = await createAdoptionCard(interaction.user, newPet);
             const attachment = new AttachmentBuilder(adoptionCard.toBuffer(), { name: 'adoption-success.png' });
@@ -1196,9 +1190,9 @@ module.exports = (client) => {
 
             // Purchase item
             updateBobbyBucks(userId, -item.cost);
-            const inventory = getPetInventory(userId);
+            const inventory = await getPetInventory(userId);
             inventory[itemKey] = (inventory[itemKey] || 0) + 1;
-            savePetInventory(userId, inventory);
+            await savePetInventory(userId, inventory);
 
             const purchaseCard = await createPurchaseCard(interaction.user, item);
             const attachment = new AttachmentBuilder(purchaseCard.toBuffer(), { name: 'purchase-card.png' });
@@ -1244,14 +1238,14 @@ module.exports = (client) => {
                     // Game won!
                     activeGames.delete(userId);
 
-                    const pet = getPet(userId);
+                    const pet = await getPet(userId);
                     pet.happiness = Math.min(100, pet.happiness + 25);
                     pet.energy = Math.max(0, pet.energy - 25);
                     pet.experience += 15;
 
                     const reward = Math.floor(Math.random() * 100) + 50;
                     updateBobbyBucks(userId, reward);
-                    savePet(userId, pet);
+                    await savePet(userId, pet);
 
                     return interaction.reply({
                         content: `🎉 **Perfect!** ${pet.name} caught the ball!\n+25 Happiness, +15 XP, +??${reward}!`,
@@ -1294,7 +1288,7 @@ module.exports = (client) => {
                 // Found treasure!
                 activeGames.delete(userId);
 
-                const pet = getPet(userId);
+                const pet = await getPet(userId);
                 const reward = Math.floor(Math.random() * 200) + 150;
                 pet.happiness = Math.min(100, pet.happiness + 30);
                 pet.energy = Math.max(0, pet.energy - 30);
@@ -1303,7 +1297,7 @@ module.exports = (client) => {
                 pet.stats.treasures_found = (pet.stats.treasures_found || 0) + 1;
 
                 updateBobbyBucks(userId, reward);
-                savePet(userId, pet);
+                await savePet(userId, pet);
                 checkAchievements(userId, pet, interaction.channel);
 
                 return interaction.reply({
@@ -1314,9 +1308,9 @@ module.exports = (client) => {
                 // Out of attempts
                 activeGames.delete(userId);
 
-                const pet = getPet(userId);
+                const pet = await getPet(userId);
                 pet.energy = Math.max(0, pet.energy - 15);
-                savePet(userId, pet);
+                await savePet(userId, pet);
 
                 return interaction.reply({
                     content: `😞 No treasure found! ${pet.name} is tired from digging. The treasure was at spot ${game.treasureSpot + 1}.`,
@@ -1338,7 +1332,7 @@ module.exports = (client) => {
                 return interaction.reply({ content: '❌ This is not your pet!', ephemeral: true });
             }
 
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
             if (!pet) {
                 return interaction.reply({ content: '❌ You don\'t have a pet!', ephemeral: true });
             }
@@ -1378,7 +1372,7 @@ module.exports = (client) => {
                 return interaction.reply({ content: '❌ This is not your pet!', ephemeral: true });
             }
 
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
             const userAchievements = getPetAchievements(userId);
             const earnedAchievements = Object.entries(ACHIEVEMENTS)
                 .filter(([key]) => userAchievements.includes(key))
@@ -1525,7 +1519,7 @@ module.exports = (client) => {
                 return interaction.reply({ content: '❌ Not your pet!', ephemeral: true });
             }
 
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
             if (!pet) {
                 return interaction.reply({ content: '❌ Pet not found!', ephemeral: true });
             }
@@ -1677,7 +1671,7 @@ module.exports = (client) => {
                 return interaction.reply({ content: '❌ This is not your pet!', ephemeral: true });
             }
 
-            const pet = getPet(userId);
+            const pet = await getPet(userId);
             if (!pet) {
                 return interaction.reply({ content: '❌ You don\'t have a pet!', ephemeral: true });
             }
@@ -1755,7 +1749,7 @@ module.exports = (client) => {
                 pet.level++;
             }
 
-            savePet(userId, pet);
+            await savePet(userId, pet);
 
             const careCard = await createCareCard(interaction.user, pet, action);
             const attachment = new AttachmentBuilder(careCard.toBuffer(), { name: 'pet-care.png' });
@@ -1821,7 +1815,7 @@ module.exports = (client) => {
     }
 
     // Get active/primary pet for a user (first pet or user's selected pet)
-    function getPet(userId, petId = null) {
+    function await getPet(userId, petId = null) {
         const pets = getAllPets(userId);
         if (pets.length === 0) return null;
 
@@ -1852,7 +1846,7 @@ module.exports = (client) => {
     }
 
     // Save a single pet (updates the pet in the array)
-    function savePet(userId, pet) {
+    function await savePet(userId, pet) {
         let pets = getAllPets(userId);
 
         // Ensure pets is an array
@@ -1870,7 +1864,7 @@ module.exports = (client) => {
         saveAllPets(userId, pets);
     }
 
-    function getPetInventory(userId) {
+    function await getPetInventory(userId) {
         if (!fs.existsSync(petItemsFilePath)) {
             fs.writeFileSync(petItemsFilePath, '', 'utf-8');
             return {};
@@ -1887,7 +1881,7 @@ module.exports = (client) => {
         return {};
     }
 
-    function savePetInventory(userId, inventory) {
+    function await savePetInventory(userId, inventory) {
         if (!fs.existsSync(petItemsFilePath)) {
             fs.writeFileSync(petItemsFilePath, '', 'utf-8');
         }
