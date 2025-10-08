@@ -1815,7 +1815,7 @@ module.exports = (client) => {
     }
 
     // Get active/primary pet for a user (first pet or user's selected pet)
-    function await getPet(userId, petId = null) {
+    function getPet(userId, petId = null) {
         const pets = getAllPets(userId);
         if (pets.length === 0) return null;
 
@@ -1846,7 +1846,7 @@ module.exports = (client) => {
     }
 
     // Save a single pet (updates the pet in the array)
-    function await savePet(userId, pet) {
+    function savePet(userId, pet) {
         let pets = getAllPets(userId);
 
         // Ensure pets is an array
@@ -1864,7 +1864,7 @@ module.exports = (client) => {
         saveAllPets(userId, pets);
     }
 
-    function await getPetInventory(userId) {
+    function getPetInventory(userId) {
         if (!fs.existsSync(petItemsFilePath)) {
             fs.writeFileSync(petItemsFilePath, '', 'utf-8');
             return {};
@@ -1881,7 +1881,7 @@ module.exports = (client) => {
         return {};
     }
 
-    function await savePetInventory(userId, inventory) {
+    function savePetInventory(userId, inventory) {
         if (!fs.existsSync(petItemsFilePath)) {
             fs.writeFileSync(petItemsFilePath, '', 'utf-8');
         }
