@@ -7,7 +7,6 @@ last_voting_date.txt
 pet_items.txt
 thin_ice.txt
 user_personality_scores.txt
-user_memories.txt
 valorant_inhouse_events.json
 valorant_users.json
 virtual_pets.txt
@@ -18,4 +17,3 @@ wordle_scores.txt
 .claude/settings.local.json
 /.claude
 /node_modules
-user_memories.txt

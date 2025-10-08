@@ -1,0 +1,25 @@
+# Bobby's User Memories
+# Format: userId|memory_string
+# Bobby will remember these details when talking to each user
+#
+# Examples:
+# 123456789012345678|Prefers to be called "Captain" and loves pizza
+# 987654321098765432|Goes by "Shadow", hates mornings, plays Valorant
+# 111222333444555666|Their name is Sarah, they're learning Python
+#
+# Instructions:
+# - One user per line
+# - Format: userId|memory_string (use | as separator)
+# - Memory can be any text (nicknames, preferences, facts, etc.)
+# - Bobby will naturally incorporate these memories into conversations
+# - You can update a user's memory by changing their line
+# - Users can also ask Bobby to remember things in chat
+#
+# Memory Ideas:
+# - Nicknames/preferred names
+# - Favorite games
+# - Personal facts
+# - Inside jokes
+# - Preferences
+# - Achievements
+# - Anything Bobby should remember about them
