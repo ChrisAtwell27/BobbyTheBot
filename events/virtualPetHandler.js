@@ -313,6 +313,7 @@ module.exports = (client) => {
                 );
 
             // Row 3: Social & Info
+            const allPets = getAllPets(userId);
             const socialRow = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
@@ -332,6 +333,16 @@ module.exports = (client) => {
                         .setLabel('🎒 Inventory')
                         .setStyle(ButtonStyle.Secondary)
                 );
+
+            // Add switch pet button if user has multiple pets
+            if (allPets.length > 1) {
+                socialRow.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`pet_switch_${userId}`)
+                        .setLabel(`🔄 Switch Pet (${allPets.length})`)
+                        .setStyle(ButtonStyle.Success)
+                );
+            }
 
             const mood = getPetMood(pet);
             const personality = pet.personality ? PERSONALITIES[pet.personality] : null;
@@ -1071,27 +1082,47 @@ module.exports = (client) => {
 
             if (balance < pet.cost) {
                 return interaction.reply({
-                    content: `❌ You need ??{pet.cost} to adopt a ${pet.name}! You have ??{balance}.`,
+                    content: `❌ You need ¢${pet.cost} to adopt a ${pet.name}! You have ¢${balance}.`,
+                    ephemeral: true
+                });
+            }
+
+            const existingPets = getAllPets(userId);
+            const maxPets = 5; // Maximum pets per user
+
+            if (existingPets.length >= maxPets) {
+                return interaction.reply({
+                    content: `❌ You've reached the maximum of ${maxPets} pets! You'll need to release one before adopting another.`,
                     ephemeral: true
                 });
             }
 
             // Create new pet
-            const newPet = createNewPet(petType, `${pet.name}-${Math.floor(Math.random() * 1000)}`);
+            const petNumber = existingPets.filter(p => p.type === petType).length + 1;
+            const newPet = createNewPet(petType, `${pet.name}-${petNumber}`);
+
+            // If this is the first pet, mark it as active
+            if (existingPets.length === 0) {
+                newPet.isActive = true;
+            } else {
+                newPet.isActive = false;
+            }
+
             updateBobbyBucks(userId, -pet.cost);
             savePet(userId, newPet);
 
             const adoptionCard = await createAdoptionCard(interaction.user, newPet);
             const attachment = new AttachmentBuilder(adoptionCard.toBuffer(), { name: 'adoption-success.png' });
 
+            const totalPets = existingPets.length + 1;
             const embed = new EmbedBuilder()
                 .setTitle('🎉 Congratulations on Your New Pet!')
                 .setColor('#8fbc8f')
-                .setDescription(`**Welcome ${newPet.name} to the family!**`)
+                .setDescription(`**Welcome ${newPet.name} to the family!**\n\nYou now have **${totalPets}** pet${totalPets > 1 ? 's' : ''}!${totalPets > 1 ? '\n\n💡 Use the **Switch Pet** button in your pet dashboard to manage multiple pets!' : ''}`)
                 .setImage('attachment://adoption-success.png')
                 .addFields(
                     { name: '🏷️ Pet Type', value: pet.name, inline: true },
-                    { name: '💰 Adoption Fee', value: `??{pet.cost}`, inline: true },
+                    { name: '💰 Adoption Fee', value: `¢${pet.cost}`, inline: true },
                     { name: '🎯 Getting Started', value: 'Use `!pet` to check on your new friend!', inline: true }
                 )
                 .setFooter({ text: 'Remember to feed and care for your pet regularly!' })
@@ -1561,6 +1592,83 @@ module.exports = (client) => {
             return interaction.update({ embeds: [embed], files: [attachment], components: [careRow, gamesRow, socialRow] });
         }
 
+        // Handle pet switch button
+        if (interaction.isButton() && interaction.customId.startsWith('pet_switch_')) {
+            const userId = interaction.customId.split('_')[2];
+
+            if (interaction.user.id !== userId) {
+                return interaction.reply({ content: '❌ This is not your pet menu!', ephemeral: true });
+            }
+
+            const allPets = getAllPets(userId);
+            if (allPets.length === 0) {
+                return interaction.reply({ content: '❌ You don\'t have any pets!', ephemeral: true });
+            }
+
+            // Create pet selector
+            const petSelectMenu = new StringSelectMenuBuilder()
+                .setCustomId(`pet_select_${userId}`)
+                .setPlaceholder('Choose which pet to switch to!')
+                .addOptions(
+                    allPets.map(p => ({
+                        label: `${p.name} (${PET_TYPES[p.type].name}) - Lv${p.level}`,
+                        description: `${p.isActive ? '✓ Currently Active' : 'Switch to this pet'} • ${Math.floor((p.hunger + p.happiness + p.health)/3)}% Health`,
+                        value: p.id
+                    }))
+                );
+
+            const row = new ActionRowBuilder().addComponents(petSelectMenu);
+
+            const embed = new EmbedBuilder()
+                .setTitle('🔄 Switch Active Pet')
+                .setColor('#5a6c8a')
+                .setDescription(`**You have ${allPets.length} pet${allPets.length > 1 ? 's' : ''}!**\n\nSelect which pet you want to interact with:`)
+                .addFields(
+                    allPets.map(p => {
+                        const mood = getPetMood(p);
+                        return {
+                            name: `${p.isActive ? '✅ ' : ''}${p.name} ${p.isSleeping ? '😴' : mood.emoji}`,
+                            value: `**${PET_TYPES[p.type].name}** • Level ${p.level}\n${p.isSleeping ? 'Sleeping...' : mood.name}\nHunger: ${p.hunger}% • Happiness: ${p.happiness}%`,
+                            inline: true
+                        };
+                    })
+                )
+                .setFooter({ text: 'Select a pet from the menu above to make it active!' })
+                .setTimestamp();
+
+            await interaction.update({ embeds: [embed], components: [row] });
+            return;
+        }
+
+        // Handle pet selection from switch menu
+        if (interaction.isStringSelectMenu() && interaction.customId.startsWith('pet_select_')) {
+            const userId = interaction.customId.split('_')[2];
+
+            if (interaction.user.id !== userId) {
+                return interaction.reply({ content: '❌ This is not your pet menu!', ephemeral: true });
+            }
+
+            const selectedPetId = interaction.values[0];
+            const allPets = getAllPets(userId);
+
+            // Set all pets to inactive
+            allPets.forEach(p => p.isActive = false);
+
+            // Set selected pet to active
+            const selectedPet = allPets.find(p => p.id === selectedPetId);
+            if (selectedPet) {
+                selectedPet.isActive = true;
+                saveAllPets(userId, allPets);
+
+                return interaction.reply({
+                    content: `✅ Switched to **${selectedPet.name}**! Use \`!pet\` to view their dashboard.`,
+                    ephemeral: true
+                });
+            } else {
+                return interaction.reply({ content: '❌ Pet not found!', ephemeral: true });
+            }
+        }
+
         // Handle pet care buttons
         if (interaction.isButton() && interaction.customId.startsWith('pet_')) {
             const [, action, userId] = interaction.customId.split('_');
@@ -1579,6 +1687,9 @@ module.exports = (client) => {
 
             switch (action) {
                 case 'feed':
+                    if (pet.isSleeping) {
+                        return interaction.reply({ content: '❌ Your pet is sleeping! Let them rest.', ephemeral: true });
+                    }
                     if (pet.hunger >= 90) {
                         return interaction.reply({ content: '❌ Your pet is not hungry right now!', ephemeral: true });
                     }
@@ -1589,6 +1700,9 @@ module.exports = (client) => {
                     break;
 
                 case 'play':
+                    if (pet.isSleeping) {
+                        return interaction.reply({ content: '❌ Your pet is sleeping! Let them rest.', ephemeral: true });
+                    }
                     if (pet.energy < 20) {
                         return interaction.reply({ content: '❌ Your pet is too tired to play! Let them rest.', ephemeral: true });
                     }
@@ -1599,6 +1713,9 @@ module.exports = (client) => {
                     break;
 
                 case 'clean':
+                    if (pet.isSleeping) {
+                        return interaction.reply({ content: '❌ Your pet is sleeping! Let them rest.', ephemeral: true });
+                    }
                     if (pet.cleanliness >= 90) {
                         return interaction.reply({ content: '❌ Your pet is already clean!', ephemeral: true });
                     }
@@ -1609,6 +1726,9 @@ module.exports = (client) => {
                     break;
 
                 case 'sleep':
+                    if (pet.isSleeping) {
+                        return interaction.reply({ content: '❌ Your pet is already sleeping!', ephemeral: true });
+                    }
                     if (pet.energy >= 90) {
                         return interaction.reply({ content: '❌ Your pet is not tired right now!', ephemeral: true });
                     }
@@ -1654,52 +1774,100 @@ module.exports = (client) => {
                 .setFooter({ text: 'Your pet appreciates the care!' })
                 .setTimestamp();
 
-            await interaction.reply({ embeds: [embed], files: [attachment] });
+            // Add back button to return to dashboard
+            const backButton = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`pet_dashboard_${userId}`)
+                        .setLabel('⬅️ Back to Dashboard')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+
+            await interaction.update({ embeds: [embed], files: [attachment], components: [backButton] });
         }
     });
 
     // Pet management functions
 
-    function getPet(userId) {
+    // Get all pets for a user
+    function getAllPets(userId) {
         if (!fs.existsSync(petsFilePath)) {
             fs.writeFileSync(petsFilePath, '', 'utf-8');
-            return null;
+            return [];
         }
         const data = fs.readFileSync(petsFilePath, 'utf-8');
         const userRecord = data.split('\n').find(line => line.startsWith(`${userId}|`));
         if (userRecord) {
             try {
-                let pet = JSON.parse(userRecord.substring(userRecord.indexOf('|') + 1));
+                let pets = JSON.parse(userRecord.substring(userRecord.indexOf('|') + 1));
 
-                // Apply time-based stat updates before returning
-                pet = updatePetStatsOverTime(pet);
+                // Ensure pets is an array (backward compatibility)
+                if (!Array.isArray(pets)) {
+                    pets = [pets];
+                }
+
+                // Apply time-based stat updates to all pets
+                pets = pets.map(pet => updatePetStatsOverTime(pet));
 
                 // Save the updated stats back
-                savePet(userId, pet);
+                saveAllPets(userId, pets);
 
-                return pet;
+                return pets;
             } catch (e) {
-                return null;
+                return [];
             }
         }
-        return null;
+        return [];
     }
 
-    function savePet(userId, pet) {
+    // Get active/primary pet for a user (first pet or user's selected pet)
+    function getPet(userId, petId = null) {
+        const pets = getAllPets(userId);
+        if (pets.length === 0) return null;
+
+        if (petId) {
+            return pets.find(p => p.id === petId) || pets[0];
+        }
+
+        // Return the active pet or first pet
+        return pets.find(p => p.isActive) || pets[0];
+    }
+
+    // Save all pets for a user
+    function saveAllPets(userId, pets) {
         if (!fs.existsSync(petsFilePath)) {
             fs.writeFileSync(petsFilePath, '', 'utf-8');
         }
         let data = fs.readFileSync(petsFilePath, 'utf-8').trim();
         const userRecord = data.split('\n').find(line => line.startsWith(`${userId}|`));
-        const petData = `${userId}|${JSON.stringify(pet)}`;
-        
+        const petData = `${userId}|${JSON.stringify(pets)}`;
+
         if (userRecord) {
             data = data.replace(userRecord, petData);
         } else {
             data += `\n${petData}`;
         }
-        
+
         fs.writeFileSync(petsFilePath, data.trim(), 'utf-8');
+    }
+
+    // Save a single pet (updates the pet in the array)
+    function savePet(userId, pet) {
+        let pets = getAllPets(userId);
+
+        // Ensure pets is an array
+        if (!Array.isArray(pets)) {
+            pets = [pets];
+        }
+
+        const petIndex = pets.findIndex(p => p.id === pet.id);
+        if (petIndex >= 0) {
+            pets[petIndex] = pet;
+        } else {
+            pets.push(pet);
+        }
+
+        saveAllPets(userId, pets);
     }
 
     function getPetInventory(userId) {
@@ -1968,6 +2136,114 @@ module.exports = (client) => {
     }
 
     // Canvas drawing functions
+
+    // Helper function to draw pet icon instead of emoji
+    function drawPetIcon(ctx, petType, x, y, size = 40) {
+        ctx.save();
+
+        // Different shapes for different pet types
+        switch(petType) {
+            case 'dog':
+                // Dog: Circle head
+                ctx.fillStyle = '#d4a574';
+                ctx.beginPath();
+                ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+                ctx.fill();
+                // Ears
+                ctx.beginPath();
+                ctx.arc(x - size / 3, y - size / 3, size / 4, 0, Math.PI * 2);
+                ctx.arc(x + size / 3, y - size / 3, size / 4, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            case 'cat':
+                // Cat: Triangular ears
+                ctx.fillStyle = '#e6b872';
+                ctx.beginPath();
+                ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+                ctx.fill();
+                // Triangular ears
+                ctx.beginPath();
+                ctx.moveTo(x - size / 3, y - size / 3);
+                ctx.lineTo(x - size / 2, y - size);
+                ctx.lineTo(x - size / 6, y - size / 3);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(x + size / 3, y - size / 3);
+                ctx.lineTo(x + size / 2, y - size);
+                ctx.lineTo(x + size / 6, y - size / 3);
+                ctx.closePath();
+                ctx.fill();
+                break;
+            case 'rabbit':
+                // Rabbit: Long ears
+                ctx.fillStyle = '#e0e0e0';
+                ctx.beginPath();
+                ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+                ctx.fill();
+                // Long ears
+                ctx.fillStyle = '#e0e0e0';
+                ctx.fillRect(x - size / 4, y - size, size / 8, size * 0.7);
+                ctx.fillRect(x + size / 8, y - size, size / 8, size * 0.7);
+                break;
+            case 'bird':
+                // Bird: Small circle with beak
+                ctx.fillStyle = '#87ceeb';
+                ctx.beginPath();
+                ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+                ctx.fill();
+                // Beak
+                ctx.fillStyle = '#ff8c00';
+                ctx.beginPath();
+                ctx.moveTo(x + size / 2, y);
+                ctx.lineTo(x + size, y + size / 6);
+                ctx.lineTo(x + size / 2, y + size / 3);
+                ctx.closePath();
+                ctx.fill();
+                break;
+            case 'hamster':
+                // Hamster: Round with small ears
+                ctx.fillStyle = '#d4a574';
+                ctx.beginPath();
+                ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+                ctx.fill();
+                // Small ears
+                ctx.beginPath();
+                ctx.arc(x - size / 4, y - size / 2, size / 6, 0, Math.PI * 2);
+                ctx.arc(x + size / 4, y - size / 2, size / 6, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            case 'turtle':
+                // Turtle: Oval with shell pattern
+                ctx.fillStyle = '#8fbc8f';
+                ctx.beginPath();
+                ctx.ellipse(x, y, size / 2, size / 3, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Shell pattern
+                ctx.strokeStyle = '#556b2f';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(x, y, size / 3, 0, Math.PI * 2);
+                ctx.stroke();
+                break;
+            default:
+                // Default: Simple circle
+                ctx.fillStyle = '#a9a9a9';
+                ctx.beginPath();
+                ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+                ctx.fill();
+        }
+
+        // Eyes for all pets
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(x - size / 6, y, size / 10, 0, Math.PI * 2);
+        ctx.arc(x + size / 6, y, size / 10, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
     async function createAdoptionMenu() {
         const canvas = createCanvas(600, 400);
         const ctx = canvas.getContext('2d');
@@ -1983,15 +2259,18 @@ module.exports = (client) => {
         ctx.fillStyle = '#2c3e50';
         ctx.font = 'bold 32px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('🏠 PET ADOPTION CENTER', 300, 50);
+        ctx.fillText('PET ADOPTION CENTER', 300, 50);
         
-        // Subtle decoration
+        // Subtle decoration (emoji removed for better rendering)
+        // Decorative hearts as circles instead of emojis
         ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
         for (let i = 0; i < 15; i++) {
             const x = Math.random() * 600;
             const y = Math.random() * 400;
-            ctx.font = `${Math.random() * 15 + 10}px Arial`;
-            ctx.fillText('💝', x, y);
+            const size = Math.random() * 3 + 2;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
         }
         
         // Pet showcase with better contrast
@@ -2001,38 +2280,27 @@ module.exports = (client) => {
         
         for (let i = 0; i < Math.min(pets.length, 6); i++) {
             const pet = pets[i];
+            const petType = Object.keys(PET_TYPES)[i];
             const x = 100 + (i % cols) * 150;
             const y = 120 + Math.floor(i / cols) * 120;
-            
+
             // Pet box with softer colors
             ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
             ctx.fillRect(x - 50, y - 40, 100, 80);
             ctx.strokeStyle = '#5a6c8a';
             ctx.lineWidth = 2;
             ctx.strokeRect(x - 50, y - 40, 100, 80);
-            
-            // Pet emoji with shadow for better visibility
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-            ctx.shadowBlur = 2;
-            ctx.shadowOffsetX = 1;
-            ctx.shadowOffsetY = 1;
-            
-            ctx.font = '40px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(pet.emoji, x, y - 5);
-            
-            // Reset shadow
-            ctx.shadowColor = 'transparent';
-            ctx.shadowBlur = 0;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 0;
-            
+
+            // Draw pet icon instead of emoji
+            drawPetIcon(ctx, petType, x, y - 10, 35);
+
             // Pet name and cost
             ctx.fillStyle = '#2c3e50';
             ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
             ctx.fillText(pet.name, x, y + 20);
             ctx.font = '10px Arial';
-            ctx.fillText(`??{pet.cost}`, x, y + 35);
+            ctx.fillText(`¢${pet.cost}`, x, y + 35);
         }
         
         return canvas;
@@ -2058,7 +2326,7 @@ module.exports = (client) => {
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 28px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(`${PET_TYPES[pet.type].emoji} ${pet.name}`, 250, 40);
+        ctx.fillText(pet.name, 250, 40);
         
         // Level and age
         ctx.font = '16px Arial';
@@ -2109,7 +2377,6 @@ module.exports = (client) => {
 
         // Personality badge
         if (pet.personality) {
-            const personality = PERSONALITIES[pet.personality];
             ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
             ctx.fillRect(280, 160, 140, 30);
             ctx.strokeStyle = '#FFD700';
@@ -2119,7 +2386,7 @@ module.exports = (client) => {
             ctx.fillStyle = '#FFD700';
             ctx.font = 'bold 14px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(`${personality.emoji} ${pet.personality.toUpperCase()}`, 350, 180);
+            ctx.fillText(pet.personality.toUpperCase(), 350, 180);
         }
 
         // Mood indicator
@@ -2130,13 +2397,12 @@ module.exports = (client) => {
         ctx.lineWidth = 2;
         ctx.strokeRect(450, 50, 120, 40);
 
-        ctx.font = '24px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(mood.emoji, 480, 75);
-
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 10px Arial';
-        ctx.fillText('MOOD', 535, 75);
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('MOOD', 510, 65);
+        ctx.font = '10px Arial';
+        ctx.fillText(mood.name || 'Happy', 510, 80);
         
         // Stats bars with softer colors
         const stats = [
@@ -2154,7 +2420,7 @@ module.exports = (client) => {
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 14px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText(`${stat.emoji} ${stat.name}`, 30, y);
+            ctx.fillText(stat.name, 30, y);
             
             // Progress bar background
             ctx.fillStyle = '#2c3e50';
@@ -2180,7 +2446,7 @@ module.exports = (client) => {
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 14px Arial';
         ctx.textAlign = 'left';
-        ctx.fillText('⭐ Experience', 30, 385);
+        ctx.fillText('Experience', 30, 385);
         
         ctx.fillStyle = '#2c3e50';
         ctx.fillRect(150, 373, 200, 16);
@@ -2215,7 +2481,7 @@ module.exports = (client) => {
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 32px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('🛒 PET SHOP', 300, 50);
+        ctx.fillText('PET SHOP', 300, 50);
         
         // Categories display with muted colors
         const categories = [
@@ -2236,10 +2502,10 @@ module.exports = (client) => {
             ctx.arc(x, y, 40, 0, Math.PI * 2);
             ctx.fill();
             
-            // Category emoji
+            // Category label (emoji removed for better rendering)
             ctx.font = '30px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(cat.emoji, x, y + 10);
+            // Emoji removed - category name shown below is sufficient
             
             // Category name
             ctx.fillStyle = '#ffffff';
@@ -2247,13 +2513,15 @@ module.exports = (client) => {
             ctx.fillText(cat.name, x, y + 65);
         });
         
-        // Subtle shop decorations
+        // Subtle shop decorations (emoji removed for better rendering)
+        // Decorative circles instead of emojis
         ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
         for (let i = 0; i < 10; i++) {
             const x = Math.random() * 600;
             const y = Math.random() * 400;
-            ctx.font = `${Math.random() * 12 + 8}px Arial`;
-            ctx.fillText('🛍️', x, y);
+            ctx.beginPath();
+            ctx.arc(x, y, Math.random() * 3 + 2, 0, Math.PI * 2);
+            ctx.fill();
         }
         
         return canvas;
@@ -2284,11 +2552,10 @@ module.exports = (client) => {
         ctx.fillStyle = '#2c3e50';
         ctx.font = 'bold 28px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('🎉 ADOPTION SUCCESS!', 200, 50);
+        ctx.fillText('ADOPTION SUCCESS!', 200, 50);
         
-        // Pet
-        ctx.font = '80px Arial';
-        ctx.fillText(PET_TYPES[pet.type].emoji, 200, 150);
+        // Pet icon (using custom drawing instead of emoji)
+        drawPetIcon(ctx, pet.type, 200, 150, 80);
         
         // Pet name
         ctx.font = 'bold 24px Arial';
@@ -2316,12 +2583,16 @@ module.exports = (client) => {
         ctx.fillStyle = '#2c3e50';
         ctx.font = 'bold 24px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('🍽️ FEEDING TIME!', 200, 40);
+        ctx.fillText('FEEDING TIME!', 200, 40);
         
-        // Pet and food
-        ctx.font = '50px Arial';
-        ctx.fillText(PET_TYPES[pet.type].emoji, 150, 120);
-        ctx.fillText(food.emoji, 250, 120);
+        // Pet and food (using custom drawing instead of emojis)
+        drawPetIcon(ctx, pet.type, 150, 120, 50);
+
+        // Food label (emoji removed for better rendering)
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(food.name, 250, 120);
         
         // Pet name and happiness
         ctx.fillStyle = '#2c3e50';
@@ -2370,10 +2641,10 @@ module.exports = (client) => {
             ctx.lineWidth = 2;
             ctx.strokeRect(x - 30, y - 30, 60, 60);
             
-            // Item emoji
-            ctx.font = '24px Arial';
+            // Item label (emoji removed for better rendering)
+            ctx.font = '12px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(item.emoji, x, y - 5);
+            ctx.fillText(item.name, x, y);
             
             // Count
             ctx.fillStyle = '#dc143c';
@@ -2399,12 +2670,16 @@ module.exports = (client) => {
         ctx.fillStyle = '#2c3e50';
         ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('✨ ITEM USED!', 175, 30);
+        ctx.fillText('ITEM USED!', 175, 30);
         
-        // Pet and item
-        ctx.font = '40px Arial';
-        ctx.fillText(PET_TYPES[pet.type].emoji, 125, 90);
-        ctx.fillText(item.emoji, 225, 90);
+        // Pet and item (using custom drawing instead of emojis)
+        drawPetIcon(ctx, pet.type, 125, 90, 40);
+
+        // Item label (emoji removed for better rendering)
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(item.name, 225, 90);
         
         // Effect text
         ctx.font = 'bold 16px Arial';
@@ -2431,11 +2706,9 @@ module.exports = (client) => {
         ctx.fillStyle = '#2c3e50';
         ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('🛍️ PURCHASE SUCCESS!', 175, 30);
+        ctx.fillText('PURCHASE SUCCESS!', 175, 30);
         
-        // Item
-        ctx.font = '60px Arial';
-        ctx.fillText(item.emoji, 175, 100);
+        // Item (emoji removed for better rendering)
         
         // Item info
         ctx.font = 'bold 18px Arial';
@@ -2479,9 +2752,8 @@ module.exports = (client) => {
         ctx.textAlign = 'center';
         ctx.fillText(`${icons[action]} PET CARE`, 175, 30);
         
-        // Pet
-        ctx.font = '60px Arial';
-        ctx.fillText(PET_TYPES[pet.type].emoji, 175, 100);
+        // Pet (using custom drawing instead of emoji)
+        drawPetIcon(ctx, pet.type, 175, 100, 60);
         
         // Pet name
         ctx.font = 'bold 18px Arial';
@@ -2516,11 +2788,10 @@ module.exports = (client) => {
         ctx.fillStyle = '#2c3e50';
         ctx.font = 'bold 24px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('🎓 TRAINING COMPLETE!', 200, 40);
+        ctx.fillText('TRAINING COMPLETE!', 200, 40);
         
-        // Pet
-        ctx.font = '60px Arial';
-        ctx.fillText(PET_TYPES[pet.type].emoji, 200, 120);
+        // Pet (using custom drawing instead of emoji)
+        drawPetIcon(ctx, pet.type, 200, 120, 60);
         
         // Training info
         ctx.font = 'bold 18px Arial';
@@ -2530,7 +2801,7 @@ module.exports = (client) => {
         if (pet.level > oldLevel) {
             ctx.fillStyle = '#daa520';
             ctx.font = 'bold 16px Arial';
-            ctx.fillText(`🎉 LEVEL UP! Now Level ${pet.level}!`, 200, 190);
+            ctx.fillText(`LEVEL UP! Now Level ${pet.level}!`, 200, 190);
         } else {
             ctx.fillStyle = '#2c3e50';
             ctx.font = '14px Arial';
@@ -2555,7 +2826,7 @@ module.exports = (client) => {
         ctx.fillStyle = '#2c3e50';
         ctx.font = 'bold 32px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('🏆 PET LEADERBOARD', 300, 50);
+        ctx.fillText('PET LEADERBOARD', 300, 50);
         
         // Server name
         ctx.font = '18px Arial';
@@ -2580,9 +2851,8 @@ module.exports = (client) => {
             ctx.textAlign = 'center';
             ctx.fillText(index + 1, 55, y);
             
-            // Pet emoji
-            ctx.font = '20px Arial';
-            ctx.fillText(PET_TYPES[entry.pet.type].emoji, 110, y);
+            // Pet icon (using custom drawing instead of emoji)
+            drawPetIcon(ctx, entry.pet.type, 110, y, 20);
             
             // Pet and owner info
             ctx.fillStyle = '#2c3e50';
@@ -2637,7 +2907,7 @@ module.exports = (client) => {
         ctx.textAlign = 'center';
         ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
         ctx.shadowBlur = 5;
-        ctx.fillText(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Mood`, 250, 40);
+        ctx.fillText(`${pet.name}'s Mood`, 250, 40);
         ctx.shadowBlur = 0;
 
         // Large mood text (emojis don't render well in canvas)
@@ -2651,7 +2921,6 @@ module.exports = (client) => {
 
         // Personality badge
         if (pet.personality) {
-            const personality = PERSONALITIES[pet.personality];
             ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
             ctx.fillRect(150, 220, 200, 40);
             ctx.strokeStyle = '#FFD700';
@@ -2660,7 +2929,7 @@ module.exports = (client) => {
 
             ctx.fillStyle = '#2c3e50';
             ctx.font = 'bold 16px Arial';
-            ctx.fillText(`${personality.emoji} ${pet.personality}`, 250, 247);
+            ctx.fillText(`${pet.personality}`, 250, 247);
         }
 
         // Thought bubble
@@ -2728,11 +2997,11 @@ module.exports = (client) => {
         ctx.shadowBlur = 10;
 
         if (result === 'win') {
-            ctx.fillText('🏆 VICTORY! 🏆', 300, 260);
+            ctx.fillText('VICTORY!', 300, 260);
         } else if (result === 'place') {
-            ctx.fillText('🥈 NICE TRY! 🥈', 300, 260);
+            ctx.fillText('NICE TRY!', 300, 260);
         } else {
-            ctx.fillText('💪 KEEP TRYING! 💪', 300, 260);
+            ctx.fillText('KEEP TRYING!', 300, 260);
         }
 
         // Reward info
@@ -2790,7 +3059,7 @@ module.exports = (client) => {
         ctx.textAlign = 'center';
         ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
         ctx.shadowBlur = 10;
-        ctx.fillText('🗺️ ADVENTURE COMPLETE! 🗺️', 300, 70);
+        ctx.fillText('ADVENTURE COMPLETE!', 300, 70);
 
         // Pet info
         ctx.shadowBlur = 20;
@@ -2855,7 +3124,7 @@ module.exports = (client) => {
         ctx.textAlign = 'center';
         ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
         ctx.shadowBlur = 10;
-        ctx.fillText('🎉 PLAYDATE SUCCESS! 🎉', 350, 70);
+        ctx.fillText('PLAYDATE SUCCESS!', 350, 70);
 
         // Pet 1
         ctx.shadowBlur = 15;
@@ -2896,7 +3165,7 @@ module.exports = (client) => {
         ctx.font = 'bold 18px Arial';
         ctx.fillText('Both pets gained:', 350, 330);
         ctx.font = '16px Arial';
-        ctx.fillText('😊 +30 Happiness  ⭐ +10 XP  ⚡ -20 Energy', 350, 355);
+        ctx.fillText('+30 Happiness  |  +10 XP  |  -20 Energy', 350, 355);
 
         return canvas;
     }
@@ -2934,7 +3203,7 @@ module.exports = (client) => {
         ctx.textAlign = 'center';
         ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
         ctx.shadowBlur = 15;
-        ctx.fillText('🏆 ACHIEVEMENT UNLOCKED! 🏆', 300, 90);
+        ctx.fillText('ACHIEVEMENT UNLOCKED!', 300, 90);
 
         // Achievement icon - using text instead of emoji
         ctx.shadowBlur = 20;
@@ -2967,6 +3236,7 @@ module.exports = (client) => {
         const randomPersonality = personalities[Math.floor(Math.random() * personalities.length)];
 
         return {
+            id: `${Date.now()}_${Math.random().toString(36).substring(2, 11)}`, // Unique ID
             type: type,
             name: name,
             personality: randomPersonality,
@@ -2979,6 +3249,7 @@ module.exports = (client) => {
             experience: 0,
             age: 0,
             created: Date.now(),
+            isActive: true, // Mark as active pet
             lastFed: Date.now(),
             lastPlayed: Date.now(),
             lastCleaned: Date.now(),
@@ -3000,11 +3271,11 @@ module.exports = (client) => {
 
         for (const [key, mood] of Object.entries(MOODS)) {
             if (avgStat >= mood.threshold) {
-                return mood;
+                return { ...mood, name: key };
             }
         }
 
-        return MOODS.sick;
+        return { ...MOODS.sick, name: 'sick' };
     }
 
     function getPetThoughts(pet) {

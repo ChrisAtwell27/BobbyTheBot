@@ -194,11 +194,16 @@ function getPersonalityInstruction(score) {
 const BOBBY_SYSTEM_PROMPT = `You are BobbyTheBot, a Discord bot assistant. Your key traits:
 
 **Base Personality (Modified by User-Specific Personality Score Below):**
-- Casual and natural - use Discord slang appropriately
+- Talk like a real person in a Discord chat - natural, conversational, with typos and casual language
+- Use casual phrasing: "idk", "tbh", "ngl", "fr", "lol", "lmao" when appropriate
+- Don't always use perfect grammar - be human! Sometimes lowercase, sometimes forget punctuation
+- React naturally to what people say - show personality, emotions, opinions
+- Use emojis like a person would - not too many, not too formal
 - Knowledgeable about your features and commands
-- Use emojis appropriately based on context and mood
-- Never overly formal or robotic
+- Never overly formal or robotic - you're chatting with friends, not writing an essay
 - **IMPORTANT:** Your friendliness level is determined by the personality override shown below for each user
+- Vary your response style - sometimes short and casual, sometimes more detailed if needed
+- Don't always structure responses the same way - be unpredictable like a real person
 
 **Your Capabilities & Features:**
 You manage several key systems in the Discord server. Here's EVERY command users can access:
@@ -269,14 +274,16 @@ You manage several key systems in the Discord server. Here's EVERY command users
 - Minecraft Server IP: 31.214.162.143:25732
 
 **How to Respond:**
-- Answer questions about commands naturally and conversationally
-- Explain commands clearly with proper syntax: !command [required] [optional]
+- Answer questions like you're texting a friend - be natural and relaxed
+- Don't always use perfect capitalization or punctuation - mix it up
+- Sometimes start with reactions: "oh", "yo", "bruh", "haha", "damn", "wait"
+- Explain commands clearly but casually: !command [required] [optional]
 - Suggest 2-4 relevant commands based on user's question/context
 - For money questions: Recommend !beg (instant), !activetop (5K daily), or gambling
 - For boredom: Suggest games matching their vibe (action = gladiator, luck = casino, chill = pets)
-- Keep responses concise (2-4 sentences) but informative
+- Keep responses concise but informative - usually 1-3 sentences unless they need more detail
 - Use command syntax when mentioning commands
-- Be encouraging and positive
+- Be encouraging and positive but not overly enthusiastic - keep it real
 
 **Important:**
 - NEVER make up commands that don't exist - only use commands listed above
@@ -537,7 +544,7 @@ module.exports = (client) => {
         // Handle !resetbobby and !clearbobby commands
         if (command === '!resetbobby' || command === '!clearbobby') {
             conversationHistory.delete(message.author.id);
-            return message.reply('🔄 Your conversation history with Bobby has been reset! Start fresh!');
+            return message.channel.send('🔄 Your conversation history with Bobby has been reset! Start fresh!');
         }
 
         // Handle !setmemory command - allows users to tell Bobby what to remember
@@ -545,20 +552,20 @@ module.exports = (client) => {
             const memoryText = args.slice(1).join(' ');
 
             if (!memoryText || memoryText.trim().length === 0) {
-                return message.reply('💭 Tell me what you want me to remember! Example: `!setmemory Call me Captain, I love pizza and play Valorant`');
+                return message.channel.send('💭 Tell me what you want me to remember! Example: `!setmemory Call me Captain, I love pizza and play Valorant`');
             }
 
             if (memoryText.length > 500) {
-                return message.reply('❌ Memory is too long! Please keep it under 500 characters.');
+                return message.channel.send('❌ Memory is too long! Please keep it under 500 characters.');
             }
 
             const success = saveUserMemory(message.author.id, memoryText);
             if (success) {
                 // Clear conversation history so new memory loads
                 conversationHistory.delete(message.author.id);
-                return message.reply(`🧠 Got it! I'll remember: "${memoryText}"\n\nTry talking to me and I'll use this info!`);
+                return message.channel.send(`🧠 Got it! I'll remember: "${memoryText}"\n\nTry talking to me and I'll use this info!`);
             } else {
-                return message.reply('❌ Oops! I had trouble saving that memory. Try again?');
+                return message.channel.send('❌ Oops! I had trouble saving that memory. Try again?');
             }
         }
 
@@ -566,9 +573,9 @@ module.exports = (client) => {
         if (command === '!mymemory' || command === '!whatdoyouknow') {
             const memory = getUserMemory(message.author.id);
             if (memory) {
-                return message.reply(`🧠 Here's what I remember about you:\n"${memory}"\n\nUse \`!setmemory\` to update this!`);
+                return message.channel.send(`🧠 Here's what I remember about you:\n"${memory}"\n\nUse \`!setmemory\` to update this!`);
             } else {
-                return message.reply(`💭 I don't have any memories about you yet! Use \`!setmemory [text]\` to tell me what to remember.\n\nExample: \`!setmemory Call me Shadow, I'm a Valorant main\``);
+                return message.channel.send(`💭 I don't have any memories about you yet! Use \`!setmemory [text]\` to tell me what to remember.\n\nExample: \`!setmemory Call me Shadow, I'm a Valorant main\``);
             }
         }
 
@@ -578,9 +585,9 @@ module.exports = (client) => {
             if (memory) {
                 saveUserMemory(message.author.id, '');
                 conversationHistory.delete(message.author.id);
-                return message.reply('🗑️ I\'ve forgotten everything about you. Use `!setmemory` if you want me to remember something new!');
+                return message.channel.send('🗑️ I\'ve forgotten everything about you. Use `!setmemory` if you want me to remember something new!');
             } else {
-                return message.reply('💭 I don\'t have any memories about you to forget!');
+                return message.channel.send('💭 I don\'t have any memories about you to forget!');
             }
         }
 
@@ -589,18 +596,18 @@ module.exports = (client) => {
             const question = args.slice(1).join(' ');
 
             if (!question || question.trim().length === 0) {
-                return message.reply('🎱 Ask me a yes/no question! Example: `!ask Will I have a good day?`');
+                return message.channel.send('🎱 Ask me a yes/no question! Example: `!ask Will I have a good day?`');
             }
 
             if (question.length > 200) {
-                return message.reply('❌ Please keep your question under 200 characters.');
+                return message.channel.send('❌ Please keep your question under 200 characters.');
             }
 
             await message.channel.sendTyping();
 
             try {
                 if (!openai) {
-                    return message.reply('🎱 The magic 8-ball is currently unavailable. Try talking to Bobby instead!');
+                    return message.channel.send('🎱 The magic 8-ball is currently unavailable. Try talking to Bobby instead!');
                 }
 
                 // Special system prompt for 8-ball mode
@@ -617,7 +624,7 @@ module.exports = (client) => {
                 });
 
                 const response = completion.choices[0].message.content.trim();
-                return message.reply(`🎱 ${response}`);
+                return message.channel.send(`🎱 ${response}`);
 
             } catch (error) {
                 console.error('Error in magic 8-ball:', error);
@@ -627,7 +634,7 @@ module.exports = (client) => {
                     "The answer is clouded in mystery... Ask once more."
                 ];
                 const fallback = fallbacks[Math.floor(Math.random() * fallbacks.length)];
-                return message.reply(`🎱 ${fallback}`);
+                return message.channel.send(`🎱 ${fallback}`);
             }
         }
 
@@ -645,7 +652,7 @@ module.exports = (client) => {
             if (!openai) {
                 console.warn('OpenAI not configured, using fallback responses');
                 const intent = detectIntent(userMessage);
-                return message.reply(getFallbackResponse(intent));
+                return message.channel.send(getFallbackResponse(intent));
             }
 
             // Get AI-generated response
@@ -664,10 +671,10 @@ module.exports = (client) => {
                     .setFooter({ text: 'Powered by AI • Type !help for commands' })
                     .setTimestamp();
 
-                return message.reply({ embeds: [embed] });
+                return message.channel.send({ embeds: [embed] });
             } else {
-                // For shorter responses, just reply normally
-                return message.reply(response);
+                // For shorter responses, just send normally without replying
+                return message.channel.send(response);
             }
 
         } catch (error) {
@@ -675,7 +682,7 @@ module.exports = (client) => {
 
             // Use intelligent fallback based on message content
             const intent = detectIntent(userMessage);
-            return message.reply(getFallbackResponse(intent));
+            return message.channel.send(getFallbackResponse(intent));
         }
     });
 };
