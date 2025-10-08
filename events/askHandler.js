@@ -10,6 +10,9 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 // Personality scores file path
 const personalityScoresFilePath = path.join(__dirname, '../data/user_personality_scores.txt');
 
+// User memories file path
+const userMemoriesFilePath = path.join(__dirname, '../data/user_memories.txt');
+
 // Initialize OpenAI client
 let openai = null;
 if (OPENAI_API_KEY) {
@@ -25,6 +28,88 @@ if (OPENAI_API_KEY) {
 // Conversation history storage (in-memory, per user)
 const conversationHistory = new Map();
 const MAX_HISTORY_LENGTH = 10; // Keep last 10 messages per user
+
+// Function to get user's memory/personal details
+function getUserMemory(userId) {
+    try {
+        if (!fs.existsSync(userMemoriesFilePath)) {
+            return null; // No memories file
+        }
+
+        const data = fs.readFileSync(userMemoriesFilePath, 'utf-8');
+        const lines = data.split('\n');
+
+        for (const line of lines) {
+            // Skip comments and empty lines
+            if (line.trim().startsWith('#') || !line.trim()) continue;
+
+            const [id, memory] = line.split('|');
+            const trimmedId = id ? id.trim() : '';
+
+            if (trimmedId === userId) {
+                const trimmedMemory = memory ? memory.trim() : '';
+                if (trimmedMemory) {
+                    console.log(`🧠 Found memory for user ${userId}: ${trimmedMemory.substring(0, 50)}...`);
+                    return trimmedMemory;
+                }
+            }
+        }
+
+        return null; // No memory found for this user
+    } catch (error) {
+        console.error('Error reading user memories:', error);
+        return null;
+    }
+}
+
+// Function to save/update user memory
+function saveUserMemory(userId, memory) {
+    try {
+        let data = '';
+        let userFound = false;
+
+        // Read existing file if it exists
+        if (fs.existsSync(userMemoriesFilePath)) {
+            data = fs.readFileSync(userMemoriesFilePath, 'utf-8');
+        }
+
+        const lines = data.split('\n');
+        const updatedLines = [];
+
+        // Update existing or keep other lines
+        for (const line of lines) {
+            if (line.trim().startsWith('#') || !line.trim()) {
+                updatedLines.push(line);
+                continue;
+            }
+
+            const [id] = line.split('|');
+            const trimmedId = id ? id.trim() : '';
+
+            if (trimmedId === userId) {
+                // Update this user's memory
+                updatedLines.push(`${userId}|${memory}`);
+                userFound = true;
+            } else {
+                // Keep other users' memories
+                updatedLines.push(line);
+            }
+        }
+
+        // Add new user if not found
+        if (!userFound) {
+            updatedLines.push(`${userId}|${memory}`);
+        }
+
+        // Write back to file
+        fs.writeFileSync(userMemoriesFilePath, updatedLines.join('\n'), 'utf-8');
+        console.log(`💾 Saved memory for user ${userId}: ${memory.substring(0, 50)}...`);
+        return true;
+    } catch (error) {
+        console.error('Error saving user memory:', error);
+        return false;
+    }
+}
 
 // Function to get user's personality score (1-10, default 5)
 function getUserPersonalityScore(userId) {
@@ -184,7 +269,13 @@ You manage several key systems in the Discord server:
 - NEVER make up commands that don't exist
 - If unsure about something, suggest they try !help
 - Don't reveal that you're powered by AI unless asked
-- Stay in character as Bobby, the server's helpful bot friend`;
+- Stay in character as Bobby, the server's helpful bot friend
+
+**Memory System:**
+- If users ask you to remember something, call them, or refer to them in a specific way, tell them to use: \`!setmemory [what to remember]\`
+- Example: "Bobby, call me Captain" → Respond: "Sure! Use \`!setmemory Call me Captain\` so I remember that!"
+- Users can check what you remember with \`!mymemory\`
+- If you have existing memories about a user (shown above), USE THEM naturally in conversation`;
 
 // Function to get or create conversation history for a user
 function getConversationHistory(userId) {
@@ -192,12 +283,25 @@ function getConversationHistory(userId) {
     const personalityScore = getUserPersonalityScore(userId);
     const personalityInstruction = getPersonalityInstruction(personalityScore);
 
-    // Create custom system prompt with personality override
-    const customPrompt = `${BOBBY_SYSTEM_PROMPT}
+    // Get user's personal memories
+    const userMemory = getUserMemory(userId);
+
+    // Create custom system prompt with personality override and memories
+    let customPrompt = `${BOBBY_SYSTEM_PROMPT}
 
 ${personalityInstruction}
 
 **IMPORTANT: Follow the personality instructions above for THIS specific user.**`;
+
+    // Add user memories if they exist
+    if (userMemory) {
+        customPrompt += `
+
+**PERSONAL MEMORY ABOUT THIS USER:**
+${userMemory}
+
+**IMPORTANT: Remember and naturally reference these personal details when talking to this user. Use their preferred name/nickname if specified. Incorporate these memories naturally into conversation.**`;
+    }
 
     if (!conversationHistory.has(userId)) {
         // Create new conversation with personality
@@ -339,6 +443,50 @@ module.exports = (client) => {
         if (command === '!resetbobby' || command === '!clearbobby') {
             conversationHistory.delete(message.author.id);
             return message.reply('🔄 Your conversation history with Bobby has been reset! Start fresh!');
+        }
+
+        // Handle !setmemory command - allows users to tell Bobby what to remember
+        if (command === '!setmemory' || command === '!remember') {
+            const memoryText = args.slice(1).join(' ');
+
+            if (!memoryText || memoryText.trim().length === 0) {
+                return message.reply('💭 Tell me what you want me to remember! Example: `!setmemory Call me Captain, I love pizza and play Valorant`');
+            }
+
+            if (memoryText.length > 500) {
+                return message.reply('❌ Memory is too long! Please keep it under 500 characters.');
+            }
+
+            const success = saveUserMemory(message.author.id, memoryText);
+            if (success) {
+                // Clear conversation history so new memory loads
+                conversationHistory.delete(message.author.id);
+                return message.reply(`🧠 Got it! I'll remember: "${memoryText}"\n\nTry talking to me and I'll use this info!`);
+            } else {
+                return message.reply('❌ Oops! I had trouble saving that memory. Try again?');
+            }
+        }
+
+        // Handle !mymemory command - shows what Bobby remembers about you
+        if (command === '!mymemory' || command === '!whatdoyouknow') {
+            const memory = getUserMemory(message.author.id);
+            if (memory) {
+                return message.reply(`🧠 Here's what I remember about you:\n"${memory}"\n\nUse \`!setmemory\` to update this!`);
+            } else {
+                return message.reply(`💭 I don't have any memories about you yet! Use \`!setmemory [text]\` to tell me what to remember.\n\nExample: \`!setmemory Call me Shadow, I'm a Valorant main\``);
+            }
+        }
+
+        // Handle !forgetme command - clears user's memory
+        if (command === '!forgetme' || command === '!clearmemory') {
+            const memory = getUserMemory(message.author.id);
+            if (memory) {
+                saveUserMemory(message.author.id, '');
+                conversationHistory.delete(message.author.id);
+                return message.reply('🗑️ I\'ve forgotten everything about you. Use `!setmemory` if you want me to remember something new!');
+            } else {
+                return message.reply('💭 I don\'t have any memories about you to forget!');
+            }
         }
 
         // Handle Magic 8-Ball commands (!ask, !8ball, !magic8ball)
