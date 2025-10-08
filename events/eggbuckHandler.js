@@ -209,14 +209,14 @@ module.exports = (client) => {
             try {
                 // Fetch all members to ensure we have the complete member list
                 const allMembers = await message.guild.members.fetch();
-                
+
                 let membersAwarded = 0;
-                allMembers.forEach(member => {
+                for (const [, member] of allMembers) {
                     if (!member.user.bot) {
                         await updateBobbyBucks(member.id, amount);
                         membersAwarded++;
                     }
-                });
+                }
 
                 const massAwardImage = await createMassAwardCard(amount, membersAwarded, message.author);
                 const attachment = new AttachmentBuilder(massAwardImage.toBuffer(), { name: 'mass-award.png' });
