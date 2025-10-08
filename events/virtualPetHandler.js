@@ -7,6 +7,11 @@ const https = require('https');
 const petsFilePath = path.join(__dirname, '../data/virtual_pets.txt');
 const petItemsFilePath = path.join(__dirname, '../data/pet_items.txt');
 const bobbyBucksFilePath = path.join(__dirname, '../data/bobby_bucks.txt');
+const petAchievementsFilePath = path.join(__dirname, '../data/pet_achievements.txt');
+const petEventsFilePath = path.join(__dirname, '../data/pet_events.txt');
+
+// Active games tracker
+const activeGames = new Map();
 
 // Pet types with different characteristics
 const PET_TYPES = {
@@ -18,7 +23,9 @@ const PET_TYPES = {
         energyDecay: 0.7,
         cleanlinessDecay: 0.5,
         healthDecay: 0.3,
-        cost: 500
+        cost: 500,
+        abilities: ['fetch', 'guard', 'dig'],
+        favoriteGames: ['fetch', 'race']
     },
     cat: {
         name: 'Cat',
@@ -28,7 +35,9 @@ const PET_TYPES = {
         energyDecay: 0.5,
         cleanlinessDecay: 0.3,
         healthDecay: 0.2,
-        cost: 400
+        cost: 400,
+        abilities: ['hunt', 'stealth', 'climb'],
+        favoriteGames: ['hunt', 'hide_seek']
     },
     rabbit: {
         name: 'Rabbit',
@@ -38,7 +47,9 @@ const PET_TYPES = {
         energyDecay: 0.6,
         cleanlinessDecay: 0.4,
         healthDecay: 0.3,
-        cost: 300
+        cost: 300,
+        abilities: ['hop', 'burrow', 'forage'],
+        favoriteGames: ['race', 'treasure_hunt']
     },
     bird: {
         name: 'Bird',
@@ -48,7 +59,9 @@ const PET_TYPES = {
         energyDecay: 0.8,
         cleanlinessDecay: 0.6,
         healthDecay: 0.4,
-        cost: 350
+        cost: 350,
+        abilities: ['fly', 'sing', 'scout'],
+        favoriteGames: ['fetch', 'treasure_hunt']
     },
     fish: {
         name: 'Fish',
@@ -58,7 +71,9 @@ const PET_TYPES = {
         energyDecay: 0.3,
         cleanlinessDecay: 0.8,
         healthDecay: 0.2,
-        cost: 200
+        cost: 200,
+        abilities: ['swim', 'bubble', 'dive'],
+        favoriteGames: ['bubble_pop', 'race']
     },
     dragon: {
         name: 'Dragon',
@@ -68,9 +83,83 @@ const PET_TYPES = {
         energyDecay: 0.9,
         cleanlinessDecay: 0.7,
         healthDecay: 0.5,
-        cost: 2000
+        cost: 2000,
+        abilities: ['breathe_fire', 'fly', 'roar'],
+        favoriteGames: ['treasure_hunt', 'battle']
+    },
+    unicorn: {
+        name: 'Unicorn',
+        emoji: '🦄',
+        hungerDecay: 0.7,
+        happinessDecay: 0.5,
+        energyDecay: 0.6,
+        cleanlinessDecay: 0.4,
+        healthDecay: 0.2,
+        cost: 1500,
+        abilities: ['heal', 'magic', 'sparkle'],
+        favoriteGames: ['race', 'treasure_hunt']
+    },
+    penguin: {
+        name: 'Penguin',
+        emoji: '🐧',
+        hungerDecay: 0.7,
+        happinessDecay: 0.4,
+        energyDecay: 0.5,
+        cleanlinessDecay: 0.3,
+        healthDecay: 0.3,
+        cost: 450,
+        abilities: ['slide', 'swim', 'waddle'],
+        favoriteGames: ['race', 'ice_slide']
     }
 };
+
+// Pet personalities that affect behavior
+const PERSONALITIES = {
+    playful: { happiness_bonus: 1.2, energy_decay: 1.1, favorite_activity: 'play', emoji: '🎭' },
+    lazy: { energy_decay: 0.8, happiness_bonus: 0.9, favorite_activity: 'sleep', emoji: '😴' },
+    curious: { experience_bonus: 1.3, happiness_bonus: 1.1, favorite_activity: 'explore', emoji: '🔍' },
+    brave: { health_bonus: 1.1, happiness_bonus: 1.0, favorite_activity: 'adventure', emoji: '⚔️' },
+    shy: { happiness_bonus: 0.9, energy_decay: 0.9, favorite_activity: 'cuddle', emoji: '🙈' },
+    energetic: { energy_decay: 1.2, happiness_bonus: 1.2, favorite_activity: 'play', emoji: '⚡' },
+    gentle: { happiness_bonus: 1.0, health_bonus: 1.1, favorite_activity: 'cuddle', emoji: '💕' },
+    mischievous: { happiness_bonus: 1.1, cleanliness_decay: 1.2, favorite_activity: 'play', emoji: '😈' }
+};
+
+// Pet moods/emotions
+const MOODS = {
+    ecstatic: { emoji: '🤩', threshold: 90, messages: ['is bouncing with joy!', 'can\'t stop wagging!', 'is absolutely thrilled!'] },
+    happy: { emoji: '😊', threshold: 70, messages: ['seems content!', 'is smiling!', 'looks pleased!'] },
+    content: { emoji: '😌', threshold: 50, messages: ['is doing okay.', 'seems calm.', 'is relaxed.'] },
+    sad: { emoji: '😢', threshold: 30, messages: ['looks sad...', 'seems down...', 'needs attention...'] },
+    angry: { emoji: '😠', threshold: 15, messages: ['is upset!', 'seems frustrated!', 'is grumpy!'] },
+    sick: { emoji: '🤢', threshold: 0, messages: ['is feeling ill!', 'needs care badly!', 'is in poor condition!'] }
+};
+
+// Pet achievements
+const ACHIEVEMENTS = {
+    first_steps: { name: 'First Steps', emoji: '👶', description: 'Reach level 5', requirement: { type: 'level', value: 5 }, reward: 100 },
+    dedicated_owner: { name: 'Dedicated Owner', emoji: '💝', description: 'Care for your pet 50 times', requirement: { type: 'care_count', value: 50 }, reward: 250 },
+    happy_camper: { name: 'Happy Camper', emoji: '😄', description: 'Keep happiness above 90 for 7 days', requirement: { type: 'happy_streak', value: 7 }, reward: 500 },
+    master_trainer: { name: 'Master Trainer', emoji: '🎓', description: 'Train your pet 25 times', requirement: { type: 'train_count', value: 25 }, reward: 300 },
+    speed_demon: { name: 'Speed Demon', emoji: '🏃', description: 'Win 10 races', requirement: { type: 'race_wins', value: 10 }, reward: 400 },
+    treasure_hunter: { name: 'Treasure Hunter', emoji: '💎', description: 'Find 20 treasures', requirement: { type: 'treasures_found', value: 20 }, reward: 600 },
+    ancient_companion: { name: 'Ancient Companion', emoji: '👴', description: 'Keep your pet alive for 30 days', requirement: { type: 'age', value: 30 }, reward: 1000 },
+    max_level: { name: 'Maximum Power', emoji: '⚡', description: 'Reach level 50', requirement: { type: 'level', value: 50 }, reward: 2000 },
+    social_butterfly: { name: 'Social Butterfly', emoji: '🦋', description: 'Have 15 playdates', requirement: { type: 'playdates', value: 15 }, reward: 350 },
+    perfect_health: { name: 'Perfect Health', emoji: '💪', description: 'Keep all stats above 80 for 5 days', requirement: { type: 'perfect_streak', value: 5 }, reward: 750 }
+};
+
+// Random pet events
+const RANDOM_EVENTS = [
+    { id: 'found_treasure', chance: 0.05, message: 'found a treasure while exploring!', reward: { type: 'bobby_bucks', amount: 100 }, stat: 'treasures_found' },
+    { id: 'found_food', chance: 0.08, message: 'found some food!', effect: { hunger: 20 } },
+    { id: 'made_friend', chance: 0.06, message: 'made a new friend!', effect: { happiness: 25 } },
+    { id: 'got_dirty', chance: 0.07, message: 'got messy playing!', effect: { cleanliness: -30, happiness: 10 } },
+    { id: 'learned_trick', chance: 0.04, message: 'learned a new trick!', effect: { experience: 20 } },
+    { id: 'feel_sick', chance: 0.03, message: 'isn\'t feeling well...', effect: { health: -25 } },
+    { id: 'burst_energy', chance: 0.06, message: 'had a sudden burst of energy!', effect: { energy: 25, happiness: 15 } },
+    { id: 'nap', chance: 0.08, message: 'took a spontaneous nap!', effect: { energy: 30, hunger: -10 } }
+];
 
 // Pet items that can be purchased
 const PET_ITEMS = {
@@ -488,6 +577,384 @@ module.exports = (client) => {
 
             return message.channel.send({ embeds: [embed], files: [attachment] });
         }
+
+        // NEW INTERACTIVE FEATURES!
+
+        // Pet mood/emotion check
+        if (args[0] === '!petmood' || args[0] === '!mood') {
+            const userId = message.author.id;
+            const pet = getPet(userId);
+
+            if (!pet) {
+                return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
+            }
+
+            const moodCard = await createMoodCard(pet, message.author);
+            const attachment = new AttachmentBuilder(moodCard.toBuffer(), { name: 'pet-mood.png' });
+
+            const mood = getPetMood(pet);
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Emotional State`)
+                .setColor(getPetStatus(pet).color)
+                .setDescription(`**${pet.name} ${mood.messages[Math.floor(Math.random() * mood.messages.length)]}**`)
+                .setImage('attachment://pet-mood.png')
+                .setFooter({ text: 'Your pet\'s mood changes based on their care!' })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [embed], files: [attachment] });
+        }
+
+        // Mini-game: Fetch
+        if (args[0] === '!fetch') {
+            const userId = message.author.id;
+            const pet = getPet(userId);
+
+            if (!pet) {
+                return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
+            }
+
+            if (pet.energy < 25) {
+                return message.channel.send(`❌ ${pet.name} is too tired to play fetch! Let them rest.`);
+            }
+
+            if (activeGames.has(userId)) {
+                return message.channel.send('❌ You already have an active game!');
+            }
+
+            const directions = ['⬅️', '➡️', '⬆️', '⬇️'];
+            const sequence = Array.from({ length: 5 }, () => directions[Math.floor(Math.random() * directions.length)]);
+
+            activeGames.set(userId, {
+                type: 'fetch',
+                sequence,
+                currentStep: 0,
+                startTime: Date.now(),
+                pet
+            });
+
+            const row = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder().setCustomId(`fetch_left_${userId}`).setEmoji('⬅️').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`fetch_right_${userId}`).setEmoji('➡️').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`fetch_up_${userId}`).setEmoji('⬆️').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`fetch_down_${userId}`).setEmoji('⬇️').setStyle(ButtonStyle.Primary)
+                );
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${PET_TYPES[pet.type].emoji} Fetch Game Started!`)
+                .setColor('#4169e1')
+                .setDescription(`**Watch where the ball goes and click the arrows in order!**\n\n🎾 Ball path: ${sequence.join(' → ')}\n\n⏱️ You have 30 seconds!`)
+                .setFooter({ text: 'Click the arrows in the correct sequence!' });
+
+            message.channel.send({ embeds: [embed], components: [row] });
+
+            setTimeout(() => {
+                if (activeGames.has(userId) && activeGames.get(userId).type === 'fetch') {
+                    activeGames.delete(userId);
+                    message.channel.send(`⏰ Time's up! ${pet.name} looks disappointed...`);
+                }
+            }, 30000);
+
+            return;
+        }
+
+        // Mini-game: Treasure Hunt
+        if (args[0] === '!treasure' || args[0] === '!hunt') {
+            const userId = message.author.id;
+            const pet = getPet(userId);
+
+            if (!pet) {
+                return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
+            }
+
+            if (pet.energy < 30) {
+                return message.channel.send(`❌ ${pet.name} is too tired for a treasure hunt!`);
+            }
+
+            if (activeGames.has(userId)) {
+                return message.channel.send('❌ You already have an active game!');
+            }
+
+            const treasureSpot = Math.floor(Math.random() * 9);
+
+            activeGames.set(userId, {
+                type: 'treasure',
+                treasureSpot,
+                attempts: 0,
+                maxAttempts: 3,
+                startTime: Date.now(),
+                pet
+            });
+
+            const buttons = [];
+            for (let i = 0; i < 9; i++) {
+                buttons.push(
+                    new ButtonBuilder()
+                        .setCustomId(`treasure_${i}_${userId}`)
+                        .setLabel('❓')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+            }
+
+            const rows = [
+                new ActionRowBuilder().addComponents(buttons.slice(0, 3)),
+                new ActionRowBuilder().addComponents(buttons.slice(3, 6)),
+                new ActionRowBuilder().addComponents(buttons.slice(6, 9))
+            ];
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${PET_TYPES[pet.type].emoji} Treasure Hunt!`)
+                .setColor('#daa520')
+                .setDescription(`**${pet.name} is searching for treasure!**\n\nClick a spot to dig! You have 3 tries.\n💎 Find the treasure for a big reward!`)
+                .setFooter({ text: 'Choose wisely! Only 3 attempts!' });
+
+            return message.channel.send({ embeds: [embed], components: rows });
+        }
+
+        // Mini-game: Pet Race
+        if (args[0] === '!race') {
+            const userId = message.author.id;
+            const pet = getPet(userId);
+
+            if (!pet) {
+                return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
+            }
+
+            if (pet.energy < 35) {
+                return message.channel.send(`❌ ${pet.name} is too tired to race!`);
+            }
+
+            const raceCost = 50;
+            const balance = getBobbyBucks(userId);
+
+            if (balance < raceCost) {
+                return message.channel.send(`❌ Racing costs ??${raceCost}! You have ??${balance}.`);
+            }
+
+            updateBobbyBucks(userId, -raceCost);
+
+            // Calculate race performance
+            const baseSpeed = (pet.energy / 100) * (pet.health / 100) * pet.level;
+            const randomFactor = Math.random() * 0.5 + 0.75;
+            const petSpeed = baseSpeed * randomFactor;
+
+            const opponents = ['Lightning', 'Speedy', 'Dash', 'Rocket', 'Flash'];
+            const opponentSpeeds = opponents.map(() => Math.random() * pet.level * 1.2);
+
+            const allRacers = [
+                { name: pet.name, speed: petSpeed, isPlayer: true },
+                ...opponents.map((name, i) => ({ name, speed: opponentSpeeds[i], isPlayer: false }))
+            ];
+
+            allRacers.sort((a, b) => b.speed - a.speed);
+            const playerPosition = allRacers.findIndex(r => r.isPlayer) + 1;
+
+            pet.energy = Math.max(0, pet.energy - 35);
+            pet.experience += playerPosition <= 3 ? 25 : 10;
+
+            let reward = 0;
+            let resultMessage = '';
+
+            if (playerPosition === 1) {
+                reward = 200;
+                resultMessage = `🏆 **FIRST PLACE!** ${pet.name} won the race!`;
+                pet.stats = pet.stats || {};
+                pet.stats.race_wins = (pet.stats.race_wins || 0) + 1;
+            } else if (playerPosition === 2) {
+                reward = 100;
+                resultMessage = `🥈 **Second place!** ${pet.name} did great!`;
+            } else if (playerPosition === 3) {
+                reward = 50;
+                resultMessage = `🥉 **Third place!** ${pet.name} tried their best!`;
+            } else {
+                resultMessage = `😅 **${playerPosition}th place.** Better luck next time!`;
+            }
+
+            if (reward > 0) {
+                updateBobbyBucks(userId, reward);
+            }
+
+            savePet(userId, pet);
+            checkAchievements(userId, pet, message.channel);
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🏁 Race Results!`)
+                .setColor(playerPosition === 1 ? '#FFD700' : playerPosition <= 3 ? '#C0C0C0' : '#CD853F')
+                .setDescription(resultMessage)
+                .addFields(
+                    { name: '🏆 Final Standings', value: allRacers.map((r, i) => `${i + 1}. ${r.name}${r.isPlayer ? ' ⭐' : ''}`).join('\n'), inline: true },
+                    { name: '💰 Earnings', value: reward > 0 ? `+??${reward}` : 'None', inline: true },
+                    { name: '⭐ XP Gained', value: `+${playerPosition <= 3 ? 25 : 10} XP`, inline: true }
+                )
+                .setFooter({ text: `${pet.name} lost 35 energy from racing!` })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [embed] });
+        }
+
+        // Pet adventure command
+        if (args[0] === '!adventure' || args[0] === '!explore') {
+            const userId = message.author.id;
+            const pet = getPet(userId);
+
+            if (!pet) {
+                return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
+            }
+
+            const timeSinceLastAdventure = Date.now() - (pet.lastAdventure || 0);
+            const cooldownTime = 3600000; // 1 hour
+
+            if (timeSinceLastAdventure < cooldownTime) {
+                const remainingTime = Math.ceil((cooldownTime - timeSinceLastAdventure) / 60000);
+                return message.channel.send(`❌ ${pet.name} is resting from their last adventure! Wait ${remainingTime} more minutes.`);
+            }
+
+            if (pet.energy < 40) {
+                return message.channel.send(`❌ ${pet.name} needs at least 40 energy to go on an adventure!`);
+            }
+
+            // Trigger random event
+            const event = triggerRandomEvent(pet);
+
+            pet.energy = Math.max(0, pet.energy - 40);
+            pet.lastAdventure = Date.now();
+            savePet(userId, pet);
+
+            if (event.reward && event.reward.type === 'bobby_bucks') {
+                updateBobbyBucks(userId, event.reward.amount);
+            }
+
+            const adventureCard = await createAdventureCard(pet, event);
+            const attachment = new AttachmentBuilder(adventureCard.toBuffer(), { name: 'adventure.png' });
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🗺️ Adventure Time!`)
+                .setColor('#228b22')
+                .setDescription(`**${pet.name} went on an adventure!**\n\n${PET_TYPES[pet.type].emoji} ${pet.name} ${event.message}`)
+                .setImage('attachment://adventure.png')
+                .addFields(
+                    { name: '✨ Results', value: getEventResults(event, pet), inline: false },
+                    { name: '⚡ Energy Used', value: '-40 Energy', inline: true }
+                )
+                .setFooter({ text: 'Adventures can happen once per hour!' })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [embed], files: [attachment] });
+        }
+
+        // Pet achievements command
+        if (args[0] === '!petach' || args[0] === '!achievements') {
+            const userId = message.author.id;
+            const pet = getPet(userId);
+
+            if (!pet) {
+                return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
+            }
+
+            const userAchievements = getPetAchievements(userId);
+            const earnedAchievements = Object.entries(ACHIEVEMENTS)
+                .filter(([key]) => userAchievements.includes(key))
+                .map(([key, ach]) => `${ach.emoji} **${ach.name}** - ${ach.description}`)
+                .join('\n') || 'No achievements yet!';
+
+            const nextAchievements = Object.entries(ACHIEVEMENTS)
+                .filter(([key]) => !userAchievements.includes(key))
+                .slice(0, 3)
+                .map(([key, ach]) => `${ach.emoji} **${ach.name}** - ${ach.description} (??${ach.reward})`)
+                .join('\n');
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Achievements`)
+                .setColor('#9370db')
+                .setDescription(`**Earned: ${userAchievements.length}/${Object.keys(ACHIEVEMENTS).length}**`)
+                .addFields(
+                    { name: '🏆 Unlocked Achievements', value: earnedAchievements, inline: false },
+                    { name: '🎯 Next Goals', value: nextAchievements || 'All achievements earned!', inline: false }
+                )
+                .setFooter({ text: 'Keep playing to unlock more achievements!' })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [embed] });
+        }
+
+        // Pet playdate command
+        if (args[0] === '!playdate') {
+            const userId = message.author.id;
+            const pet = getPet(userId);
+
+            if (!pet) {
+                return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
+            }
+
+            const targetUser = message.mentions.users.first();
+            if (!targetUser) {
+                return message.channel.send('❌ Mention a user to have a playdate with! Usage: `!playdate @user`');
+            }
+
+            if (targetUser.id === userId) {
+                return message.channel.send('❌ Your pet can\'t have a playdate with themselves!');
+            }
+
+            const targetPet = getPet(targetUser.id);
+            if (!targetPet) {
+                return message.channel.send('❌ That user doesn\'t have a pet!');
+            }
+
+            if (pet.energy < 20 || targetPet.energy < 20) {
+                return message.channel.send('❌ One of the pets is too tired for a playdate!');
+            }
+
+            // Execute playdate
+            pet.happiness = Math.min(100, pet.happiness + 30);
+            pet.energy = Math.max(0, pet.energy - 20);
+            pet.experience += 10;
+            pet.stats = pet.stats || {};
+            pet.stats.playdates = (pet.stats.playdates || 0) + 1;
+
+            targetPet.happiness = Math.min(100, targetPet.happiness + 30);
+            targetPet.energy = Math.max(0, targetPet.energy - 20);
+            targetPet.experience += 10;
+            targetPet.stats = targetPet.stats || {};
+            targetPet.stats.playdates = (targetPet.stats.playdates || 0) + 1;
+
+            savePet(userId, pet);
+            savePet(targetUser.id, targetPet);
+
+            checkAchievements(userId, pet, message.channel);
+            checkAchievements(targetUser.id, targetPet, message.channel);
+
+            const playdateCard = await createPlaydateCard(pet, targetPet, message.author, targetUser);
+            const attachment = new AttachmentBuilder(playdateCard.toBuffer(), { name: 'playdate.png' });
+
+            const embed = new EmbedBuilder()
+                .setTitle('🎉 Playdate Success!')
+                .setColor('#ff69b4')
+                .setDescription(`**${pet.name} and ${targetPet.name} had a wonderful playdate!**`)
+                .setImage('attachment://playdate.png')
+                .setFooter({ text: 'Both pets had a great time together!' })
+                .setTimestamp();
+
+            return message.channel.send({ embeds: [embed], files: [attachment] });
+        }
+
+        // Rename pet command
+        if (args[0] === '!renamepet' && args[1]) {
+            const userId = message.author.id;
+            const pet = getPet(userId);
+
+            if (!pet) {
+                return message.channel.send('❌ You don\'t have a pet! Use `!adopt` to get one.');
+            }
+
+            const newName = args.slice(1).join(' ').substring(0, 30);
+            const oldName = pet.name;
+
+            pet.name = newName;
+            savePet(userId, pet);
+
+            return message.channel.send(`✅ Successfully renamed your pet from **${oldName}** to **${newName}**! ${PET_TYPES[pet.type].emoji}`);
+        }
     });
 
     // Handle button and select menu interactions
@@ -625,10 +1092,122 @@ module.exports = (client) => {
             await interaction.reply({ embeds: [embed], files: [attachment] });
         }
 
+        // Handle fetch game buttons
+        if (interaction.isButton() && (interaction.customId.startsWith('fetch_'))) {
+            const parts = interaction.customId.split('_');
+            const direction = parts[1];
+            const userId = parts[2];
+
+            if (interaction.user.id !== userId) {
+                return interaction.reply({ content: '❌ This is not your game!', ephemeral: true });
+            }
+
+            const game = activeGames.get(userId);
+            if (!game || game.type !== 'fetch') {
+                return interaction.reply({ content: '❌ No active fetch game found!', ephemeral: true });
+            }
+
+            const directionMap = { left: '⬅️', right: '➡️', up: '⬆️', down: '⬇️' };
+            const clickedDirection = directionMap[direction];
+
+            if (game.sequence[game.currentStep] === clickedDirection) {
+                game.currentStep++;
+
+                if (game.currentStep >= game.sequence.length) {
+                    // Game won!
+                    activeGames.delete(userId);
+
+                    const pet = getPet(userId);
+                    pet.happiness = Math.min(100, pet.happiness + 25);
+                    pet.energy = Math.max(0, pet.energy - 25);
+                    pet.experience += 15;
+
+                    const reward = Math.floor(Math.random() * 100) + 50;
+                    updateBobbyBucks(userId, reward);
+                    savePet(userId, pet);
+
+                    return interaction.reply({
+                        content: `🎉 **Perfect!** ${pet.name} caught the ball!\n+25 Happiness, +15 XP, +??${reward}!`,
+                        ephemeral: false
+                    });
+                } else {
+                    return interaction.reply({
+                        content: `✅ Correct! Keep going... (${game.currentStep}/${game.sequence.length})`,
+                        ephemeral: true
+                    });
+                }
+            } else {
+                // Game lost
+                activeGames.delete(userId);
+                return interaction.reply({
+                    content: `❌ Wrong direction! ${game.pet.name} missed the ball!`,
+                    ephemeral: false
+                });
+            }
+        }
+
+        // Handle treasure hunt buttons
+        if (interaction.isButton() && interaction.customId.startsWith('treasure_')) {
+            const parts = interaction.customId.split('_');
+            const spot = parseInt(parts[1]);
+            const userId = parts[2];
+
+            if (interaction.user.id !== userId) {
+                return interaction.reply({ content: '❌ This is not your game!', ephemeral: true });
+            }
+
+            const game = activeGames.get(userId);
+            if (!game || game.type !== 'treasure') {
+                return interaction.reply({ content: '❌ No active treasure hunt found!', ephemeral: true });
+            }
+
+            game.attempts++;
+
+            if (spot === game.treasureSpot) {
+                // Found treasure!
+                activeGames.delete(userId);
+
+                const pet = getPet(userId);
+                const reward = Math.floor(Math.random() * 200) + 150;
+                pet.happiness = Math.min(100, pet.happiness + 30);
+                pet.energy = Math.max(0, pet.energy - 30);
+                pet.experience += 20;
+                pet.stats = pet.stats || {};
+                pet.stats.treasures_found = (pet.stats.treasures_found || 0) + 1;
+
+                updateBobbyBucks(userId, reward);
+                savePet(userId, pet);
+                checkAchievements(userId, pet, interaction.channel);
+
+                return interaction.reply({
+                    content: `💎 **TREASURE FOUND!** ${pet.name} dug up treasure!\n+30 Happiness, +20 XP, +??${reward}!`,
+                    ephemeral: false
+                });
+            } else if (game.attempts >= game.maxAttempts) {
+                // Out of attempts
+                activeGames.delete(userId);
+
+                const pet = getPet(userId);
+                pet.energy = Math.max(0, pet.energy - 15);
+                savePet(userId, pet);
+
+                return interaction.reply({
+                    content: `😞 No treasure found! ${pet.name} is tired from digging. The treasure was at spot ${game.treasureSpot + 1}.`,
+                    ephemeral: false
+                });
+            } else {
+                // Keep trying
+                return interaction.reply({
+                    content: `❌ Nothing here! ${game.maxAttempts - game.attempts} attempts remaining.`,
+                    ephemeral: true
+                });
+            }
+        }
+
         // Handle pet care buttons
         if (interaction.isButton() && interaction.customId.startsWith('pet_')) {
-            const [prefix, action, userId] = interaction.customId.split('_');
-            
+            const [, action, userId] = interaction.customId.split('_');
+
             if (interaction.user.id !== userId) {
                 return interaction.reply({ content: '❌ This is not your pet!', ephemeral: true });
             }
@@ -714,26 +1293,6 @@ module.exports = (client) => {
     });
 
     // Pet management functions
-    function createNewPet(type, name) {
-        return {
-            type: type,
-            name: name,
-            hunger: 100,
-            happiness: 100,
-            health: 100,
-            energy: 100,
-            cleanliness: 100,
-            level: 1,
-            experience: 0,
-            age: 0,
-            created: Date.now(),
-            lastFed: Date.now(),
-            lastPlayed: Date.now(),
-            lastCleaned: Date.now(),
-            lastCared: Date.now(),
-            lastTraining: 0
-        };
-    }
 
     function getPet(userId) {
         if (!fs.existsSync(petsFilePath)) {
@@ -1098,11 +1657,45 @@ module.exports = (client) => {
         ctx.font = '14px Arial';
         ctx.textAlign = 'center';
         ctx.fillText(`Owner: ${user.username}`, 80, 165);
-        
-        // Pet emoji (large)
+
+        // Pet emoji (large) with glow effect
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+        ctx.shadowBlur = 20;
         ctx.font = '80px Arial';
         ctx.textAlign = 'center';
         ctx.fillText(PET_TYPES[pet.type].emoji, 350, 150);
+        ctx.shadowBlur = 0;
+
+        // Personality badge
+        if (pet.personality) {
+            const personality = PERSONALITIES[pet.personality];
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(280, 160, 140, 30);
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(280, 160, 140, 30);
+
+            ctx.fillStyle = '#FFD700';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${personality.emoji} ${pet.personality.toUpperCase()}`, 350, 180);
+        }
+
+        // Mood indicator
+        const mood = getPetMood(pet);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(450, 50, 120, 40);
+        ctx.strokeStyle = mood.threshold >= 70 ? '#90EE90' : mood.threshold >= 30 ? '#FFD700' : '#FF6B6B';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(450, 50, 120, 40);
+
+        ctx.font = '24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(mood.emoji, 480, 75);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 10px Arial';
+        ctx.fillText('MOOD', 535, 75);
         
         // Stats bars with softer colors
         const stats = [
@@ -1568,6 +2161,568 @@ module.exports = (client) => {
         });
         
         return canvas;
+    }
+
+    // NEW HELPER FUNCTIONS
+
+    async function createMoodCard(pet, user) {
+        const canvas = createCanvas(500, 350);
+        const ctx = canvas.getContext('2d');
+
+        // Gradient background based on mood
+        const mood = getPetMood(pet);
+        const gradient = ctx.createLinearGradient(0, 0, 0, 350);
+
+        if (mood.threshold >= 70) {
+            gradient.addColorStop(0, '#FFD700');
+            gradient.addColorStop(1, '#FFA500');
+        } else if (mood.threshold >= 30) {
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(1, '#4682B4');
+        } else {
+            gradient.addColorStop(0, '#778899');
+            gradient.addColorStop(1, '#2F4F4F');
+        }
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 500, 350);
+
+        // Title
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(0, 0, 500, 60);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 28px Arial';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 5;
+        ctx.fillText(`${PET_TYPES[pet.type].emoji} ${pet.name}'s Mood`, 250, 40);
+        ctx.shadowBlur = 0;
+
+        // Large mood emoji
+        ctx.font = '100px Arial';
+        ctx.fillText(mood.emoji, 250, 150);
+
+        // Mood name
+        const moodName = Object.keys(MOODS).find(k => MOODS[k].emoji === mood.emoji);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 32px Arial';
+        ctx.fillText(moodName.toUpperCase(), 250, 200);
+
+        // Personality badge
+        if (pet.personality) {
+            const personality = PERSONALITIES[pet.personality];
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.fillRect(150, 220, 200, 40);
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(150, 220, 200, 40);
+
+            ctx.fillStyle = '#2c3e50';
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText(`${personality.emoji} ${pet.personality}`, 250, 247);
+        }
+
+        // Thought bubble
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.beginPath();
+        ctx.roundRect(50, 270, 400, 60, 10);
+        ctx.fill();
+        ctx.strokeStyle = '#2c3e50';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = '16px Arial';
+        ctx.fillText(`💭 "${getPetThoughts(pet)}"`, 250, 305);
+
+        return canvas;
+    }
+
+    async function createGameResultCard(type, result, pet, reward) {
+        const canvas = createCanvas(600, 400);
+        const ctx = canvas.getContext('2d');
+
+        // Background
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        if (result === 'win') {
+            gradient.addColorStop(0, '#FFD700');
+            gradient.addColorStop(1, '#FF8C00');
+        } else if (result === 'place') {
+            gradient.addColorStop(0, '#C0C0C0');
+            gradient.addColorStop(1, '#696969');
+        } else {
+            gradient.addColorStop(0, '#4682B4');
+            gradient.addColorStop(1, '#1E3A5F');
+        }
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 600, 400);
+
+        // Decorative elements
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        for (let i = 0; i < 20; i++) {
+            const x = Math.random() * 600;
+            const y = Math.random() * 400;
+            const size = Math.random() * 30 + 10;
+            ctx.font = `${size}px Arial`;
+            ctx.fillText(result === 'win' ? '⭐' : '🎮', x, y);
+        }
+
+        // Pet emoji (large)
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 15;
+        ctx.font = '120px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(PET_TYPES[pet.type].emoji, 300, 180);
+        ctx.shadowBlur = 0;
+
+        // Result text
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 48px Arial';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+        ctx.shadowBlur = 10;
+
+        if (result === 'win') {
+            ctx.fillText('🏆 VICTORY! 🏆', 300, 260);
+        } else if (result === 'place') {
+            ctx.fillText('🥈 NICE TRY! 🥈', 300, 260);
+        } else {
+            ctx.fillText('💪 KEEP TRYING! 💪', 300, 260);
+        }
+
+        // Reward info
+        if (reward > 0) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(200, 290, 200, 50);
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(200, 290, 200, 50);
+
+            ctx.fillStyle = '#FFD700';
+            ctx.font = 'bold 28px Arial';
+            ctx.fillText(`+¢${reward}`, 300, 325);
+        }
+
+        ctx.shadowBlur = 0;
+
+        return canvas;
+    }
+
+    async function createAdventureCard(pet, event) {
+        const canvas = createCanvas(600, 400);
+        const ctx = canvas.getContext('2d');
+
+        // Adventure background
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, '#228B22');
+        gradient.addColorStop(0.5, '#2E8B57');
+        gradient.addColorStop(1, '#006400');
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 600, 400);
+
+        // Adventure elements
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        const adventureEmojis = ['🌲', '🗻', '🏔️', '🌳', '🍃'];
+        for (let i = 0; i < 25; i++) {
+            const x = Math.random() * 600;
+            const y = Math.random() * 400;
+            const size = Math.random() * 20 + 15;
+            ctx.font = `${size}px Arial`;
+            ctx.fillText(adventureEmojis[Math.floor(Math.random() * adventureEmojis.length)], x, y);
+        }
+
+        // Title banner
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(0, 30, 600, 60);
+
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 36px Arial';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+        ctx.shadowBlur = 10;
+        ctx.fillText('🗺️ ADVENTURE COMPLETE! 🗺️', 300, 70);
+
+        // Pet with event indicator
+        ctx.shadowBlur = 20;
+        ctx.font = '100px Arial';
+        ctx.fillText(PET_TYPES[pet.type].emoji, 300, 200);
+
+        // Event result box
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.fillRect(50, 250, 500, 100);
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(50, 250, 500, 100);
+
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = 'bold 20px Arial';
+        ctx.fillText(`${pet.name} ${event.message}`, 300, 285);
+
+        // Rewards
+        if (event.reward) {
+            ctx.font = 'bold 24px Arial';
+            ctx.fillStyle = '#228B22';
+            ctx.fillText(`💰 Reward: ¢${event.reward.amount}`, 300, 325);
+        }
+
+        return canvas;
+    }
+
+    async function createPlaydateCard(pet1, pet2, user1, user2) {
+        const canvas = createCanvas(700, 400);
+        const ctx = canvas.getContext('2d');
+
+        // Happy background
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, '#FF69B4');
+        gradient.addColorStop(0.5, '#FFB6C1');
+        gradient.addColorStop(1, '#FF1493');
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 700, 400);
+
+        // Hearts decoration
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        for (let i = 0; i < 30; i++) {
+            const x = Math.random() * 700;
+            const y = Math.random() * 400;
+            const size = Math.random() * 25 + 15;
+            ctx.font = `${size}px Arial`;
+            ctx.fillText('💕', x, y);
+        }
+
+        // Title
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(0, 20, 700, 70);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 42px Arial';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 10;
+        ctx.fillText('🎉 PLAYDATE SUCCESS! 🎉', 350, 70);
+
+        // Pet 1
+        ctx.shadowBlur = 15;
+        ctx.font = '90px Arial';
+        ctx.fillText(PET_TYPES[pet1.type].emoji, 180, 200);
+
+        // Heart between
+        ctx.font = '50px Arial';
+        ctx.fillText('💝', 350, 200);
+
+        // Pet 2
+        ctx.font = '90px Arial';
+        ctx.fillText(PET_TYPES[pet2.type].emoji, 520, 200);
+
+        // Names
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(100, 230, 160, 40);
+        ctx.fillRect(440, 230, 160, 40);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 18px Arial';
+        ctx.fillText(pet1.name, 180, 257);
+        ctx.fillText(pet2.name, 520, 257);
+
+        // Benefits box
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.fillRect(150, 300, 400, 70);
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(150, 300, 400, 70);
+
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = 'bold 18px Arial';
+        ctx.fillText('Both pets gained:', 350, 330);
+        ctx.font = '16px Arial';
+        ctx.fillText('😊 +30 Happiness  ⭐ +10 XP  ⚡ -20 Energy', 350, 355);
+
+        return canvas;
+    }
+
+    async function createAchievementCard(achievement, pet) {
+        const canvas = createCanvas(600, 350);
+        const ctx = canvas.getContext('2d');
+
+        // Golden background
+        const gradient = ctx.createLinearGradient(0, 0, 0, 350);
+        gradient.addColorStop(0, '#FFD700');
+        gradient.addColorStop(0.5, '#FFA500');
+        gradient.addColorStop(1, '#FF8C00');
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 600, 350);
+
+        // Sparkles
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        for (let i = 0; i < 50; i++) {
+            const x = Math.random() * 600;
+            const y = Math.random() * 350;
+            const size = Math.random() * 3 + 1;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Achievement banner
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 40, 600, 80);
+
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 38px Arial';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 15;
+        ctx.fillText('🏆 ACHIEVEMENT UNLOCKED! 🏆', 300, 90);
+
+        // Achievement emoji
+        ctx.shadowBlur = 20;
+        ctx.font = '100px Arial';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(achievement.emoji, 300, 190);
+
+        // Achievement name
+        ctx.shadowBlur = 10;
+        ctx.font = 'bold 32px Arial';
+        ctx.fillText(achievement.name, 300, 250);
+
+        // Reward box
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(200, 280, 200, 50);
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(200, 280, 200, 50);
+
+        ctx.fillStyle = '#00FF00';
+        ctx.font = 'bold 26px Arial';
+        ctx.fillText(`+¢${achievement.reward}`, 300, 313);
+
+        return canvas;
+    }
+
+    function createNewPet(type, name) {
+        const personalities = Object.keys(PERSONALITIES);
+        const randomPersonality = personalities[Math.floor(Math.random() * personalities.length)];
+
+        return {
+            type: type,
+            name: name,
+            personality: randomPersonality,
+            hunger: 100,
+            happiness: 100,
+            health: 100,
+            energy: 100,
+            cleanliness: 100,
+            level: 1,
+            experience: 0,
+            age: 0,
+            created: Date.now(),
+            lastFed: Date.now(),
+            lastPlayed: Date.now(),
+            lastCleaned: Date.now(),
+            lastCared: Date.now(),
+            lastTraining: 0,
+            lastAdventure: 0,
+            stats: {
+                care_count: 0,
+                train_count: 0,
+                race_wins: 0,
+                treasures_found: 0,
+                playdates: 0
+            }
+        };
+    }
+
+    function getPetMood(pet) {
+        const avgStat = (pet.hunger + pet.happiness + pet.health + pet.energy + pet.cleanliness) / 5;
+
+        for (const [key, mood] of Object.entries(MOODS)) {
+            if (avgStat >= mood.threshold) {
+                return mood;
+            }
+        }
+
+        return MOODS.sick;
+    }
+
+    function getPetThoughts(pet) {
+        const thoughts = [];
+
+        if (pet.hunger < 30) thoughts.push("I'm so hungry...");
+        else if (pet.hunger > 90) thoughts.push("My belly is full!");
+
+        if (pet.happiness < 30) thoughts.push("I'm feeling sad...");
+        else if (pet.happiness > 90) thoughts.push("Life is amazing!");
+
+        if (pet.energy < 30) thoughts.push("I need to rest...");
+        else if (pet.energy > 90) thoughts.push("I'm full of energy!");
+
+        if (pet.cleanliness < 30) thoughts.push("I need a bath!");
+
+        if (thoughts.length === 0) {
+            const defaultThoughts = [
+                "What's my owner up to?",
+                "I wonder what's for dinner!",
+                "Life is good!",
+                "Time for some fun!",
+                "I love my owner!"
+            ];
+            return defaultThoughts[Math.floor(Math.random() * defaultThoughts.length)];
+        }
+
+        return thoughts[Math.floor(Math.random() * thoughts.length)];
+    }
+
+    function triggerRandomEvent(pet) {
+        const event = RANDOM_EVENTS[Math.floor(Math.random() * RANDOM_EVENTS.length)];
+
+        // Apply effects
+        if (event.effect) {
+            if (event.effect.hunger) pet.hunger = Math.max(0, Math.min(100, pet.hunger + event.effect.hunger));
+            if (event.effect.happiness) pet.happiness = Math.max(0, Math.min(100, pet.happiness + event.effect.happiness));
+            if (event.effect.health) pet.health = Math.max(0, Math.min(100, pet.health + event.effect.health));
+            if (event.effect.energy) pet.energy = Math.max(0, Math.min(100, pet.energy + event.effect.energy));
+            if (event.effect.cleanliness) pet.cleanliness = Math.max(0, Math.min(100, pet.cleanliness + event.effect.cleanliness));
+            if (event.effect.experience) pet.experience += event.effect.experience;
+        }
+
+        // Track stats
+        if (event.stat) {
+            pet.stats = pet.stats || {};
+            pet.stats[event.stat] = (pet.stats[event.stat] || 0) + 1;
+        }
+
+        return event;
+    }
+
+    function getEventResults(event, pet) {
+        const results = [];
+
+        if (event.reward) {
+            if (event.reward.type === 'bobby_bucks') {
+                results.push(`💰 Found ??${event.reward.amount}`);
+            }
+        }
+
+        if (event.effect) {
+            if (event.effect.hunger) results.push(`🍽️ ${event.effect.hunger > 0 ? '+' : ''}${event.effect.hunger} Hunger`);
+            if (event.effect.happiness) results.push(`😊 ${event.effect.happiness > 0 ? '+' : ''}${event.effect.happiness} Happiness`);
+            if (event.effect.health) results.push(`❤️ ${event.effect.health > 0 ? '+' : ''}${event.effect.health} Health`);
+            if (event.effect.energy) results.push(`⚡ ${event.effect.energy > 0 ? '+' : ''}${event.effect.energy} Energy`);
+            if (event.effect.cleanliness) results.push(`🛁 ${event.effect.cleanliness > 0 ? '+' : ''}${event.effect.cleanliness} Cleanliness`);
+            if (event.effect.experience) results.push(`⭐ +${event.effect.experience} XP`);
+        }
+
+        return results.length > 0 ? results.join('\n') : 'Nothing happened...';
+    }
+
+    function getPetAchievements(userId) {
+        if (!fs.existsSync(petAchievementsFilePath)) {
+            fs.writeFileSync(petAchievementsFilePath, '', 'utf-8');
+            return [];
+        }
+
+        const data = fs.readFileSync(petAchievementsFilePath, 'utf-8');
+        const userRecord = data.split('\n').find(line => line.startsWith(`${userId}|`));
+
+        if (userRecord) {
+            try {
+                return JSON.parse(userRecord.substring(userRecord.indexOf('|') + 1));
+            } catch (e) {
+                return [];
+            }
+        }
+
+        return [];
+    }
+
+    function savePetAchievements(userId, achievements) {
+        if (!fs.existsSync(petAchievementsFilePath)) {
+            fs.writeFileSync(petAchievementsFilePath, '', 'utf-8');
+        }
+
+        let data = fs.readFileSync(petAchievementsFilePath, 'utf-8').trim();
+        const userRecord = data.split('\n').find(line => line.startsWith(`${userId}|`));
+        const achievementData = `${userId}|${JSON.stringify(achievements)}`;
+
+        if (userRecord) {
+            data = data.replace(userRecord, achievementData);
+        } else {
+            data += `\n${achievementData}`;
+        }
+
+        fs.writeFileSync(petAchievementsFilePath, data.trim(), 'utf-8');
+    }
+
+    async function checkAchievements(userId, pet, channel) {
+        const userAchievements = getPetAchievements(userId);
+        const newAchievements = [];
+
+        for (const [key, achievement] of Object.entries(ACHIEVEMENTS)) {
+            if (userAchievements.includes(key)) continue;
+
+            let unlocked = false;
+
+            switch (achievement.requirement.type) {
+                case 'level':
+                    unlocked = pet.level >= achievement.requirement.value;
+                    break;
+                case 'care_count':
+                    unlocked = (pet.stats?.care_count || 0) >= achievement.requirement.value;
+                    break;
+                case 'train_count':
+                    unlocked = (pet.stats?.train_count || 0) >= achievement.requirement.value;
+                    break;
+                case 'race_wins':
+                    unlocked = (pet.stats?.race_wins || 0) >= achievement.requirement.value;
+                    break;
+                case 'treasures_found':
+                    unlocked = (pet.stats?.treasures_found || 0) >= achievement.requirement.value;
+                    break;
+                case 'playdates':
+                    unlocked = (pet.stats?.playdates || 0) >= achievement.requirement.value;
+                    break;
+                case 'age':
+                    unlocked = pet.age >= achievement.requirement.value;
+                    break;
+            }
+
+            if (unlocked) {
+                userAchievements.push(key);
+                newAchievements.push({ key, achievement });
+                updateBobbyBucks(userId, achievement.reward);
+            }
+        }
+
+        if (newAchievements.length > 0) {
+            savePetAchievements(userId, userAchievements);
+
+            // Display achievement cards
+            if (channel) {
+                for (const { achievement } of newAchievements) {
+                    const achievementCard = await createAchievementCard(achievement, pet);
+                    const attachment = new AttachmentBuilder(achievementCard.toBuffer(), { name: 'achievement.png' });
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('🏆 New Achievement!')
+                        .setColor('#FFD700')
+                        .setDescription(`**${achievement.name}**\n${achievement.description}`)
+                        .setImage('attachment://achievement.png')
+                        .setFooter({ text: `Reward: ¢${achievement.reward} Bobby Bucks!` })
+                        .setTimestamp();
+
+                    await channel.send({ embeds: [embed], files: [attachment] });
+                }
+            }
+        }
+
+        return newAchievements;
     }
 };
 

@@ -17,3 +17,4 @@ wordle_scores.txt
 .claude/settings.local.json
 /.claude
 /node_modules
+user_memories.txt

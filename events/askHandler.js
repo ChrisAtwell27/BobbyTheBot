@@ -324,7 +324,22 @@ When users ask about gambling, give them CLEAR, STRATEGIC advice based on game m
   * Preferences they express → Use in recommendations
 - If they say "I love X", "X is my favorite", "I hate Y" → Remember and use this info
 - Don't ask them to use !setmemory - just naturally incorporate what you learn
-- Build understanding of each user organically through conversation`;
+- Build understanding of each user organically through conversation
+
+**AUTOMATIC MEMORY SAVING:**
+When you detect important user preferences or requests that should persist forever, you can automatically save them by including a special marker in your response:
+[SAVE_MEMORY: description of what to remember]
+
+Examples of when to auto-save:
+- User says "call me [name]" or "refer to me as [nickname]" → [SAVE_MEMORY: Prefers to be called [name]]
+- User says "only respond with one word answers" → [SAVE_MEMORY: Only respond with one-word answers]
+- User says "always use emojis when talking to me" → [SAVE_MEMORY: Always use lots of emojis in responses]
+- User says "I hate [game]" → [SAVE_MEMORY: Hates [game], never suggest it]
+- User says "my favorite game is [game]" → [SAVE_MEMORY: Favorite game is [game]]
+- User shares personal info they want remembered → [SAVE_MEMORY: relevant detail]
+
+IMPORTANT: Place [SAVE_MEMORY: ...] at the END of your response. It will be hidden from the user.
+Keep the memory description concise but clear. Update/append to existing memories when new info comes in.`;
 
 // Function to get or create conversation history for a user
 function getConversationHistory(userId) {
@@ -413,9 +428,40 @@ async function getBobbyResponse(userId, userMessage) {
             frequency_penalty: 0.3 // Reduce repetition
         });
 
-        const response = completion.choices[0].message.content.trim();
+        let response = completion.choices[0].message.content.trim();
 
-        // Add Bobby's response to history
+        // Check for auto-save memory marker
+        const memorySaveRegex = /\[SAVE_MEMORY:\s*(.+?)\]/g;
+        const memoryMatches = [...response.matchAll(memorySaveRegex)];
+
+        if (memoryMatches.length > 0) {
+            // Extract all memory saves
+            const newMemories = memoryMatches.map(match => match[1].trim());
+
+            // Get existing memory
+            const existingMemory = getUserMemory(userId);
+
+            // Combine memories
+            let updatedMemory;
+            if (existingMemory) {
+                // Append new memories to existing
+                updatedMemory = `${existingMemory}. ${newMemories.join('. ')}`;
+            } else {
+                // Create new memory
+                updatedMemory = newMemories.join('. ');
+            }
+
+            // Save to file
+            const saved = saveUserMemory(userId, updatedMemory);
+            if (saved) {
+                console.log(`🤖 Bobby auto-saved memory for user ${userId}`);
+            }
+
+            // Remove the [SAVE_MEMORY: ...] markers from the response
+            response = response.replace(memorySaveRegex, '').trim();
+        }
+
+        // Add Bobby's response to history (without the memory markers)
         addToHistory(userId, 'assistant', response);
 
         return response;
