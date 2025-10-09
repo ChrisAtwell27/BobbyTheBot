@@ -381,6 +381,49 @@ module.exports = (client) => {
 
             return message.channel.send({ embeds: [embed], files: [attachment] });
         }
+
+        // Command to reset everyone's honey to 5000 (Top Egg only)
+        if (args[0].toLowerCase() === '!clearhoney') {
+            console.log('!clearhoney command detected');
+            console.log('User roles:', [...userRoles.keys()]);
+            console.log('Top Egg Role ID:', topEggRoleId);
+            console.log('Has Top Egg role:', userRoles.has(topEggRoleId));
+
+            if (!userRoles.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            }
+
+            try {
+                console.log('Starting honey reset...');
+                // Import User model
+                const User = require('../database/models/User');
+
+                // Reset all balances to 5000
+                const result = await User.updateMany(
+                    {},
+                    { $set: { balance: 5000 } }
+                );
+
+                console.log('Honey reset complete. Modified:', result.modifiedCount);
+
+                const embed = new EmbedBuilder()
+                    .setTitle('💰 Economy Reset - Honey Wiped')
+                    .setColor('#FF6B00')
+                    .setDescription('**All user balances have been reset to 5000 honey!**')
+                    .addFields(
+                        { name: '👥 Users Affected', value: `${result.modifiedCount}`, inline: true },
+                        { name: '💰 New Balance', value: '**🍯5,000**', inline: true },
+                        { name: '👤 Reset By', value: `${message.author.username}`, inline: true }
+                    )
+                    .setFooter({ text: 'The great honey redistribution of 2025' })
+                    .setTimestamp();
+
+                message.channel.send({ embeds: [embed] });
+            } catch (error) {
+                console.error('Error resetting honey balances:', error);
+                message.channel.send('An error occurred while resetting honey balances. Check console for details.');
+            }
+        }
     });
 
     // Handle button interactions for donations
@@ -472,49 +515,6 @@ module.exports = (client) => {
                 await originalMessage.edit({ embeds: [updatedEmbed], files: [updatedAttachment] });
             } catch (error) {
                 console.error('Error updating tip jar:', error);
-            }
-        }
-
-        // Command to reset everyone's honey to 5000 (Top Egg only)
-        if (args[0].toLowerCase() === '!clearhoney') {
-            console.log('!clearhoney command detected');
-            console.log('User roles:', [...userRoles.keys()]);
-            console.log('Top Egg Role ID:', topEggRoleId);
-            console.log('Has Top Egg role:', userRoles.has(topEggRoleId));
-
-            if (!userRoles.has(topEggRoleId)) {
-                return message.reply("You don't have permission to use this command. (Top Egg only)");
-            }
-
-            try {
-                console.log('Starting honey reset...');
-                // Import User model
-                const User = require('../database/models/User');
-
-                // Reset all balances to 5000
-                const result = await User.updateMany(
-                    {},
-                    { $set: { balance: 5000 } }
-                );
-
-                console.log('Honey reset complete. Modified:', result.modifiedCount);
-
-                const embed = new EmbedBuilder()
-                    .setTitle('💰 Economy Reset - Honey Wiped')
-                    .setColor('#FF6B00')
-                    .setDescription('**All user balances have been reset to 5000 honey!**')
-                    .addFields(
-                        { name: '👥 Users Affected', value: `${result.modifiedCount}`, inline: true },
-                        { name: '💰 New Balance', value: '**🍯5,000**', inline: true },
-                        { name: '👤 Reset By', value: `${message.author.username}`, inline: true }
-                    )
-                    .setFooter({ text: 'The great honey redistribution of 2025' })
-                    .setTimestamp();
-
-                message.channel.send({ embeds: [embed] });
-            } catch (error) {
-                console.error('Error resetting honey balances:', error);
-                message.channel.send('An error occurred while resetting honey balances. Check console for details.');
             }
         }
     });
