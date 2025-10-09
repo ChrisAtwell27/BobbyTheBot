@@ -133,7 +133,7 @@ async function createTeamVisualization(team) {
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 28px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('🎯 VALORANT TEAM BUILDER', 350, 40);
+    ctx.fillText('VALORANT TEAM BUILDER', 350, 40);
     ctx.shadowBlur = 0;
     
     // Team status
@@ -196,12 +196,12 @@ async function createTeamVisualization(team) {
                 
                 // Enhanced leader crown
                 if (i === 0) {
-                    ctx.font = '24px Arial';
+                    ctx.font = 'bold 16px Arial';
                     ctx.fillStyle = '#ffd700';
                     ctx.textAlign = 'center';
                     ctx.shadowColor = '#ffd700';
                     ctx.shadowBlur = 5;
-                    ctx.fillText('👑', x + slotWidth/2, y - 5);
+                    ctx.fillText('LEADER', x + slotWidth/2, y - 5);
                     ctx.shadowBlur = 0;
                 }
                 
@@ -257,9 +257,9 @@ async function createTeamVisualization(team) {
                 ctx.fill();
                 
                 ctx.fillStyle = '#ffffff';
-                ctx.font = '30px Arial';
+                ctx.font = '24px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText('👤', x + slotWidth/2, y + 50);
+                ctx.fillText('?', x + slotWidth/2, y + 50);
             }
         } else {
             // Enhanced empty slot

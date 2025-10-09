@@ -165,7 +165,7 @@ async function createInhouseVisualization(inhouse, showTeams = false, balancedTe
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 28px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('🏆 VALORANT IN-HOUSE', 550, 40);
+    ctx.fillText('VALORANT IN-HOUSE', 550, 40);
     ctx.shadowBlur = 0;
     
     // Status based on whether teams are balanced
@@ -285,12 +285,12 @@ async function drawPlayerSlot(ctx, member, x, y, width, height, slotNum, teamCol
             
             // Enhanced leader crown
             if (slotNum === 1) {
-                ctx.font = '20px Arial';
+                ctx.font = 'bold 14px Arial';
                 ctx.fillStyle = '#ffd700';
                 ctx.textAlign = 'center';
                 ctx.shadowColor = '#ffd700';
                 ctx.shadowBlur = 5;
-                ctx.fillText('👑', x + width/2, y - 5);
+                ctx.fillText('HOST', x + width/2, y - 5);
                 ctx.shadowBlur = 0;
             }
             
@@ -345,9 +345,9 @@ async function drawPlayerSlot(ctx, member, x, y, width, height, slotNum, teamCol
             ctx.fill();
             
             ctx.fillStyle = '#ffffff';
-            ctx.font = '25px Arial';
+            ctx.font = '22px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('👤', x + width/2, y + 45);
+            ctx.fillText('?', x + width/2, y + 45);
         }
     } else {
         // Enhanced empty slot
