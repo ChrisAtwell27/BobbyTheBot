@@ -1,5 +1,6 @@
 const WordleScore = require('../database/models/WordleScore');
 const { updateBobbyBucks } = require('../database/helpers/economyHelpers');
+const { topEggRoleId } = require('../data/config');
 
 const WORDLE_CHANNEL_ID = '1382796270036586608';
 
@@ -15,21 +16,36 @@ const HONEY_REWARDS = {
 };
 
 // Add a score for a user and award honey
-async function addScore(userId, score, timestamp = null) {
+// skipHoney: if true, don't award honey (for backfill operations)
+async function addScore(userId, score, timestamp = null, skipHoney = false) {
     try {
-        const honeyAwarded = HONEY_REWARDS[score] || 0;
+        const honeyAwarded = skipHoney ? 0 : (HONEY_REWARDS[score] || 0);
 
-        // Save score to database
-        const wordleScore = new WordleScore({
-            userId,
+        // Find or create user's Wordle document
+        let userWordle = await WordleScore.findOne({ userId });
+
+        if (!userWordle) {
+            userWordle = new WordleScore({
+                userId,
+                scores: [],
+                totalGames: 0,
+                totalHoney: 0
+            });
+        }
+
+        // Add the new score
+        userWordle.scores.push({
             score,
             timestamp: timestamp || Date.now(),
             honeyAwarded
         });
-        await wordleScore.save();
+        userWordle.totalGames++;
+        userWordle.totalHoney += honeyAwarded;
 
-        // Award honey to user
-        if (honeyAwarded > 0) {
+        await userWordle.save();
+
+        // Award honey to user's balance (only if not skipping)
+        if (!skipHoney && honeyAwarded > 0) {
             await updateBobbyBucks(userId, honeyAwarded);
         }
 
@@ -100,54 +116,42 @@ function parseWordleMessage(content) {
 // timeFilter: optional object with { start: Date, end: Date } to filter by time range
 async function calculateStats(timeFilter = null) {
     try {
-        // Build query filter
-        const filter = {};
-        if (timeFilter) {
-            filter.timestamp = {
-                $gte: timeFilter.start,
-                $lte: timeFilter.end
-            };
-        }
+        // Get all user Wordle documents
+        const allUserWordles = await WordleScore.find({}).lean();
+        const result = {};
 
-        // Aggregate scores by user
-        const scores = await WordleScore.find(filter).lean();
-        const userStats = {};
+        allUserWordles.forEach(userWordle => {
+            // Filter scores by time range if specified
+            let filteredScores = userWordle.scores;
+            if (timeFilter) {
+                filteredScores = userWordle.scores.filter(s => {
+                    const scoreDate = new Date(s.timestamp);
+                    return scoreDate >= timeFilter.start && scoreDate <= timeFilter.end;
+                });
+            }
 
-        // Group scores by userId
-        scores.forEach(scoreDoc => {
-            if (!userStats[scoreDoc.userId]) {
-                userStats[scoreDoc.userId] = {
-                    scores: [],
-                    totalScore: 0,
-                    totalGames: 0
+            if (filteredScores.length > 0) {
+                const scoreValues = filteredScores.map(s => s.score);
+                const totalScore = scoreValues.reduce((sum, s) => sum + s, 0);
+                const bestScore = Math.min(...scoreValues);
+                const avgScore = totalScore / filteredScores.length;
+
+                // Calculate weighted score that HEAVILY favors volume
+                // Lower is better. Exponential penalty for low game counts.
+                // Formula: avgScore * (50 / games)^0.7
+                // This means more games = exponentially better score
+                const volumeMultiplier = Math.pow(50 / filteredScores.length, 0.7);
+                const weightedScore = avgScore * volumeMultiplier;
+
+                result[userWordle.userId] = {
+                    totalGames: filteredScores.length,
+                    totalScore: totalScore,
+                    bestScore: bestScore,
+                    avgScore: avgScore,
+                    weightedScore: weightedScore,
+                    scores: scoreValues
                 };
             }
-            userStats[scoreDoc.userId].scores.push(scoreDoc.score);
-            userStats[scoreDoc.userId].totalScore += scoreDoc.score;
-            userStats[scoreDoc.userId].totalGames++;
-        });
-
-        // Calculate stats for each user
-        const result = {};
-        Object.entries(userStats).forEach(([userId, data]) => {
-            const avgScore = data.totalScore / data.totalGames;
-            const bestScore = Math.min(...data.scores);
-
-            // Calculate weighted score that HEAVILY favors volume
-            // Lower is better. Exponential penalty for low game counts.
-            // Formula: avgScore * (50 / games)^0.7
-            // This means more games = exponentially better score
-            const volumeMultiplier = Math.pow(50 / data.totalGames, 0.7);
-            const weightedScore = avgScore * volumeMultiplier;
-
-            result[userId] = {
-                totalGames: data.totalGames,
-                totalScore: data.totalScore,
-                bestScore: bestScore,
-                avgScore: avgScore,
-                weightedScore: weightedScore,
-                scores: data.scores
-            };
         });
 
         return result;
@@ -502,7 +506,8 @@ module.exports = (client) => {
                                 }
 
                                 if (member) {
-                                    const scoreResult = await addScore(member.id, result.score);
+                                    // Pass true for skipHoney to not award honey for backfilled scores
+                                    const scoreResult = await addScore(member.id, result.score, null, true);
                                     if (scoreResult.success) {
                                         totalScores++;
                                     }
@@ -517,10 +522,39 @@ module.exports = (client) => {
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 }
 
-                message.channel.send(`Backfill complete! Processed ${totalMessages} Wordle result messages and added ${totalScores} new scores.`);
+                message.channel.send(`Backfill complete! Processed ${totalMessages} Wordle result messages and added ${totalScores} new scores. (No honey awarded for backfilled scores)`);
             } catch (error) {
                 console.error('Error during backfill:', error);
                 message.channel.send('L An error occurred during backfill. Check console for details.');
+            }
+        }
+
+        // Handle !clearwordle command (Top Egg only)
+        if (message.content.toLowerCase() === '!clearwordle') {
+            // Check if user has Top Egg role
+            if (!message.member.roles.cache.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            }
+
+            try {
+                const result = await WordleScore.deleteMany({});
+
+                const { EmbedBuilder } = require('discord.js');
+                const embed = new EmbedBuilder()
+                    .setTitle('🗑️ Wordle Data Cleared')
+                    .setColor('#FF0000')
+                    .setDescription(`Successfully cleared all Wordle scores!`)
+                    .addFields(
+                        { name: '📊 Users Cleared', value: `${result.deletedCount}`, inline: true },
+                        { name: '👤 Cleared By', value: `${message.author.username}`, inline: true }
+                    )
+                    .setFooter({ text: 'All Wordle history has been wiped.' })
+                    .setTimestamp();
+
+                message.channel.send({ embeds: [embed] });
+            } catch (error) {
+                console.error('Error clearing Wordle data:', error);
+                message.channel.send('An error occurred while clearing Wordle data. Check console for details.');
             }
         }
     });

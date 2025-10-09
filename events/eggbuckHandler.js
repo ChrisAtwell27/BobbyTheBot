@@ -466,6 +466,41 @@ module.exports = (client) => {
                 console.error('Error updating tip jar:', error);
             }
         }
+
+        // Command to reset everyone's honey to 5000 (Top Egg only)
+        if (args[0] === '!clearhoney') {
+            if (!userRoles.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            }
+
+            try {
+                // Import User model
+                const User = require('../database/models/User');
+
+                // Reset all balances to 5000
+                const result = await User.updateMany(
+                    {},
+                    { $set: { balance: 5000 } }
+                );
+
+                const embed = new EmbedBuilder()
+                    .setTitle('💰 Economy Reset - Honey Wiped')
+                    .setColor('#FF6B00')
+                    .setDescription('**All user balances have been reset to 5000 honey!**')
+                    .addFields(
+                        { name: '👥 Users Affected', value: `${result.modifiedCount}`, inline: true },
+                        { name: '💰 New Balance', value: '**🍯5,000**', inline: true },
+                        { name: '👤 Reset By', value: `${message.author.username}`, inline: true }
+                    )
+                    .setFooter({ text: 'The great honey redistribution of 2025' })
+                    .setTimestamp();
+
+                message.channel.send({ embeds: [embed] });
+            } catch (error) {
+                console.error('Error resetting honey balances:', error);
+                message.channel.send('An error occurred while resetting honey balances. Check console for details.');
+            }
+        }
     });
 
     // Award 500 Honey to new members on join (silent)

@@ -4,20 +4,30 @@ const wordleScoreSchema = new mongoose.Schema({
     userId: {
         type: String,
         required: true,
+        unique: true,
         index: true
     },
-    score: {
+    scores: [{
+        score: {
+            type: Number,
+            required: true,
+            min: 1,
+            max: 7  // 1-6 for successful games, 7 for failures (X/6)
+        },
+        timestamp: {
+            type: Date,
+            default: Date.now
+        },
+        honeyAwarded: {
+            type: Number,
+            default: 0
+        }
+    }],
+    totalGames: {
         type: Number,
-        required: true,
-        min: 1,
-        max: 7  // 1-6 for successful games, 7 for failures (X/6)
+        default: 0
     },
-    timestamp: {
-        type: Date,
-        default: Date.now,
-        index: true
-    },
-    honeyAwarded: {
+    totalHoney: {
         type: Number,
         default: 0
     }
@@ -25,9 +35,9 @@ const wordleScoreSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Compound index for efficient queries
-wordleScoreSchema.index({ userId: 1, timestamp: -1 });
-wordleScoreSchema.index({ timestamp: -1 });
+// Index for efficient queries
+wordleScoreSchema.index({ userId: 1 });
+wordleScoreSchema.index({ totalGames: -1 });
 
 // Delete existing model if it exists (prevents caching issues)
 if (mongoose.models.WordleScore) {
