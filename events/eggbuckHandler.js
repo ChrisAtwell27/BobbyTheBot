@@ -33,6 +33,14 @@ module.exports = (client) => {
         const args = message.content.split(' ');
         const userRoles = message.member.roles.cache;
 
+        // Debug log for !clearhoney specifically
+        if (message.content.toLowerCase().startsWith('!clearhoney')) {
+            console.log('=== CLEARHONEY DEBUG ===');
+            console.log('Message received in eggbuckHandler');
+            console.log('args[0]:', args[0]);
+            console.log('args[0].toLowerCase():', args[0].toLowerCase());
+        }
+
         // Command to check Honey balance
         if (args[0] === '!balance') {
             let userId, username, user;
