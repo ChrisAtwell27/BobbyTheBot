@@ -147,7 +147,7 @@ async function createRouletteTableVisualization(lobby) {
                 // Player balance
                 ctx.fillStyle = '#ffd700';
                 ctx.font = 'bold 10px Arial';
-                ctx.fillText(`🍯{player.balance.toLocaleString()}`, posX, posY + 58);
+                ctx.fillText(`🍯${player.balance.toLocaleString()}`, posX, posY + 58);
                 
             } catch (error) {
                 console.error('Error loading avatar:', error);
@@ -304,25 +304,25 @@ async function createDeathResultVisualization(victim, survivors, totalPot, winni
     
     ctx.fillStyle = '#ff6666';
     ctx.font = 'bold 18px Arial';
-    ctx.fillText(`Lost: 🍯{victim.lostAmount.toLocaleString()}`, 300, 235);
-    
+    ctx.fillText(`Lost: 🍯${victim.lostAmount.toLocaleString()}`, 300, 235);
+
     // Results box
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
     ctx.fillRect(50, 260, 500, 200);
-    
+
     ctx.strokeStyle = '#ff0000';
     ctx.lineWidth = 3;
     ctx.strokeRect(50, 260, 500, 200);
-    
+
     // Results text
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 20px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('💰 SPOILS OF SURVIVAL 💰', 300, 290);
-    
+
     ctx.font = '16px Arial';
-    ctx.fillText(`Total Pot: 🍯{totalPot.toLocaleString()}`, 300, 320);
-    ctx.fillText(`Each Survivor Wins: 🍯{winnings.toLocaleString()}`, 300, 345);
+    ctx.fillText(`Total Pot: 🍯${totalPot.toLocaleString()}`, 300, 320);
+    ctx.fillText(`Each Survivor Wins: 🍯${winnings.toLocaleString()}`, 300, 345);
     
     // Survivors list
     ctx.font = 'bold 14px Arial';

@@ -1,75 +1,43 @@
-const fs = require('fs');
-const path = require('path');
+const WordleScore = require('../database/models/WordleScore');
+const { updateBobbyBucks } = require('../database/helpers/economyHelpers');
 
-const wordleScoresFilePath = path.join(__dirname, '../data/wordle_scores.txt');
 const WORDLE_CHANNEL_ID = '1382796270036586608';
 
-// Ensure the wordle scores file exists
-if (!fs.existsSync(wordleScoresFilePath)) {
-    fs.writeFileSync(wordleScoresFilePath, '', 'utf8');
-}
+// Honey rewards based on score
+const HONEY_REWARDS = {
+    1: 10000,
+    2: 5000,
+    3: 2500,
+    4: 1000,
+    5: 500,
+    6: 100,
+    7: 0  // Failed wordle (X/6)
+};
 
-// Load user data from file (format: userId|score1:timestamp1|score2:timestamp2...)
-// For backward compatibility, also supports old format: userId|score1|score2|score3...
-function loadUserData() {
-    const data = fs.readFileSync(wordleScoresFilePath, 'utf8');
-    const userData = {};
+// Add a score for a user and award honey
+async function addScore(userId, score, timestamp = null) {
+    try {
+        const honeyAwarded = HONEY_REWARDS[score] || 0;
 
-    data.split('\n').forEach(line => {
-        if (line.trim()) {
-            const parts = line.split('|');
-            const userId = parts[0];
-            const scores = parts.slice(1).map(s => {
-                if (s.includes(':')) {
-                    const [score, timestamp] = s.split(':');
-                    return { score: parseInt(score), timestamp: parseInt(timestamp) };
-                } else {
-                    // Legacy format - no timestamp
-                    return { score: parseInt(s), timestamp: null };
-                }
-            });
-            userData[userId] = scores;
-        }
-    });
-
-    return userData;
-}
-
-// Save all user data to file
-function saveUserData(userData) {
-    let content = '';
-
-    Object.entries(userData).forEach(([userId, scores]) => {
-        const scoreStrs = scores.map(s => {
-            if (typeof s === 'object' && s.timestamp !== null) {
-                return `${s.score}:${s.timestamp}`;
-            } else if (typeof s === 'object') {
-                return `${s.score}`;
-            } else {
-                return `${s}`;
-            }
+        // Save score to database
+        const wordleScore = new WordleScore({
+            userId,
+            score,
+            timestamp: timestamp || Date.now(),
+            honeyAwarded
         });
-        let line = userId + '|' + scoreStrs.join('|');
-        content += line + '\n';
-    });
+        await wordleScore.save();
 
-    fs.writeFileSync(wordleScoresFilePath, content, 'utf8');
-}
+        // Award honey to user
+        if (honeyAwarded > 0) {
+            await updateBobbyBucks(userId, honeyAwarded);
+        }
 
-// Add a score for a user
-function addScore(userId, score, timestamp = null) {
-    const userData = loadUserData();
-
-    if (!userData[userId]) {
-        userData[userId] = [];
+        return { success: true, honeyAwarded };
+    } catch (error) {
+        console.error('Error adding Wordle score:', error);
+        return { success: false, error };
     }
-
-    const scoreEntry = {
-        score: score,
-        timestamp: timestamp || Date.now()
-    };
-    userData[userId].push(scoreEntry);
-    saveUserData(userData);
 }
 
 
@@ -128,68 +96,65 @@ function parseWordleMessage(content) {
     return results;
 }
 
-// Add timestamps to legacy scores based on position (oldest first, one per day)
-function migrateLegacyScores() {
-    const userData = loadUserData();
-    let modified = false;
-
-    Object.entries(userData).forEach(([userId, scores]) => {
-        for (let i = 0; i < scores.length; i++) {
-            if (!scores[i].timestamp) {
-                // Assign timestamps going backwards from today, one day per score
-                const daysAgo = scores.length - i - 1;
-                scores[i].timestamp = Date.now() - (daysAgo * 24 * 60 * 60 * 1000);
-                modified = true;
-            }
-        }
-    });
-
-    if (modified) {
-        saveUserData(userData);
-    }
-}
-
 // Calculate statistics for leaderboard
-// timeFilter: optional object with { start: timestamp, end: timestamp } to filter by time range
-function calculateStats(timeFilter = null) {
-    const userData = loadUserData();
-    const userStats = {};
-
-    Object.entries(userData).forEach(([userId, scores]) => {
-        // Filter scores by time range if specified
-        let filteredScores = scores;
+// timeFilter: optional object with { start: Date, end: Date } to filter by time range
+async function calculateStats(timeFilter = null) {
+    try {
+        // Build query filter
+        const filter = {};
         if (timeFilter) {
-            filteredScores = scores.filter(s => {
-                if (!s.timestamp) return false; // Exclude scores without timestamps
-                return s.timestamp >= timeFilter.start && s.timestamp <= timeFilter.end;
-            });
+            filter.timestamp = {
+                $gte: timeFilter.start,
+                $lte: timeFilter.end
+            };
         }
 
-        if (filteredScores.length > 0) {
-            const scoreValues = filteredScores.map(s => typeof s === 'object' ? s.score : s);
-            const totalScore = scoreValues.reduce((sum, s) => sum + s, 0);
-            const bestScore = Math.min(...scoreValues);
-            const avgScore = totalScore / scoreValues.length;
+        // Aggregate scores by user
+        const scores = await WordleScore.find(filter).lean();
+        const userStats = {};
+
+        // Group scores by userId
+        scores.forEach(scoreDoc => {
+            if (!userStats[scoreDoc.userId]) {
+                userStats[scoreDoc.userId] = {
+                    scores: [],
+                    totalScore: 0,
+                    totalGames: 0
+                };
+            }
+            userStats[scoreDoc.userId].scores.push(scoreDoc.score);
+            userStats[scoreDoc.userId].totalScore += scoreDoc.score;
+            userStats[scoreDoc.userId].totalGames++;
+        });
+
+        // Calculate stats for each user
+        const result = {};
+        Object.entries(userStats).forEach(([userId, data]) => {
+            const avgScore = data.totalScore / data.totalGames;
+            const bestScore = Math.min(...data.scores);
 
             // Calculate weighted score that HEAVILY favors volume
             // Lower is better. Exponential penalty for low game counts.
             // Formula: avgScore * (50 / games)^0.7
             // This means more games = exponentially better score
-            const volumeMultiplier = Math.pow(50 / filteredScores.length, 0.7);
+            const volumeMultiplier = Math.pow(50 / data.totalGames, 0.7);
             const weightedScore = avgScore * volumeMultiplier;
 
-            userStats[userId] = {
-                totalGames: filteredScores.length,
-                totalScore: totalScore,
+            result[userId] = {
+                totalGames: data.totalGames,
+                totalScore: data.totalScore,
                 bestScore: bestScore,
                 avgScore: avgScore,
                 weightedScore: weightedScore,
-                scores: filteredScores
+                scores: data.scores
             };
-        }
-    });
+        });
 
-    return userStats;
+        return result;
+    } catch (error) {
+        console.error('Error calculating Wordle stats:', error);
+        return {};
+    }
 }
 
 module.exports = (client) => {
@@ -212,7 +177,8 @@ module.exports = (client) => {
 
             console.log(`Parsed ${parsedResults.length} results:`, parsedResults);
 
-            // Save scores for each user
+            // Save scores for each user and track honey rewards
+            const honeyRewards = [];
             for (const result of parsedResults) {
                 // Prefer direct mention ID when available
                 let member = null;
@@ -236,8 +202,15 @@ module.exports = (client) => {
                 }
 
                 if (member) {
-                    addScore(member.id, result.score);
-                    console.log(`✓ Saved: ${member.user.username} (${member.displayName}) - ${result.score}/6`);
+                    const scoreResult = await addScore(member.id, result.score);
+                    if (scoreResult.success) {
+                        console.log(`✓ Saved: ${member.user.username} (${member.displayName}) - ${result.score}/6 | +${scoreResult.honeyAwarded} honey`);
+                        if (scoreResult.honeyAwarded > 0) {
+                            honeyRewards.push({ member, honey: scoreResult.honeyAwarded, score: result.score });
+                        }
+                    } else {
+                        console.log(`✗ Error saving score for ${member.user.username}`);
+                    }
                 } else {
                     const label = result.userId ? `<@${result.userId}>` : (result.mention ? `@${result.mention}` : '(unknown)');
                     console.log(`✗ Could not find member for: ${label}`);
@@ -248,8 +221,26 @@ module.exports = (client) => {
                 }
             }
 
+            // Send honey rewards notification if any were awarded
+            if (honeyRewards.length > 0) {
+                const { EmbedBuilder } = require('discord.js');
+                let rewardsText = '';
+                honeyRewards.forEach(({ member, honey, score }) => {
+                    rewardsText += `<@${member.id}>: **${score}/6** → **+${honey.toLocaleString()} 🍯**\n`;
+                });
+
+                const honeyEmbed = new EmbedBuilder()
+                    .setTitle('🍯 Wordle Honey Rewards')
+                    .setColor('#FFA500')
+                    .setDescription(rewardsText.trim())
+                    .setFooter({ text: 'Lower scores = more honey!' })
+                    .setTimestamp();
+
+                await message.channel.send({ embeds: [honeyEmbed] });
+            }
+
             // After processing scores, send the leaderboard
-            const stats = calculateStats();
+            const stats = await calculateStats();
 
             if (Object.keys(stats).length > 0) {
                 // Sort users by weighted score (lower is better)
@@ -294,7 +285,7 @@ module.exports = (client) => {
 
         // Handle !wordletop command
         if (message.content.toLowerCase() === '!wordletop') {
-            const stats = calculateStats();
+            const stats = await calculateStats();
 
             if (Object.keys(stats).length === 0) {
                 return message.channel.send('No Wordle scores recorded yet!');
@@ -348,13 +339,10 @@ module.exports = (client) => {
 
         // Handle !wordleweekly command
         if (message.content.toLowerCase() === '!wordleweekly') {
-            // Migrate legacy scores if needed
-            migrateLegacyScores();
-
-            const now = Date.now();
-            const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
+            const now = new Date();
+            const oneWeekAgo = new Date(now - (7 * 24 * 60 * 60 * 1000));
             const timeFilter = { start: oneWeekAgo, end: now };
-            const stats = calculateStats(timeFilter);
+            const stats = await calculateStats(timeFilter);
 
             if (Object.keys(stats).length === 0) {
                 return message.channel.send('No Wordle scores recorded in the past week!');
@@ -408,13 +396,10 @@ module.exports = (client) => {
 
         // Handle !wordlemonthly command
         if (message.content.toLowerCase() === '!wordlemonthly') {
-            // Migrate legacy scores if needed
-            migrateLegacyScores();
-
-            const now = Date.now();
-            const oneMonthAgo = now - (30 * 24 * 60 * 60 * 1000);
+            const now = new Date();
+            const oneMonthAgo = new Date(now - (30 * 24 * 60 * 60 * 1000));
             const timeFilter = { start: oneMonthAgo, end: now };
-            const stats = calculateStats(timeFilter);
+            const stats = await calculateStats(timeFilter);
 
             if (Object.keys(stats).length === 0) {
                 return message.channel.send('No Wordle scores recorded in the past month!');
@@ -517,8 +502,10 @@ module.exports = (client) => {
                                 }
 
                                 if (member) {
-                                    addScore(member.id, result.score);
-                                    totalScores++;
+                                    const scoreResult = await addScore(member.id, result.score);
+                                    if (scoreResult.success) {
+                                        totalScores++;
+                                    }
                                 }
                             }
                         }

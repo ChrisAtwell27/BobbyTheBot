@@ -359,7 +359,7 @@ module.exports = (client) => {
         // Pot display
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 24px Arial';
-        ctx.fillText(`POT: 🍯{gameData.pot.toLocaleString()}`, 300, 60);
+        ctx.fillText(`POT: 🍯${gameData.pot.toLocaleString()}`, 300, 60);
 
         // Time remaining
         const timeLeft = Math.max(0, gameData.endTime - Date.now());
@@ -372,7 +372,7 @@ module.exports = (client) => {
         // King's power
         ctx.fillStyle = '#ff6b6b';
         ctx.font = '16px Arial';
-        ctx.fillText(`King's Power: 🍯{gameData.kingAmount.toLocaleString()}`, 300, 380);
+        ctx.fillText(`King's Power: 🍯${gameData.kingAmount.toLocaleString()}`, 300, 380);
 
         return canvas;
     }
@@ -418,12 +418,12 @@ module.exports = (client) => {
 
         // Winnings
         ctx.font = 'bold 24px Arial';
-        ctx.fillText(`WON 🍯{winnings.toLocaleString()}!`, 300, 260);
+        ctx.fillText(`WON 🍯${winnings.toLocaleString()}!`, 300, 260);
 
         // Additional info
         ctx.font = '18px Arial';
-        ctx.fillText(`Total Pot: 🍯{gameData.pot.toLocaleString()}`, 300, 300);
-        ctx.fillText(`House Cut: 🍯{houseCut.toLocaleString()}`, 300, 325);
+        ctx.fillText(`Total Pot: 🍯${gameData.pot.toLocaleString()}`, 300, 300);
+        ctx.fillText(`House Cut: 🍯${houseCut.toLocaleString()}`, 300, 325);
 
         // Celebration
         ctx.font = '16px Arial';

@@ -238,10 +238,10 @@ async function createArenaVisualization(match, combatLog = []) {
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 14px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(`Pot: 🍯{match.pot.toLocaleString()}`, 400, 500);
-    
+    ctx.fillText(`Pot: 🍯${match.pot.toLocaleString()}`, 400, 500);
+
     if (match.spectatorBets && Object.keys(match.spectatorBets).length > 0) {
-        ctx.fillText(`Spectator Bets: 🍯{Object.values(match.spectatorBets).reduce((sum, bet) => sum + bet.amount, 0).toLocaleString()}`, 400, 520);
+        ctx.fillText(`Spectator Bets: 🍯${Object.values(match.spectatorBets).reduce((sum, bet) => sum + bet.amount, 0).toLocaleString()}`, 400, 520);
     }
     
     return canvas.toBuffer();
@@ -1042,7 +1042,7 @@ module.exports = (client) => {
         ctx.fillStyle = '#FFFFFF';
         ctx.font = 'bold 16px Arial';
         ctx.fillText('A challenge has been issued!', 200, 100);
-        ctx.fillText(`Pot: 🍯{(challenge.betAmount * 2).toLocaleString()}`, 200, 130);
+        ctx.fillText(`Pot: 🍯${(challenge.betAmount * 2).toLocaleString()}`, 200, 130);
         
         const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'challenge.png' });
         embed.setImage('attachment://challenge.png');
@@ -1191,7 +1191,7 @@ module.exports = (client) => {
         
         ctx.font = '18px Arial';
         ctx.fillText(`Defeats ${loser.displayName}`, 300, 150);
-        ctx.fillText(`Wins 🍯{winnings.toLocaleString()}`, 300, 180);
+        ctx.fillText(`Wins 🍯${winnings.toLocaleString()}`, 300, 180);
         
         // Champion laurel wreath effect
         ctx.strokeStyle = '#228B22';
