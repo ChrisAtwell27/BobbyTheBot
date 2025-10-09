@@ -2,14 +2,45 @@
 const { createCanvas, loadImage } = require('canvas');
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
+const Challenge = require('../database/models/Challenge');
 const cooldowns = new Map(); // Track cooldowns
-const challenges = new Map(); // Track pending challenges
+const challenges = new Map(); // Track pending challenges (in-memory cache)
 const activeGames = new Map(); // Track active games
 
 const COOLDOWN_SECONDS = 3; // Cooldown in seconds
-const CHALLENGE_TIMEOUT = 60000; // 1 minute timeout for challenges
+const CHALLENGE_TIMEOUT = 5 * 60 * 1000; // 5 minute timeout for challenges
+
+// Load active challenges from database on startup
+async function loadActiveChallenges() {
+    try {
+        const activeChallenges = await Challenge.find({});
+        console.log(`[GAMBLING] Loaded ${activeChallenges.length} active challenges from database`);
+
+        for (const challenge of activeChallenges) {
+            challenges.set(challenge.challengeId, {
+                type: challenge.type,
+                creator: challenge.creator,
+                creatorName: challenge.creatorName,
+                challenged: challenge.challenged,
+                challengedName: challenge.challengedName,
+                amount: challenge.amount,
+                channelId: challenge.channelId,
+                gladiatorClass: challenge.gladiatorClass,
+                challengerAvatarURL: challenge.challengerAvatarURL,
+                challengedAvatarURL: challenge.challengedAvatarURL,
+                timestamp: challenge.createdAt.getTime()
+            });
+        }
+    } catch (error) {
+        console.error('[GAMBLING] Error loading challenges from database:', error);
+    }
+}
 
 module.exports = (client) => {
+    // Load challenges when the bot starts
+    client.once('ready', () => {
+        loadActiveChallenges();
+    });
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
 
@@ -128,15 +159,46 @@ module.exports = (client) => {
         const userId = interaction.user.id;
         const customId = interaction.customId;
 
-        // Handle challenge acceptance buttons
-        if (customId.startsWith('accept_')) {
-            const challengeId = customId.replace('accept_', '');
-            
-            if (!challenges.has(challengeId)) {
-                return interaction.reply({ content: "❌ Challenge not found or has expired!", ephemeral: true });
-            }
+        try {
+            // Handle challenge acceptance buttons
+            if (customId.startsWith('accept_')) {
+                const challengeId = customId.replace('accept_', '');
 
-            const challenge = challenges.get(challengeId);
+                // Try to get from memory first, then from database
+                let challenge = challenges.get(challengeId);
+
+                if (!challenge) {
+                    // Try to load from database
+                    try {
+                        const dbChallenge = await Challenge.findOne({ challengeId });
+                        if (dbChallenge) {
+                            challenge = {
+                                type: dbChallenge.type,
+                                creator: dbChallenge.creator,
+                                creatorName: dbChallenge.creatorName,
+                                amount: dbChallenge.amount,
+                                channelId: dbChallenge.channelId,
+                                timestamp: dbChallenge.createdAt.getTime()
+                            };
+                            challenges.set(challengeId, challenge);
+                            console.log(`[GAMBLING] Loaded challenge ${challengeId} from database`);
+                        }
+                    } catch (dbError) {
+                        console.error('[GAMBLING] Error loading challenge from database:', dbError);
+                    }
+                }
+
+                if (!challenge) {
+                    return interaction.reply({
+                        content: "❌ This challenge is no longer active. It may have expired.\n\n💡 **Tip:** Ask the challenger to create a new challenge!",
+                        ephemeral: true
+                    }).catch(err => {
+                        // Silently catch interaction errors (expired tokens, etc.)
+                        if (err.code !== 10062 && err.code !== 40060) {
+                            console.error('Error replying to expired challenge interaction:', err);
+                        }
+                    });
+                }
 
             if (challenge.creator === userId) {
                 return interaction.reply({ content: "❌ You can't accept your own challenge!", ephemeral: true });
@@ -150,6 +212,13 @@ module.exports = (client) => {
             // Lock opponent's bet
             await updateBobbyBucks(userId, -challenge.amount);
             challenges.delete(challengeId);
+
+            // Delete from database
+            try {
+                await Challenge.deleteOne({ challengeId });
+            } catch (dbError) {
+                console.error('[GAMBLING] Error deleting challenge from database:', dbError);
+            }
 
             // Start the game
             const gameId = `game_${Date.now()}`;
@@ -241,6 +310,15 @@ module.exports = (client) => {
                 resolveRPSGame(client, gameId, game);
             }
         }
+        } catch (error) {
+            // Handle interaction errors gracefully
+            if (error.code === 10062 || error.code === 40060) {
+                // Interaction expired or unknown - this is normal for old buttons
+                console.log('Interaction expired or unknown - user clicked an old button');
+            } else {
+                console.error('Error handling gambling interaction:', error);
+            }
+        }
     });
 
     // Create Rock Paper Scissors challenge
@@ -269,6 +347,20 @@ module.exports = (client) => {
 
         challenges.set(challengeId, challenge);
         await updateBobbyBucks(userId, -betAmount); // Lock the bet
+
+        // Save to database
+        try {
+            await Challenge.create({
+                challengeId,
+                type: 'rps',
+                creator: userId,
+                creatorName: message.author.username,
+                amount: betAmount,
+                channelId: message.channel.id
+            });
+        } catch (dbError) {
+            console.error('[GAMBLING] Error saving challenge to database:', dbError);
+        }
 
         const embed = new EmbedBuilder()
             .setTitle('⚔️ Rock Paper Scissors Challenge!')
@@ -299,7 +391,14 @@ module.exports = (client) => {
             if (challenges.has(challengeId)) {
                 challenges.delete(challengeId);
                 await updateBobbyBucks(userId, betAmount); // Refund
-                
+
+                // Delete from database
+                try {
+                    await Challenge.deleteOne({ challengeId });
+                } catch (dbError) {
+                    console.error('[GAMBLING] Error deleting expired challenge from database:', dbError);
+                }
+
                 // Disable the button
                 const disabledButton = new ActionRowBuilder()
                     .addComponents(
@@ -343,6 +442,20 @@ module.exports = (client) => {
 
         challenges.set(challengeId, challenge);
         await updateBobbyBucks(userId, -betAmount);
+
+        // Save to database
+        try {
+            await Challenge.create({
+                challengeId,
+                type: 'highercard',
+                creator: userId,
+                creatorName: message.author.username,
+                amount: betAmount,
+                channelId: message.channel.id
+            });
+        } catch (dbError) {
+            console.error('[GAMBLING] Error saving challenge to database:', dbError);
+        }
 
         const embed = new EmbedBuilder()
             .setTitle('🃏 Higher Card Challenge!')
@@ -425,6 +538,20 @@ module.exports = (client) => {
         challenges.set(challengeId, challenge);
         await updateBobbyBucks(userId, -betAmount);
 
+        // Save to database
+        try {
+            await Challenge.create({
+                challengeId,
+                type: 'quickdraw',
+                creator: userId,
+                creatorName: message.author.username,
+                amount: betAmount,
+                channelId: message.channel.id
+            });
+        } catch (dbError) {
+            console.error('[GAMBLING] Error saving challenge to database:', dbError);
+        }
+
         const embed = new EmbedBuilder()
             .setTitle('⚡ Quick Draw Challenge!')
             .setColor('#f39c12')
@@ -495,6 +622,20 @@ module.exports = (client) => {
 
         challenges.set(challengeId, challenge);
         await updateBobbyBucks(userId, -betAmount);
+
+        // Save to database
+        try {
+            await Challenge.create({
+                challengeId,
+                type: 'numberduel',
+                creator: userId,
+                creatorName: message.author.username,
+                amount: betAmount,
+                channelId: message.channel.id
+            });
+        } catch (dbError) {
+            console.error('[GAMBLING] Error saving challenge to database:', dbError);
+        }
 
         const embed = new EmbedBuilder()
             .setTitle('🎯 Number Duel Challenge!')

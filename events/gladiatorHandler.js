@@ -5,10 +5,11 @@ const fs = require('fs');
 const path = require('path');
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
+const Challenge = require('../database/models/Challenge');
 
 // Store active gladiator matches
 const activeMatches = new Map();
-const activeChallenges = new Map();
+const activeChallenges = new Map(); // In-memory cache
 
 // Configuration
 const CHALLENGE_TIMEOUT = 3 * 60 * 1000; // 3 minutes
@@ -501,6 +502,25 @@ module.exports = (client) => {
 
             activeChallenges.set(challengeId, challenge);
 
+            // Save to database
+            try {
+                await Challenge.create({
+                    challengeId,
+                    type: 'gladiator',
+                    creator: message.author.id,
+                    creatorName: message.author.displayName || message.author.username,
+                    challenged: challengedUser.id,
+                    challengedName: challengedUser.displayName || challengedUser.username,
+                    amount: betAmount,
+                    channelId: message.channel.id,
+                    gladiatorClass: gladiatorClass,
+                    challengerAvatarURL: message.author.displayAvatarURL({ extension: 'png', size: 128 }),
+                    challengedAvatarURL: challengedUser.displayAvatarURL({ extension: 'png', size: 128 })
+                });
+            } catch (dbError) {
+                console.error('[GLADIATOR] Error saving challenge to database:', dbError);
+            }
+
             // Create challenge embed
             const challengeEmbed = await createChallengeEmbed(challenge);
             const challengeButtons = createChallengeButtons(challengeId);
@@ -513,10 +533,17 @@ module.exports = (client) => {
             });
 
             // Auto-expire challenge
-            setTimeout(() => {
+            setTimeout(async () => {
                 if (activeChallenges.has(challengeId)) {
                     activeChallenges.delete(challengeId);
-                    
+
+                    // Delete from database
+                    try {
+                        await Challenge.deleteOne({ challengeId });
+                    } catch (dbError) {
+                        console.error('[GLADIATOR] Error deleting expired challenge from database:', dbError);
+                    }
+
                     const expiredEmbed = new EmbedBuilder()
                         .setColor('#666666')
                         .setTitle('⏰ Gladiator Challenge Expired')
@@ -569,11 +596,44 @@ module.exports = (client) => {
             // Handle challenge buttons (accept/decline)
             if (['accept', 'decline'].includes(action)) {
                 const challengeId = parts.slice(1).join('_');
-                const challenge = activeChallenges.get(challengeId);
-                
+                let challenge = activeChallenges.get(challengeId);
+
+                // Try to load from database if not in memory
+                if (!challenge) {
+                    try {
+                        const dbChallenge = await Challenge.findOne({ challengeId });
+                        if (dbChallenge) {
+                            challenge = {
+                                id: dbChallenge.challengeId,
+                                challenger: {
+                                    id: dbChallenge.creator,
+                                    username: dbChallenge.creatorName,
+                                    displayName: dbChallenge.creatorName,
+                                    avatarURL: dbChallenge.challengerAvatarURL,
+                                    gladiatorClass: dbChallenge.gladiatorClass
+                                },
+                                challenged: {
+                                    id: dbChallenge.challenged,
+                                    username: dbChallenge.challengedName,
+                                    displayName: dbChallenge.challengedName,
+                                    avatarURL: dbChallenge.challengedAvatarURL,
+                                    gladiatorClass: null
+                                },
+                                betAmount: dbChallenge.amount,
+                                channelId: dbChallenge.channelId,
+                                timestamp: dbChallenge.createdAt.getTime()
+                            };
+                            activeChallenges.set(challengeId, challenge);
+                            console.log(`[GLADIATOR] Loaded challenge ${challengeId} from database`);
+                        }
+                    } catch (dbError) {
+                        console.error('[GLADIATOR] Error loading challenge from database:', dbError);
+                    }
+                }
+
                 if (!challenge) {
                     return interaction.reply({
-                        content: '❌ This challenge is no longer active.',
+                        content: '❌ This challenge is no longer active. It may have expired.\n\n💡 **Tip:** Ask the challenger to create a new challenge with `!gladiator`!',
                         ephemeral: true
                     });
                 }
@@ -587,7 +647,14 @@ module.exports = (client) => {
 
                 if (action === 'decline') {
                     activeChallenges.delete(challengeId);
-                    
+
+                    // Delete from database
+                    try {
+                        await Challenge.deleteOne({ challengeId });
+                    } catch (dbError) {
+                        console.error('[GLADIATOR] Error deleting declined challenge from database:', dbError);
+                    }
+
                     const declineEmbed = new EmbedBuilder()
                         .setColor('#FF4444')
                         .setTitle('❌ Challenge Declined')
@@ -633,10 +700,10 @@ module.exports = (client) => {
                 const challengeId = parts.slice(2).join('_');
                 const selectedClass = parts[1];
                 const challenge = activeChallenges.get(challengeId);
-                
+
                 if (!challenge) {
                     return interaction.reply({
-                        content: '❌ This challenge is no longer active.',
+                        content: '❌ This challenge is no longer active. It may have expired or the bot was restarted.\n\n💡 **Tip:** Ask the challenger to create a new challenge with `!gladiator`!',
                         ephemeral: true
                     });
                 }
@@ -731,8 +798,15 @@ module.exports = (client) => {
                 });
             }
         } catch (error) {
+            // Handle interaction errors gracefully
+            if (error.code === 10062 || error.code === 40060) {
+                // Interaction expired or unknown - this is normal for old buttons
+                console.log('Gladiator interaction expired or unknown - user clicked an old button');
+                return;
+            }
+
             console.error('Error handling gladiator interaction:', error);
-            
+
             // Only try to respond if interaction hasn't been acknowledged yet
             if (!interaction.replied && !interaction.deferred) {
                 try {
@@ -741,7 +815,10 @@ module.exports = (client) => {
                         ephemeral: true
                     });
                 } catch (replyError) {
-                    console.error('Error sending error reply:', replyError);
+                    // Silently ignore if we can't send the error message
+                    if (replyError.code !== 10062 && replyError.code !== 40060) {
+                        console.error('Error sending error reply:', replyError);
+                    }
                 }
             }
         }
@@ -750,7 +827,14 @@ module.exports = (client) => {
     // Function to start a gladiator match in a channel (separate from interactions)
     async function startGladiatorMatchInChannel(channel, challenge) {
         activeChallenges.delete(challenge.id);
-        
+
+        // Delete from database
+        try {
+            await Challenge.deleteOne({ challengeId: challenge.id });
+        } catch (dbError) {
+            console.error('[GLADIATOR] Error deleting accepted challenge from database:', dbError);
+        }
+
         // Lock both players' bets
         await updateBobbyBucks(challenge.challenger.id, -challenge.betAmount);
         await updateBobbyBucks(challenge.challenged.id, -challenge.betAmount);
@@ -1238,11 +1322,11 @@ module.exports = (client) => {
         return { embed, files: [attachment] };
     }
 
-    // Clean up on startup
-    client.once('ready', () => {
+    // Clean up on startup and load challenges from database
+    client.once('ready', async () => {
         console.log('Gladiator Arena Handler loaded! ⚔️🏛️');
-        
-        // Clear all existing matches and challenges
+
+        // Clear all existing matches
         activeMatches.forEach(match => {
             if (match.turnTimer) {
                 clearTimeout(match.turnTimer);
@@ -1250,5 +1334,37 @@ module.exports = (client) => {
         });
         activeMatches.clear();
         activeChallenges.clear();
+
+        // Load active gladiator challenges from database
+        try {
+            const gladiatorChallenges = await Challenge.find({ type: 'gladiator' });
+            console.log(`[GLADIATOR] Loaded ${gladiatorChallenges.length} active challenges from database`);
+
+            for (const dbChallenge of gladiatorChallenges) {
+                const challenge = {
+                    id: dbChallenge.challengeId,
+                    challenger: {
+                        id: dbChallenge.creator,
+                        username: dbChallenge.creatorName,
+                        displayName: dbChallenge.creatorName,
+                        avatarURL: dbChallenge.challengerAvatarURL,
+                        gladiatorClass: dbChallenge.gladiatorClass
+                    },
+                    challenged: {
+                        id: dbChallenge.challenged,
+                        username: dbChallenge.challengedName,
+                        displayName: dbChallenge.challengedName,
+                        avatarURL: dbChallenge.challengedAvatarURL,
+                        gladiatorClass: null
+                    },
+                    betAmount: dbChallenge.amount,
+                    channelId: dbChallenge.channelId,
+                    timestamp: dbChallenge.createdAt.getTime()
+                };
+                activeChallenges.set(dbChallenge.challengeId, challenge);
+            }
+        } catch (error) {
+            console.error('[GLADIATOR] Error loading challenges from database:', error);
+        }
     });
 };
