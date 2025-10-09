@@ -468,12 +468,18 @@ module.exports = (client) => {
         }
 
         // Command to reset everyone's honey to 5000 (Top Egg only)
-        if (args[0] === '!clearhoney') {
+        if (args[0].toLowerCase() === '!clearhoney') {
+            console.log('!clearhoney command detected');
+            console.log('User roles:', [...userRoles.keys()]);
+            console.log('Top Egg Role ID:', topEggRoleId);
+            console.log('Has Top Egg role:', userRoles.has(topEggRoleId));
+
             if (!userRoles.has(topEggRoleId)) {
                 return message.reply("You don't have permission to use this command. (Top Egg only)");
             }
 
             try {
+                console.log('Starting honey reset...');
                 // Import User model
                 const User = require('../database/models/User');
 
@@ -482,6 +488,8 @@ module.exports = (client) => {
                     {},
                     { $set: { balance: 5000 } }
                 );
+
+                console.log('Honey reset complete. Modified:', result.modifiedCount);
 
                 const embed = new EmbedBuilder()
                     .setTitle('💰 Economy Reset - Honey Wiped')
