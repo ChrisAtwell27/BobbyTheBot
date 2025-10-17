@@ -27,6 +27,7 @@ module.exports = {
     thinIceRoleId: '1210273721705693217', // Replace with your Thin Ice role ID
     loggingChannelId: '1276266582234103808', // Replace with your logging channel ID
     alertChannelId: '1276267465227108455', // Replace with your alert channel ID
+    announcementsChannelId: '1276298066789535765', // Announcements channel for birthday wishes
     alertKeywords: ['ban', 'kick', 'trouble'],// Replace with the keywords you want to monitor
 
     // API Keys - Use environment variables (preferred for security)

@@ -6,7 +6,7 @@ const http = require('http');
 const { connectToDatabase } = require('./database/connection');
 
 // Load configuration values
-const { loggingChannelId, alertChannelId, alertKeywords } = require('./data/config');
+const { loggingChannelId, alertChannelId, alertKeywords, announcementsChannelId } = require('./data/config');
 
 // Create the client
 const client = new Client({
@@ -50,6 +50,7 @@ require('./events/askHandler')(client);
 require('./events/wordleHandler')(client);
 require('./events/socialMediaPostHandler')(client);
 require('./events/bumpHandler')(client);
+require('./events/birthdayHandler')(client, announcementsChannelId);
 
 // Initialize Valorant API handler separately to prevent conflicts
 const valorantApiHandler = require('./events/valorantApiHandler');

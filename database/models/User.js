@@ -116,6 +116,16 @@ const userSchema = new mongoose.Schema({
             default: []
         }
     },
+    // Birthday (format: MM-DD-YYYY)
+    birthday: {
+        month: Number,    // 1-12
+        day: Number,      // 1-31
+        year: Number      // Birth year
+    },
+    lastBirthdayWish: {
+        type: Number,     // Year of last birthday wish
+        default: null
+    },
     // Valorant stats
     valorantRank: String,
     // Gladiator arena stats
