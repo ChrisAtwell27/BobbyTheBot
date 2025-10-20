@@ -127,7 +127,22 @@ const userSchema = new mongoose.Schema({
         default: null
     },
     // Valorant stats
-    valorantRank: String,
+    valorant: {
+        puuid: String,
+        name: String,
+        tag: String,
+        region: String,
+        registeredAt: Date,
+        lastUpdated: Date,
+        preferredAgents: {
+            type: [String],
+            default: []
+        },
+        blockedUsers: {
+            type: [String],
+            default: []
+        }
+    },
     // Gladiator arena stats
     arenaStats: {
         wins: {

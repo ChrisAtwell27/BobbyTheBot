@@ -182,16 +182,42 @@ You manage several key systems in the Discord server. Here's EVERY command users
 - !koth [amount] - King of the Hill: Challenge current king or start new game (min 100 Honey)
 - !kothstatus - View current King of the Hill status and pot
 
-👥 **TEAM BUILDING - VALORANT:**
-- !valorantteam - Create balanced 5-player Valorant team based on ranks
-- !valorant - Same as valorantteam
-- !valinhouse - Create 10-player Valorant in-house match (5v5 teams)
-- !valstats - View YOUR Valorant competitive stats (register Riot account first time)
+👥 **TEAM BUILDING - VALORANT (30+ Features):**
+**Creating Teams:**
+- @Valorant or !valorantteam - Create 5-player Valorant team (lasts 2 hours, auto voice channel)
+- Interactive Buttons: Join Team, Leave Team, Close Team (2-4 players), Disband
+- Set Name button - Custom team names via modal (2-30 characters)
+- Transfer Leader button - Pass leadership to any member via dropdown
+- Invite Player button - Get instructions for inviting specific players
+- Teams auto-create temporary voice channels in Games category
+- Voice channels auto-delete after 1 hour of inactivity
+- AFK members auto-kicked after 5 minutes of inactivity
+- Ready Check system when team hits 5/5 (60-second confirmation)
+- DM notifications sent to all members when team fills up
+
+**Player Configuration:**
+- !valagents <agent1>, <agent2>, <agent3> - Set up to 3 preferred agents (shows in team list)
+- !valblock @user - Block toxic players from joining your teams
+- !valunblock @user - Unblock a player
+- !valblocklist - View your blocked users
+- !valstats - View/register your Valorant competitive stats
 - !valprofile - Same as valstats
-- !valmatches - View detailed match history with KDA and performance
+- !valmatches - View detailed match history with KDA
+
+**Match Tracking:**
+- !valreport win 13-7 - Report match win with score (within 2 hours of team completion)
+- !valreport loss 5-13 - Report match loss
+- !valmatchhistory - View your W/L record, win rate, and recent matches
+
+**Statistics & History:**
 - !valteams or !teamhistory - View your past Valorant teams
-- !teamstats - View your team formation statistics
-- @Valorant - Mention the Valorant role to trigger team formation
+- !teamstats - View server-wide team statistics
+- Teams saved to database with full stats and match results
+
+**In-House Matches:**
+- !valinhouse - Create 10-player in-house match (5v5 balanced teams)
+
+**Supported Agents (28):** Jett, Reyna, Phoenix, Sage, Brimstone, Omen, Viper, Cypher, Sova, Raze, Killjoy, Breach, Skye, Yoru, Astra, KAY/O, Chamber, Neon, Fade, Harbor, Gekko, Deadlock, Iso, Clove, Vyse, Veto, Waylay, Tejo
 
 🐕 **VIRTUAL PETS (16 commands):**
 - !adopt - Adopt your first virtual pet (choose from 10+ species)

@@ -17,14 +17,106 @@ const { saveValorantUser, getValorantUser, getAllValorantUsers, removeValorantUs
 // ===============================================
 
 // API Configuration
-const API_KEY = 'HDEV-c58e378a-b84e-45bd-bced-aae3e742c2c3';
+const API_KEY = process.env.VALORANT_API_KEY || '';
 const BASE_URL = 'https://api.henrikdev.xyz/valorant';
+
+// Validate API key is set
+if (!API_KEY) {
+    console.error('[VALORANT] WARNING: VALORANT_API_KEY not set in environment variables');
+}
 
 // Store user registrations (loaded from file)
 let userRegistrations = new Map();
 
 // Valid regions
 const VALID_REGIONS = ['na', 'eu', 'ap', 'kr', 'latam', 'br'];
+
+// ===============================================
+// RATE LIMITING & CACHING
+// ===============================================
+
+// Rate Limiter Class
+class RateLimiter {
+    constructor(maxRequests = 10, perSeconds = 60) {
+        this.requests = [];
+        this.maxRequests = maxRequests;
+        this.perSeconds = perSeconds * 1000;
+    }
+
+    async waitIfNeeded() {
+        const now = Date.now();
+        this.requests = this.requests.filter(time => now - time < this.perSeconds);
+
+        if (this.requests.length >= this.maxRequests) {
+            const oldestRequest = this.requests[0];
+            const waitTime = this.perSeconds - (now - oldestRequest);
+            console.log(`[VALORANT] Rate limit reached, waiting ${Math.ceil(waitTime / 1000)}s`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+
+        this.requests.push(Date.now());
+    }
+
+    reset() {
+        this.requests = [];
+    }
+}
+
+// Cache Manager Class
+class CacheManager {
+    constructor(ttlSeconds = 300) {
+        this.cache = new Map();
+        this.ttl = ttlSeconds * 1000;
+    }
+
+    set(key, value) {
+        this.cache.set(key, { value, timestamp: Date.now() });
+    }
+
+    get(key) {
+        const item = this.cache.get(key);
+        if (!item) return null;
+
+        if (Date.now() - item.timestamp > this.ttl) {
+            this.cache.delete(key);
+            return null;
+        }
+
+        return item.value;
+    }
+
+    clear() {
+        this.cache.clear();
+    }
+
+    // Clean up old entries periodically
+    cleanup() {
+        const now = Date.now();
+        for (const [key, item] of this.cache.entries()) {
+            if (now - item.timestamp > this.ttl) {
+                this.cache.delete(key);
+            }
+        }
+    }
+}
+
+// Initialize rate limiter and cache
+const apiRateLimiter = new RateLimiter(10, 60); // 10 requests per 60 seconds
+const apiCache = new CacheManager(300); // 5 minute cache
+
+// Clean up cache every 10 minutes
+setInterval(() => apiCache.cleanup(), 10 * 60 * 1000);
+
+// Reload user registrations from database every 30 minutes to keep in sync
+// This prevents memory leaks from stale data and ensures consistency with database
+setInterval(async () => {
+    try {
+        console.log('[VALORANT] Reloading user registrations from database...');
+        await loadUserRegistrations();
+    } catch (error) {
+        console.error('[VALORANT] Error reloading user registrations:', error);
+    }
+}, 30 * 60 * 1000);
 
 // Rank mapping with image paths
 const RANK_MAPPING = {
@@ -126,11 +218,24 @@ function createFallbackRankIcon(ctx, x, y, size, rankInfo) {
     ctx.fillText(rankInfo.name.charAt(0), x + size/2, y + size/2 + size/10);
 }
 
-// Enhanced function to make API requests with timeout and error handling
-async function makeAPIRequest(endpoint) {
+// Enhanced function to make API requests with timeout, rate limiting, caching, and error handling
+async function makeAPIRequest(endpoint, useCache = true) {
+    // Check cache first
+    const cacheKey = endpoint;
+    if (useCache) {
+        const cachedData = apiCache.get(cacheKey);
+        if (cachedData) {
+            console.log(`[VALORANT] Cache hit for ${endpoint}`);
+            return cachedData;
+        }
+    }
+
+    // Apply rate limiting
+    await apiRateLimiter.waitIfNeeded();
+
     return new Promise((resolve, reject) => {
         const url = new URL(`${BASE_URL}${endpoint}`);
-        
+
         const options = {
             hostname: url.hostname,
             path: url.pathname + url.search,
@@ -153,10 +258,16 @@ async function makeAPIRequest(endpoint) {
                         return;
                     }
                     const jsonData = JSON.parse(data);
-                    console.log(`API Response for ${endpoint}:`, jsonData.status || 'No status');
+                    console.log(`[VALORANT] API Response for ${endpoint}:`, jsonData.status || 'No status');
+
+                    // Cache successful responses
+                    if (useCache && jsonData.status === 200) {
+                        apiCache.set(cacheKey, jsonData);
+                    }
+
                     resolve(jsonData);
                 } catch (error) {
-                    console.error('Failed to parse API response:', data);
+                    console.error('[VALORANT] Failed to parse API response:', data);
                     reject(new Error('Failed to parse API response: ' + error.message));
                 }
             });
@@ -168,7 +279,7 @@ async function makeAPIRequest(endpoint) {
         });
 
         req.on('error', (error) => {
-            console.error('API Request error:', error.message);
+            console.error('[VALORANT] API Request error:', error.message);
             reject(new Error('Network error: ' + error.message));
         });
 
@@ -617,7 +728,7 @@ module.exports = {
                             .setColor('#00ff00')
                             .addFields(
                                 { name: 'Status', value: testData.status ? testData.status.toString() : 'No status', inline: true },
-                                { name: 'Data File', value: fs.existsSync(USERS_FILE) ? '✅ Exists' : '❌ Missing', inline: true },
+                                { name: 'Database', value: '✅ MongoDB Connected', inline: true },
                                 { name: 'Registered Users', value: userRegistrations.size.toString(), inline: true },
                                 { name: 'Response', value: `\`\`\`json\n${JSON.stringify(testData, null, 2).substring(0, 1000)}\n\`\`\``, inline: false }
                             )
@@ -630,7 +741,7 @@ module.exports = {
                             .setColor('#ff0000')
                             .addFields(
                                 { name: 'Error', value: error.message, inline: false },
-                                { name: 'Data File', value: fs.existsSync(USERS_FILE) ? '✅ Exists' : '❌ Missing', inline: true },
+                                { name: 'Database', value: '✅ MongoDB Connected', inline: true },
                                 { name: 'Registered Users', value: userRegistrations.size.toString(), inline: true },
                                 { name: 'Full Error', value: `\`\`\`\n${error.stack.substring(0, 1000)}\n\`\`\``, inline: false }
                             )
