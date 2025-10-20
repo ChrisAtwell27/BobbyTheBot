@@ -96,42 +96,43 @@ async function getValorantUser(userId) {
 // Get all registered Valorant users with error recovery
 async function getAllValorantUsers() {
     try {
-        // Query for both new and legacy formats
-        const users = await User.find({
+        // Query using collection.find() to bypass Mongoose schema restrictions
+        // This allows us to access the legacy 'valorantRank' field
+        const userDocs = await User.collection.find({
             $or: [
-                { 'valorant': { $exists: true, $ne: null } },
+                { 'valorant.name': { $exists: true, $ne: null } },
                 { 'valorantRank': { $exists: true, $ne: null } }
             ]
-        }).select('userId valorant valorantRank');
+        }).toArray();
 
         const userMap = new Map();
-        for (const user of users) {
+        for (const userDoc of userDocs) {
             try {
                 let valorantData = null;
 
-                // Try new format first
-                if (user.valorant && typeof user.valorant === 'object') {
-                    valorantData = user.valorant;
+                // Try new format first (check if name/tag/region exist)
+                if (userDoc.valorant && userDoc.valorant.name && userDoc.valorant.tag && userDoc.valorant.region) {
+                    valorantData = userDoc.valorant;
                 }
                 // Fall back to legacy format
-                else if (user.valorantRank && typeof user.valorantRank === 'string') {
+                else if (userDoc.valorantRank && typeof userDoc.valorantRank === 'string') {
                     try {
-                        valorantData = JSON.parse(user.valorantRank);
+                        valorantData = JSON.parse(userDoc.valorantRank);
                         // Migrate legacy data in background (don't await)
-                        saveValorantUser(user.userId, valorantData).catch(err =>
-                            console.error(`[VALORANT] Error migrating user ${user.userId}:`, err)
+                        saveValorantUser(userDoc.userId, valorantData).catch(err =>
+                            console.error(`[VALORANT] Error migrating user ${userDoc.userId}:`, err)
                         );
                     } catch (parseError) {
-                        console.error(`[VALORANT] Failed to parse legacy data for user ${user.userId}:`, parseError);
+                        console.error(`[VALORANT] Failed to parse legacy data for user ${userDoc.userId}:`, parseError);
                         continue; // Skip this user
                     }
                 }
 
-                if (valorantData) {
-                    userMap.set(user.userId, valorantData);
+                if (valorantData && valorantData.name && valorantData.tag && valorantData.region) {
+                    userMap.set(userDoc.userId, valorantData);
                 }
             } catch (error) {
-                console.error(`[VALORANT] Error processing Valorant data for user ${user.userId}:`, error);
+                console.error(`[VALORANT] Error processing Valorant data for user ${userDoc.userId}:`, error);
             }
         }
 
