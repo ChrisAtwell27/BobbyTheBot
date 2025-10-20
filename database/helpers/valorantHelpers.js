@@ -96,43 +96,24 @@ async function getValorantUser(userId) {
 // Get all registered Valorant users with error recovery
 async function getAllValorantUsers() {
     try {
-        // Query using collection.find() to bypass Mongoose schema restrictions
-        // This allows us to access the legacy 'valorantRank' field
-        const userDocs = await User.collection.find({
-            $or: [
-                { 'valorant.name': { $exists: true, $ne: null } },
-                { 'valorantRank': { $exists: true, $ne: null } }
-            ]
-        }).toArray();
+        // Query for users with new valorant format (migrated data)
+        const users = await User.find({
+            'valorant.name': { $exists: true, $ne: null }
+        }).select('userId valorant').lean();
 
         const userMap = new Map();
-        for (const userDoc of userDocs) {
+        for (const user of users) {
             try {
-                let valorantData = null;
+                const valorantData = user.valorant;
 
-                // Try new format first (check if name/tag/region exist)
-                if (userDoc.valorant && userDoc.valorant.name && userDoc.valorant.tag && userDoc.valorant.region) {
-                    valorantData = userDoc.valorant;
-                }
-                // Fall back to legacy format
-                else if (userDoc.valorantRank && typeof userDoc.valorantRank === 'string') {
-                    try {
-                        valorantData = JSON.parse(userDoc.valorantRank);
-                        // Migrate legacy data in background (don't await)
-                        saveValorantUser(userDoc.userId, valorantData).catch(err =>
-                            console.error(`[VALORANT] Error migrating user ${userDoc.userId}:`, err)
-                        );
-                    } catch (parseError) {
-                        console.error(`[VALORANT] Failed to parse legacy data for user ${userDoc.userId}:`, parseError);
-                        continue; // Skip this user
-                    }
-                }
-
+                // Validate required fields exist
                 if (valorantData && valorantData.name && valorantData.tag && valorantData.region) {
-                    userMap.set(userDoc.userId, valorantData);
+                    userMap.set(user.userId, valorantData);
+                } else {
+                    console.error(`[VALORANT] User ${user.userId} has incomplete valorant data`);
                 }
             } catch (error) {
-                console.error(`[VALORANT] Error processing Valorant data for user ${userDoc.userId}:`, error);
+                console.error(`[VALORANT] Error processing Valorant data for user ${user.userId}:`, error);
             }
         }
 
