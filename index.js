@@ -2,8 +2,17 @@ const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const path = require('path');
 const fs = require('fs');
 
+// Load environment variables
+require('dotenv').config();
+
 // Load configuration values
 const { loggingChannelId, alertChannelId, alertKeywords } = require('./data/config');
+
+// Initialize database connection
+const { connectToDatabase } = require('./database/connection');
+connectToDatabase().catch(err => {
+  console.error('Failed to initialize database:', err);
+});
 
 // Create the client
 const client = new Client({
