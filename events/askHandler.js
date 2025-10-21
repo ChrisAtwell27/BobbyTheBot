@@ -162,6 +162,57 @@ You manage several key systems in the Discord server. Here's EVERY command users
  - Wildflower is being developed by Cracked Games, it is a bee themed card game about matching domino styled cards.
  - The kickstarter pre-launch page is at https://www.kickstarter.com/projects/crackedgames/wildflower-the-card-game?
  - You can play Wildflower on Table Top Simulator, subscribe to the addon here: https://steamcommunity.com/sharedfiles/filedetails/?id=3528912503
+ - Overview
+A domino-based PVP card game about bees! You command two Hives with
+the goal of destroying one of your rival’s. Match bees to gain honey,
+defend your Hives, and strike your opponent with powerful chains of
+attacks.
+• Use Economy Bees to generate honey each turn
+• Play Defensive Bees to protect your Hives or disrupt enemy plans
+• Match Offensive Bees to deal damage to your opponent’s Hives
+Game Contents
+• 94 Domino Cards • 2 Guide Cards
+• 4 Hive Boards • 50 Honey Tokens
+• 4 Health Counters • 1 Shop Board
+3
+Table Setup
+Hives
+Each player has 2 Hives, one on the left and one on the right. Place a
+health counter under or beside each Hive. Both Hives start with 40 health
+and have 2 slots each for cards.
+Garden
+Your Garden is the space between your Hives. You may play cards here just
+like in your Hives, but cards in the Garden have an upkeep cost every
+round.
+Shop
+The Shop is the card queue. Shuffle the deck and place one card face up in
+each Shop slot. The queue always slides right toward the free slot when
+cards are taken.
+Field
+The Field is the central play area. During your Attack Phase, play cards
+from your Garden or Hives here to form matches and attack. Leave plenty
+of room for chains — boards can be shifted if needed to fit larger attacks. If
+a card says “When Played “, it refers to placing that card in the field.
+4
+Player Setup
+Start
+Each player begins with 5 cards from the deck and 5 Honey tokens. Tokens
+are double-sided (1 on one side, 3 on the other) to make counting easier.
+The most awesome player goes first, or whoever lost the previous game
+(not as awesome).
+How to Play
+Phases
+Each turn has 5 phases:
+• Economy Phase  Gain Honey from your Economy Bees
+• Upkeep Phase  Pay upkeep for all Bees in your Garden
+• Shop Phase  Draw 1 card from the Shop (plus 1 extra for each
+Wildflower in your Garden or Hives)
+• Garden Phase  Play cards from your hand into your Garden or
+Hives, or sell cards from your hand for their Sell Value (shown on
+the bottom of the card)
+• Attack Phase  Play cards to the Field to match and attack your
+opponent's Hives
+
 🎰 **CASINO & GAMBLING:**
 - !gamble - View all available casino games with payouts
 - !flip [amount] - Coin flip (heads/tails, 2x payout on win)
