@@ -389,6 +389,52 @@ function createDisbandedEmbed() {
         .setTimestamp();
 }
 
+// Helper function to safely respond to interactions
+async function safeInteractionResponse(interaction, responseType, responseData) {
+    try {
+        // Check if interaction is still valid (not expired)
+        if (!interaction.isRepliable()) {
+            console.log('Interaction is no longer repliable');
+            return false;
+        }
+
+        // Check which response method to use
+        if (responseType === 'reply') {
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(responseData);
+            } else {
+                await interaction.reply(responseData);
+            }
+        } else if (responseType === 'update') {
+            if (interaction.replied) {
+                await interaction.editReply(responseData);
+            } else {
+                await interaction.update(responseData);
+            }
+        } else if (responseType === 'defer') {
+            if (!interaction.deferred && !interaction.replied) {
+                await interaction.deferUpdate();
+            }
+        }
+        return true;
+    } catch (error) {
+        console.error('Error in safe interaction response:', error.message);
+        
+        // Try fallback response if possible
+        try {
+            if (!interaction.replied && !interaction.deferred && responseType === 'reply') {
+                await interaction.reply({ 
+                    content: '❌ There was an error processing your request. Please try again.', 
+                    ephemeral: true 
+                });
+            }
+        } catch (fallbackError) {
+            console.error('Fallback response also failed:', fallbackError.message);
+        }
+        return false;
+    }
+}
+
 module.exports = (client) => {
     // Initialize the API handler first
     apiHandler.init(client);
@@ -551,7 +597,7 @@ module.exports = (client) => {
             console.log('Looking for team:', fullTeamId);
 
             if (!team) {
-                return interaction.reply({
+                return safeInteractionResponse(interaction, 'reply', {
                     content: '❌ This team is no longer active.',
                     ephemeral: true
                 });
@@ -568,7 +614,7 @@ module.exports = (client) => {
             if (action === 'join') {
                 // Check if user is already in team
                 if (userId === team.leader.id || team.members.some(member => member.id === userId)) {
-                    return interaction.reply({
+                    return safeInteractionResponse(interaction, 'reply', {
                         content: '❌ You are already in this team!',
                         ephemeral: true
                     });
@@ -576,26 +622,34 @@ module.exports = (client) => {
 
                 // Check if team is full
                 if (getTotalMembers(team) >= 5) {
-                    return interaction.reply({
+                    return safeInteractionResponse(interaction, 'reply', {
                         content: '❌ This team is already full!',
                         ephemeral: true
                     });
                 }
 
+                // Defer the interaction immediately to prevent timeout
+                await safeInteractionResponse(interaction, 'defer');
+
                 // Add user to team
                 team.members.push(userInfo);
 
                 try {
-                    // Update the team display first
+                    // Update the team display
                     const isFull = getTotalMembers(team) >= 5;
                     const updatedEmbed = await createTeamEmbed(team);
                     const updatedComponents = createTeamButtons(fullTeamId, isFull);
 
-                    await interaction.update({
+                    const success = await safeInteractionResponse(interaction, 'update', {
                         embeds: [updatedEmbed.embed],
                         files: updatedEmbed.files,
                         components: [updatedComponents]
                     });
+
+                    if (!success) {
+                        console.log('Failed to update interaction, but team was still updated');
+                        return;
+                    }
 
                     // If team is full, celebrate!
                     if (isFull) {
@@ -629,28 +683,29 @@ module.exports = (client) => {
                             )
                             .setTimestamp();
 
-                        await interaction.followUp({
+                        await safeInteractionResponse(interaction, 'reply', {
                             embeds: [celebrationEmbed]
                         });
 
                         // Auto-delete team after 5 minutes when full
                         setTimeout(() => {
                             activeTeams.delete(fullTeamId);
-                            interaction.message.delete().catch(() => {});
+                            try {
+                                interaction.message.delete().catch(() => {});
+                            } catch (error) {
+                                console.log('Could not delete completed team message:', error.message);
+                            }
                         }, 5 * 60 * 1000);
                     }
                 } catch (error) {
-                    console.error('Error updating team:', error);
-                    await interaction.reply({
-                        content: '❌ There was an error updating the team. Please try again.',
-                        ephemeral: true
-                    });
+                    console.error('Error updating team after join:', error);
+                    // The team was already updated, so don't try to respond again
                 }
 
             } else if (action === 'leave') {
                 // Check if user is the leader
                 if (userId === team.leader.id) {
-                    return interaction.reply({
+                    return safeInteractionResponse(interaction, 'reply', {
                         content: '❌ Team leaders cannot leave their own team! Use the disband button instead.',
                         ephemeral: true
                     });
@@ -659,11 +714,14 @@ module.exports = (client) => {
                 // Check if user is in team
                 const memberIndex = team.members.findIndex(member => member.id === userId);
                 if (memberIndex === -1) {
-                    return interaction.reply({
+                    return safeInteractionResponse(interaction, 'reply', {
                         content: '❌ You are not in this team!',
                         ephemeral: true
                     });
                 }
+
+                // Defer the interaction immediately to prevent timeout
+                await safeInteractionResponse(interaction, 'defer');
 
                 // Remove user from team
                 team.members.splice(memberIndex, 1);
@@ -674,23 +732,20 @@ module.exports = (client) => {
                     const updatedEmbed = await createTeamEmbed(team);
                     const updatedComponents = createTeamButtons(fullTeamId, isFull);
 
-                    await interaction.update({
+                    await safeInteractionResponse(interaction, 'update', {
                         embeds: [updatedEmbed.embed],
                         files: updatedEmbed.files,
                         components: [updatedComponents]
                     });
                 } catch (error) {
                     console.error('Error updating team after leave:', error);
-                    await interaction.reply({
-                        content: '❌ There was an error updating the team. Please try again.',
-                        ephemeral: true
-                    });
+                    // The team was already updated, so don't try to respond again
                 }
 
             } else if (action === 'disband') {
                 // Only leader can disband
                 if (userId !== team.leader.id) {
-                    return interaction.reply({
+                    return safeInteractionResponse(interaction, 'reply', {
                         content: '❌ Only the team leader can disband the team!',
                         ephemeral: true
                     });
@@ -703,15 +758,22 @@ module.exports = (client) => {
 
                 // Remove team and delete message
                 activeTeams.delete(fullTeamId);
-                await interaction.update({
+                
+                const success = await safeInteractionResponse(interaction, 'update', {
                     embeds: [createDisbandedEmbed()],
                     components: []
                 });
 
-                // Delete the message after 5 seconds
-                setTimeout(() => {
-                    interaction.message.delete().catch(() => {});
-                }, 5000);
+                if (success) {
+                    // Delete the message after 5 seconds
+                    setTimeout(() => {
+                        try {
+                            interaction.message.delete().catch(() => {});
+                        } catch (error) {
+                            console.log('Could not delete disbanded team message:', error.message);
+                        }
+                    }, 5000);
+                }
 
                 return;
             }

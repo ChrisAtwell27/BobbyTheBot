@@ -33,5 +33,54 @@
     "region": "na",
     "puuid": "7ef936a7-3138-559d-b2f5-8f05ddc2e297",
     "registeredAt": "2025-07-23T19:20:34.297Z"
+  },
+  "622958028098109474": {
+    "name": "Ballooney",
+    "tag": "latte",
+    "region": "na",
+    "puuid": "660c389e-1803-50c3-a5ca-8f32c05c2cb0",
+    "registeredAt": "2025-07-26T19:20:58.875Z"
+  },
+  "1073002930556383303": {
+    "name": "The Deliverer",
+    "tag": "Steak",
+    "region": "na",
+    "puuid": "69656254-5c3f-546a-b209-aa783f41a4b3",
+    "registeredAt": "2025-07-26T22:56:43.718Z"
+  },
+  "638512602846330884": {
+    "name": "AroAceUpMySleeve",
+    "tag": "7100",
+    "region": "na",
+    "puuid": "6b68a39c-03a5-5f6e-a513-d59e027820b8",
+    "registeredAt": "2025-07-26T22:57:51.353Z"
+  },
+  "398157706965286925": {
+    "name": "Sappho",
+    "tag": "Bells",
+    "region": "na",
+    "puuid": "bcabb388-979e-578d-94fa-ec8229f307ed",
+    "registeredAt": "2025-07-26T22:58:36.934Z"
+  },
+  "278742274186412033": {
+    "name": "Serpent",
+    "tag": "scale",
+    "region": "na",
+    "puuid": "0724445c-9796-59f7-ba8d-88f076de475a",
+    "registeredAt": "2025-07-26T22:59:00.305Z"
+  },
+  "743324898771992706": {
+    "name": "dommedndelicate",
+    "tag": "subby",
+    "region": "na",
+    "puuid": "eb1d963c-852a-5b4b-bdab-f7d439e2b2f3",
+    "registeredAt": "2025-07-27T00:42:12.749Z"
+  },
+  "459723765513846795": {
+    "name": "MINI PEKKA",
+    "tag": "1234",
+    "region": "na",
+    "puuid": "b276fd31-d275-5ef4-b836-62d513f57b19",
+    "registeredAt": "2025-07-31T17:43:31.832Z"
   }
 }

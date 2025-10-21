@@ -35,6 +35,9 @@ let userRegistrations = new Map();
 // Valid regions
 const VALID_REGIONS = ['na', 'eu', 'ap', 'kr', 'latam', 'br'];
 
+// Competitive game modes for filtering
+const COMPETITIVE_MODES = ['competitive', 'ranked'];
+
 // Rank mapping with image paths
 const RANK_MAPPING = {
     0: { name: 'Unranked', color: '#8D8D8D', image: 'Unranked_Rank.png' },
@@ -260,6 +263,199 @@ function getAllRegisteredUsers() {
     }));
 }
 
+// Enhanced function to calculate match statistics from stored matches
+async function getPlayerMatchStats(registration) {
+    try {
+        // Use stored-matches endpoint for more comprehensive data
+        const storedMatchData = await makeAPIRequest(
+            `/v1/stored-matches/${registration.region}/${encodeURIComponent(registration.name)}/${encodeURIComponent(registration.tag)}`
+        );
+
+        if (storedMatchData.status !== 200 || !storedMatchData.data) {
+            console.log('No stored match data available, falling back to regular matches endpoint');
+            return await getPlayerMatchStatsLegacy(registration);
+        }
+
+        // Filter for competitive matches only
+        const competitiveMatches = storedMatchData.data.filter(match => 
+            match.meta && match.meta.mode && 
+            COMPETITIVE_MODES.includes(match.meta.mode.toLowerCase())
+        );
+
+        if (competitiveMatches.length === 0) {
+            console.log('No competitive matches found in stored data');
+            return {
+                totalKills: 0,
+                totalDeaths: 1, // Avoid division by zero
+                totalAssists: 0,
+                totalMatches: 0,
+                wins: 0,
+                avgKDA: 0,
+                winRate: 0,
+                avgACS: 0
+            };
+        }
+
+        // Take last 30 matches for more comprehensive analysis
+        const recentMatches = competitiveMatches.slice(0, 30);
+        
+        let totalKills = 0;
+        let totalDeaths = 0;
+        let totalAssists = 0;
+        let totalScore = 0;
+        let wins = 0;
+        let validMatches = 0;
+
+        for (const match of recentMatches) {
+            // Find player's stats in this match
+            if (!match.stats || !match.teams) continue;
+            
+            const playerStats = match.stats;
+            const teams = match.teams;
+            
+            // Check if this is the player's data (matches by PUUID if available)
+            if (registration.puuid && playerStats.puuid !== registration.puuid) {
+                continue;
+            }
+            
+            totalKills += playerStats.kills || 0;
+            totalDeaths += playerStats.deaths || 0;
+            totalAssists += playerStats.assists || 0;
+            totalScore += playerStats.score || 0;
+            
+            // Determine if won based on team scores
+            const redScore = teams.red || 0;
+            const blueScore = teams.blue || 0;
+            const playerTeam = playerStats.team;
+            
+            let won = false;
+            if (playerTeam === 'Red' && redScore > blueScore) won = true;
+            if (playerTeam === 'Blue' && blueScore > redScore) won = true;
+            
+            if (won) wins++;
+            validMatches++;
+        }
+
+        // Calculate averages and ratios
+        const avgKDA = totalDeaths > 0 ? (totalKills + totalAssists) / totalDeaths : totalKills + totalAssists;
+        const winRate = validMatches > 0 ? (wins / validMatches) * 100 : 0;
+        const avgACS = validMatches > 0 ? totalScore / validMatches : 0;
+
+        console.log(`Player ${registration.name}#${registration.tag} stats from ${validMatches} competitive matches:`);
+        console.log(`- KDA: ${totalKills}/${totalDeaths}/${totalAssists} (${avgKDA.toFixed(2)})`);
+        console.log(`- Win Rate: ${winRate.toFixed(1)}%`);
+        console.log(`- Avg ACS: ${avgACS.toFixed(0)}`);
+
+        return {
+            totalKills,
+            totalDeaths: Math.max(totalDeaths, 1), // Ensure never 0
+            totalAssists,
+            totalMatches: validMatches,
+            wins,
+            avgKDA,
+            winRate,
+            avgACS
+        };
+
+    } catch (error) {
+        console.error('Error fetching stored match stats:', error);
+        // Fall back to legacy method
+        return await getPlayerMatchStatsLegacy(registration);
+    }
+}
+
+// Legacy function for calculating match stats (fallback)
+async function getPlayerMatchStatsLegacy(registration) {
+    try {
+        const matchData = await makeAPIRequest(
+            `/v4/matches/${registration.region}/pc/${encodeURIComponent(registration.name)}/${encodeURIComponent(registration.tag)}`
+        );
+
+        if (matchData.status !== 200 || !matchData.data) {
+            return {
+                totalKills: 0,
+                totalDeaths: 1,
+                totalAssists: 0,
+                totalMatches: 0,
+                wins: 0,
+                avgKDA: 0,
+                winRate: 0,
+                avgACS: 0
+            };
+        }
+
+        // Filter for competitive matches only
+        const competitiveMatches = matchData.data.filter(match => 
+            match.metadata && match.metadata.queue.name && 
+            match.metadata.queue.name.toLowerCase() === 'competitive'
+        ).slice(0, 20); // Last 20 competitive matches
+
+        if (competitiveMatches.length === 0) {
+            return {
+                totalKills: 0,
+                totalDeaths: 1,
+                totalAssists: 0,
+                totalMatches: 0,
+                wins: 0,
+                avgKDA: 0,
+                winRate: 0,
+                avgACS: 0
+            };
+        }
+
+        let totalKills = 0;
+        let totalDeaths = 0;
+        let totalAssists = 0;
+        let totalScore = 0;
+        let wins = 0;
+        let validMatches = 0;
+
+        for (const match of competitiveMatches) {
+            const player = match.players.find(p => 
+                p.name.toLowerCase() === registration.name.toLowerCase()
+            );
+            if (!player) continue;
+
+            totalKills += player.stats.kills;
+            totalDeaths += player.stats.deaths;
+            totalAssists += player.stats.assists;
+            totalScore += player.stats.score;
+
+            const won = player.team_id === (match.teams.find(t => t.won) || {}).team_id;
+            if (won) wins++;
+            validMatches++;
+        }
+
+        const avgKDA = totalDeaths > 0 ? (totalKills + totalAssists) / totalDeaths : totalKills + totalAssists;
+        const winRate = validMatches > 0 ? (wins / validMatches) * 100 : 0;
+        const avgACS = validMatches > 0 ? totalScore / validMatches : 0;
+
+        return {
+            totalKills,
+            totalDeaths: Math.max(totalDeaths, 1),
+            totalAssists,
+            totalMatches: validMatches,
+            wins,
+            avgKDA,
+            winRate,
+            avgACS
+        };
+
+    } catch (error) {
+        console.error('Error fetching legacy match stats:', error);
+        return {
+            totalKills: 0,
+            totalDeaths: 1,
+            totalAssists: 0,
+            totalMatches: 0,
+            wins: 0,
+            avgKDA: 0,
+            winRate: 0,
+            avgACS: 0
+        };
+    }
+}
+
 // Function to create user stats visualization - Fix parameter list
 async function createStatsVisualization(accountData, mmrData, matchData, userAvatar, registration) {
     const canvas = createCanvas(1000, 800);
@@ -304,7 +500,7 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     // Subtitle
     ctx.font = '16px Arial';
     ctx.fillStyle = '#cccccc';
-    ctx.fillText('Powered by HenrikDev API & Enhanced Visualization', 500, 75);
+    ctx.fillText('Powered by HenrikDev API • Enhanced Visualization v3.0 • KDA + Stored Matches', 500, 75);
     
     // User info section with enhanced styling
     const infoBoxGradient = ctx.createLinearGradient(50, 100, 950, 200);
@@ -530,9 +726,55 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     ctx.fillStyle = '#666666';
     ctx.font = '12px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('Powered by HenrikDev Valorant API • Enhanced Visual Stats v2.0 • Data stored persistently', 500, 780);
+    ctx.fillText('Powered by HenrikDev Valorant API • Enhanced Visual Stats v3.0 • KDA + Stored Matches Integration', 500, 780);
     
     return canvas;
+}
+
+// Helper function to safely respond to interactions
+async function safeInteractionResponse(interaction, responseType, responseData) {
+    try {
+        // Check if interaction is still valid (not expired)
+        if (!interaction.isRepliable()) {
+            console.log('Interaction is no longer repliable');
+            return false;
+        }
+
+        // Check which response method to use
+        if (responseType === 'reply') {
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(responseData);
+            } else {
+                await interaction.reply(responseData);
+            }
+        } else if (responseType === 'update') {
+            if (interaction.replied) {
+                await interaction.editReply(responseData);
+            } else {
+                await interaction.update(responseData);
+            }
+        } else if (responseType === 'defer') {
+            if (!interaction.deferred && !interaction.replied) {
+                await interaction.deferUpdate();
+            }
+        }
+        return true;
+    } catch (error) {
+        console.error('Error in safe interaction response:', error.message);
+        
+        // Try fallback response if possible
+        try {
+            if (!interaction.replied && !interaction.deferred && responseType === 'reply') {
+                await interaction.reply({ 
+                    content: '❌ There was an error processing your request. Please try again.', 
+                    ephemeral: true 
+                });
+            }
+        } catch (fallbackError) {
+            console.error('Fallback response also failed:', fallbackError.message);
+        }
+        return false;
+    }
 }
 
 // Load existing registrations on startup
@@ -552,9 +794,9 @@ module.exports = {
     init: (client) => {
         // Only add event listeners if not already added
         if (!client._valorantApiHandlerInitialized) {
-            console.log('Valorant API Handler with Persistent Storage loaded successfully!');
+            console.log('Valorant API Handler with KDA Integration & Stored Matches loaded successfully!');
             console.log(`Registered regions: ${VALID_REGIONS.join(', ')}`);
-            console.log('Commands: !valstats, !valprofile, !valmatches, !valtest (admin), !valreset (admin), !vallist (admin)');
+            console.log('Commands: !valstats, !valprofile, !valmatches, !createteams (admin), !valtest (admin), !valreset (admin), !vallist (admin), !valskills (admin)');
             console.log(`Data file: ${USERS_FILE}`);
             console.log(`Loaded ${userRegistrations.size} registered users`);
 
@@ -601,6 +843,35 @@ module.exports = {
                     }
                 }
 
+                // Enhanced team creation command with better error handling
+                if (command === '!createteams' && message.member.permissions.has('ADMINISTRATOR')) {
+                    const messageId = args[1];
+                    const channelId = args[2]; // Optional channel ID
+                    
+                    if (!messageId) {
+                        return message.reply({
+                            embeds: [new EmbedBuilder()
+                                .setTitle('❌ Missing Message ID')
+                                .setColor('#ff0000')
+                                .setDescription('Please provide a message ID to create teams from.')
+                                .addFields(
+                                    { 
+                                        name: '📖 Usage', 
+                                        value: '`!createteams <messageId> [channelId]`\n\n**Examples:**\n• `!createteams 1234567890` (same channel)\n• `!createteams 1234567890 9876543210` (different channel)', 
+                                        inline: false 
+                                    },
+                                    { 
+                                        name: '💡 How to get Message ID', 
+                                        value: '1. Enable Developer Mode in Discord settings\n2. Right-click the message with reactions\n3. Select "Copy Message ID"', 
+                                        inline: false 
+                                    }
+                                )
+                                .setTimestamp()]
+                        });
+                    }
+                    await handleCreateTeams(message, messageId, channelId);
+                }
+
                 if (command === '!vallist' && message.member.permissions.has('ADMINISTRATOR')) {
                     const allUsers = getAllRegisteredUsers();
                     if (allUsers.length === 0) {
@@ -626,6 +897,171 @@ module.exports = {
                     });
 
                     message.reply({ embeds: [embed] });
+                }
+
+                if (command === '!valskills' && message.member.permissions.has('ADMINISTRATOR')) {
+                    const allUsers = getAllRegisteredUsers();
+                    if (allUsers.length === 0) {
+                        return message.reply('📋 No users are currently registered.');
+                    }
+
+                    const loadingEmbed = new EmbedBuilder()
+                        .setTitle('🔄 Calculating Skill Ratings...')
+                        .setColor('#ff4654')
+                        .setDescription('Fetching comprehensive stats for all registered users...')
+                        .setTimestamp();
+
+                    const loadingMessage = await message.channel.send({ embeds: [loadingEmbed] });
+
+                    try {
+                        const playersWithSkills = [];
+                        
+                        for (const userData of allUsers) {
+                            try {
+                                const registration = {
+                                    name: userData.name,
+                                    tag: userData.tag,
+                                    region: userData.region,
+                                    puuid: userData.puuid
+                                };
+
+                                // Get current rank data
+                                const rankData = await getUserRankData(userData.discordId);
+                                
+                                // Get match statistics with KDA data
+                                const matchStats = await getPlayerMatchStats(registration);
+
+                                // Get peak rank from MMR data
+                                const mmrData = await makeAPIRequest(
+                                    `/v2/mmr/${registration.region}/${encodeURIComponent(registration.name)}/${encodeURIComponent(registration.tag)}`
+                                );
+                                
+                                let peakTier = 0;
+                                if (mmrData.status === 200 && mmrData.data.highest_rank) {
+                                    peakTier = mmrData.data.highest_rank.tier;
+                                }
+
+                                const currentTier = rankData ? rankData.currenttier : 0;
+                                const currentRR = rankData ? rankData.ranking_in_tier : 0;
+
+                                // Calculate skill score
+                                const skillScore = calculateEnhancedSkillScore(
+                                    currentTier, 
+                                    peakTier, 
+                                    matchStats.winRate, 
+                                    currentRR, 
+                                    matchStats.avgKDA,
+                                    matchStats.avgACS
+                                );
+
+                                const discordUser = client.users.cache.get(userData.discordId);
+                                const discordName = discordUser ? discordUser.username : 'Unknown User';
+
+                                playersWithSkills.push({
+                                    discordName,
+                                    valorantName: `${userData.name}#${userData.tag}`,
+                                    currentRank: RANK_MAPPING[currentTier] || RANK_MAPPING[0],
+                                    currentRR,
+                                    peakRank: RANK_MAPPING[peakTier] || RANK_MAPPING[0],
+                                    avgKDA: matchStats.avgKDA,
+                                    winRate: matchStats.winRate,
+                                    matchesPlayed: matchStats.totalMatches,
+                                    skillScore
+                                });
+
+                            } catch (error) {
+                                console.error(`Error calculating skill for ${userData.name}#${userData.tag}:`, error);
+                                // Continue with next user
+                            }
+                        }
+
+                        if (playersWithSkills.length === 0) {
+                            const errorEmbed = new EmbedBuilder()
+                                .setTitle('❌ No Skill Data Available')
+                                .setColor('#ff0000')
+                                .setDescription('Could not calculate skill ratings for any registered users.')
+                                .setTimestamp();
+                            
+                            return await loadingMessage.edit({ embeds: [errorEmbed] });
+                        }
+
+                        // Sort by skill score (highest to lowest)
+                        playersWithSkills.sort((a, b) => b.skillScore - a.skillScore);
+
+                        const skillEmbed = new EmbedBuilder()
+                            .setTitle('🎯 Player Skill Ratings (Admin Only)')
+                            .setColor('#ff4654')
+                            .setDescription(`Comprehensive skill analysis for ${playersWithSkills.length} players`)
+                            .addFields({
+                                name: '🧮 Skill Formula',
+                                value: 'Current Rank (35%) + KDA (25%) + Win Rate (20%) + Peak Rank (15%) + RR (5%)',
+                                inline: false
+                            })
+                            .setTimestamp();
+
+                        let skillList = '';
+                        playersWithSkills.forEach((player, index) => {
+                            const rankText = player.currentRR > 0 ? `${player.currentRank.name} (${player.currentRR} RR)` : player.currentRank.name;
+                            const kdaText = player.avgKDA > 0 ? player.avgKDA.toFixed(2) : 'N/A';
+                            const wrText = player.winRate > 0 ? `${player.winRate.toFixed(0)}%` : 'N/A';
+                            const matchesText = player.matchesPlayed > 0 ? ` (${player.matchesPlayed} matches)` : '';
+                            
+                            skillList += `**${index + 1}.** ${player.discordName}\n`;
+                            skillList += `└ ${player.valorantName}\n`;
+                            skillList += `└ ${rankText} • Peak: ${player.peakRank.name}\n`;
+                            skillList += `└ KDA: ${kdaText} • WR: ${wrText}${matchesText}\n`;
+                            skillList += `└ **Skill Score: ${player.skillScore.toFixed(2)}**\n\n`;
+                        });
+
+                        // Split into multiple fields if needed
+                        const maxLength = 1024;
+                        if (skillList.length <= maxLength) {
+                            skillEmbed.addFields({
+                                name: '📊 Player Rankings',
+                                value: skillList,
+                                inline: false
+                            });
+                        } else {
+                            // Split into multiple fields
+                            const chunks = [];
+                            let currentChunk = '';
+                            const lines = skillList.split('\n');
+                            
+                            for (const line of lines) {
+                                if ((currentChunk + line + '\n').length > maxLength) {
+                                    if (currentChunk) chunks.push(currentChunk);
+                                    currentChunk = line + '\n';
+                                } else {
+                                    currentChunk += line + '\n';
+                                }
+                            }
+                            if (currentChunk) chunks.push(currentChunk);
+
+                            chunks.forEach((chunk, index) => {
+                                skillEmbed.addFields({
+                                    name: index === 0 ? '📊 Player Rankings' : '📊 Player Rankings (cont.)',
+                                    value: chunk,
+                                    inline: false
+                                });
+                            });
+                        }
+
+                        await loadingMessage.edit({ embeds: [skillEmbed] });
+
+                    } catch (error) {
+                        console.error('Error calculating skill ratings:', error);
+                        
+                        const errorEmbed = new EmbedBuilder()
+                            .setTitle('❌ Error Calculating Skill Ratings')
+                            .setColor('#ff0000')
+                            .setDescription('There was an error calculating skill ratings.')
+                            .addFields(
+                                { name: '🐛 Error Details:', value: `\`${error.message}\``, inline: false }
+                            )
+                            .setTimestamp();
+
+                        await loadingMessage.edit({ embeds: [errorEmbed] });
+                    }
                 }
 
                 if (command === '!valtest' && message.member.permissions.has('ADMINISTRATOR')) {
@@ -674,7 +1110,7 @@ module.exports = {
                     if (interaction.customId.startsWith('valstats_register_')) {
                         const userId = interaction.customId.split('_')[2];
                         if (interaction.user.id !== userId) {
-                            return interaction.reply({
+                            return safeInteractionResponse(interaction, 'reply', {
                                 content: '❌ This registration is not for you!',
                                 ephemeral: true
                             });
@@ -685,7 +1121,7 @@ module.exports = {
                     if (interaction.customId.startsWith('valstats_refresh_')) {
                         const userId = interaction.customId.split('_')[2];
                         if (interaction.user.id !== userId) {
-                            return interaction.reply({
+                            return safeInteractionResponse(interaction, 'reply', {
                                 content: '❌ This is not your stats panel!',
                                 ephemeral: true
                             });
@@ -693,13 +1129,13 @@ module.exports = {
 
                         const registration = userRegistrations.get(userId);
                         if (!registration) {
-                            return interaction.reply({
+                            return safeInteractionResponse(interaction, 'reply', {
                                 content: '❌ You are not registered! Use `!valstats` to register.',
                                 ephemeral: true
                             });
                         }
 
-                        await interaction.deferUpdate();
+                        await safeInteractionResponse(interaction, 'defer');
                         await showUserStats({ 
                             channel: interaction.channel, 
                             author: interaction.user 
@@ -709,7 +1145,7 @@ module.exports = {
                     if (interaction.customId.startsWith('valmatches_refresh_')) {
                         const userId = interaction.customId.split('_')[2];
                         if (interaction.user.id !== userId) {
-                            return interaction.reply({
+                            return safeInteractionResponse(interaction, 'reply', {
                                 content: '❌ This is not your matches panel!',
                                 ephemeral: true
                             });
@@ -717,13 +1153,13 @@ module.exports = {
 
                         const registration = userRegistrations.get(userId);
                         if (!registration) {
-                            return interaction.reply({
+                            return safeInteractionResponse(interaction, 'reply', {
                                 content: '❌ You are not registered! Use `!valstats` to register.',
                                 ephemeral: true
                             });
                         }
 
-                        await interaction.deferUpdate();
+                        await safeInteractionResponse(interaction, 'defer');
                         await showUserMatches({ 
                             channel: interaction.channel, 
                             author: interaction.user 
@@ -733,13 +1169,13 @@ module.exports = {
                     if (interaction.customId.startsWith('valstats_details_')) {
                         const userId = interaction.customId.split('_')[2];
                         if (interaction.user.id !== userId) {
-                            return interaction.reply({
+                            return safeInteractionResponse(interaction, 'reply', {
                                 content: '❌ This is not your stats panel!',
                                 ephemeral: true
                             });
                         }
 
-                        return interaction.reply({
+                        return safeInteractionResponse(interaction, 'reply', {
                             content: '🚧 Detailed match view coming soon! For now, check your recent matches in the stats image above.',
                             ephemeral: true
                         });
@@ -756,7 +1192,397 @@ module.exports = {
             client._valorantApiHandlerInitialized = true;
         }
 
-        // Helper functions
+        // Enhanced Team Creation Functions with KDA integration
+        async function handleCreateTeams(message, messageId, channelId = null) {
+            const loadingEmbed = new EmbedBuilder()
+                .setTitle('🔄 Creating Balanced Teams...')
+                .setColor('#ff4654')
+                .setDescription('Analyzing player reactions and calculating comprehensive team balance...')
+                .setTimestamp();
+
+            const loadingMessage = await message.channel.send({ embeds: [loadingEmbed] });
+
+            try {
+                // Determine which channel to search in
+                let targetChannel = message.channel;
+                if (channelId) {
+                    try {
+                        targetChannel = await client.channels.fetch(channelId);
+                        if (!targetChannel) {
+                            throw new Error('Channel not found');
+                        }
+                        if (!targetChannel.isTextBased()) {
+                            throw new Error('Target channel is not a text channel');
+                        }
+                    } catch (error) {
+                        throw new Error(`Could not access channel ${channelId}: ${error.message}`);
+                    }
+                }
+
+                // Validate message ID format
+                if (!/^\d{17,19}$/.test(messageId)) {
+                    throw new Error('Invalid message ID format. Message IDs should be 17-19 digits long.');
+                }
+
+                // Attempt to fetch the target message with better error handling
+                let targetMessage;
+                try {
+                    targetMessage = await targetChannel.messages.fetch(messageId);
+                    if (!targetMessage) {
+                        throw new Error('Message not found');
+                    }
+                } catch (fetchError) {
+                    if (fetchError.code === 10008) {
+                        throw new Error(`Message with ID ${messageId} was not found in ${targetChannel.name}. Please check:\n• The message ID is correct\n• The message exists in the specified channel\n• The message hasn't been deleted\n• The bot has permission to read message history`);
+                    } else if (fetchError.code === 50001) {
+                        throw new Error(`The bot doesn't have permission to access ${targetChannel.name}`);
+                    } else if (fetchError.code === 50013) {
+                        throw new Error(`The bot doesn't have permission to read message history in ${targetChannel.name}`);
+                    } else {
+                        throw new Error(`Failed to fetch message: ${fetchError.message}`);
+                    }
+                }
+
+                // Check if the message has any reactions
+                if (!targetMessage.reactions.cache.size) {
+                    throw new Error('The target message has no reactions. Players need to react to the message to be included in team creation.');
+                }
+
+                // Get all users who reacted to the message
+                const reactors = await getMessageReactors(targetMessage);
+                
+                if (reactors.length < 2) {
+                    throw new Error(`Need at least 2 players to create teams. Found ${reactors.length} reactor(s).`);
+                }
+
+                // Update loading message with progress
+                const progressEmbed = new EmbedBuilder()
+                    .setTitle('🔄 Processing Players...')
+                    .setColor('#ff4654')
+                    .setDescription(`Found ${reactors.length} players. Getting comprehensive Valorant stats...`)
+                    .addFields({
+                        name: '📊 Progress',
+                        value: 'Fetching player registrations, rank data, and match statistics...',
+                        inline: false
+                    })
+                    .setTimestamp();
+
+                await loadingMessage.edit({ embeds: [progressEmbed] });
+
+                // Get comprehensive stats for each registered player
+                const players = await getPlayersWithStats(reactors, client);
+                
+                if (players.length < 2) {
+                    const unregisteredCount = reactors.length - players.length;
+                    throw new Error(`Need at least 2 registered players to create teams. Found ${players.length} registered player(s) out of ${reactors.length} total reactors.\n\n${unregisteredCount > 0 ? `${unregisteredCount} player(s) need to register using \`!valstats\`.` : ''}`);
+                }
+
+                // Update loading with calculation phase
+                const calcEmbed = new EmbedBuilder()
+                    .setTitle('⚖️ Calculating Team Balance...')
+                    .setColor('#ff4654')
+                    .setDescription(`Analyzing ${players.length} players using enhanced skill formula...`)
+                    .addFields({
+                        name: '🧮 Skill Formula Components',
+                        value: '• Current Rank (35%)\n• KDA Ratio (25%)\n• Win Rate (20%)\n• Peak Rank (15%)\n• Current RR (5%)',
+                        inline: false
+                    })
+                    .setTimestamp();
+
+                await loadingMessage.edit({ embeds: [calcEmbed] });
+
+                // Create balanced teams
+                const teams = createBalancedTeams(players);
+
+                // Display the teams
+                await displayBalancedTeams(loadingMessage, teams, reactors.length, players.length, targetChannel.name);
+
+            } catch (error) {
+                console.error('Error creating teams:', error);
+                
+                const errorEmbed = new EmbedBuilder()
+                    .setTitle('❌ Error Creating Teams')
+                    .setColor('#ff0000')
+                    .setDescription('There was an error creating balanced teams.')
+                    .addFields(
+                        { 
+                            name: '🐛 Error Details:', 
+                            value: `\`\`\`${error.message}\`\`\``, 
+                            inline: false 
+                        },
+                        { 
+                            name: '💡 Common Solutions:', 
+                            value: [
+                                '• Double-check the message ID is correct',
+                                '• Ensure the message has reactions',
+                                '• Make sure players are registered with `!valstats`',
+                                '• Verify the bot has permission to read message history',
+                                '• If using a different channel, include the channel ID: `!createteams <messageId> <channelId>`'
+                            ].join('\n'), 
+                            inline: false 
+                        },
+                        { 
+                            name: '📖 Command Format:', 
+                            value: '`!createteams <messageId> [channelId]`', 
+                            inline: false 
+                        }
+                    )
+                    .setTimestamp();
+
+                await loadingMessage.edit({ embeds: [errorEmbed] });
+            }
+        }
+
+        async function getMessageReactors(targetMessage) {
+            const reactors = new Set();
+            
+            // Get all reactions from the message
+            for (const reaction of targetMessage.reactions.cache.values()) {
+                try {
+                    const users = await reaction.users.fetch();
+                    users.forEach(user => {
+                        if (!user.bot) { // Exclude bots
+                            reactors.add(user);
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error fetching reaction users:', error);
+                }
+            }
+
+            return Array.from(reactors);
+        }
+
+        async function getPlayersWithStats(reactors, client) {
+            const players = [];
+            
+            for (const user of reactors) {
+                try {
+                    const registration = userRegistrations.get(user.id);
+                    if (!registration) {
+                        console.log(`User ${user.username} is not registered`);
+                        continue;
+                    }
+
+                    console.log(`Getting comprehensive stats for ${registration.name}#${registration.tag}...`);
+
+                    // Get current rank data
+                    const rankData = await getUserRankData(user.id);
+                    
+                    // Get match statistics with KDA data using enhanced function
+                    const matchStats = await getPlayerMatchStats(registration);
+
+                    // Get peak rank from MMR data
+                    const mmrData = await makeAPIRequest(
+                        `/v2/mmr/${registration.region}/${encodeURIComponent(registration.name)}/${encodeURIComponent(registration.tag)}`
+                    );
+                    
+                    let peakTier = 0;
+                    if (mmrData.status === 200 && mmrData.data.highest_rank) {
+                        peakTier = mmrData.data.highest_rank.tier;
+                    }
+
+                    const currentTier = rankData ? rankData.currenttier : 0;
+                    const currentRR = rankData ? rankData.ranking_in_tier : 0;
+
+                    // Calculate enhanced skill score with KDA
+                    const skillScore = calculateEnhancedSkillScore(
+                        currentTier, 
+                        peakTier, 
+                        matchStats.winRate, 
+                        currentRR, 
+                        matchStats.avgKDA,
+                        matchStats.avgACS
+                    );
+
+                    players.push({
+                        user: user,
+                        registration: registration,
+                        currentTier: currentTier,
+                        currentRR: currentRR,
+                        peakTier: peakTier,
+                        winRate: matchStats.winRate,
+                        avgKDA: matchStats.avgKDA,
+                        avgACS: matchStats.avgACS,
+                        matchesPlayed: matchStats.totalMatches,
+                        skillScore: skillScore,
+                        rankInfo: RANK_MAPPING[currentTier] || RANK_MAPPING[0],
+                        peakRankInfo: RANK_MAPPING[peakTier] || RANK_MAPPING[0]
+                    });
+
+                } catch (error) {
+                    console.error(`Error getting stats for ${user.username}:`, error);
+                    // Continue with next player
+                }
+            }
+
+            return players;
+        }
+
+        // Enhanced skill score calculation with KDA integration
+        function calculateEnhancedSkillScore(currentTier, peakTier, winRate, currentRR, avgKDA, avgACS) {
+            // Enhanced skill score formula with KDA integration
+            // Current tier: 35% weight (still most important)
+            // KDA: 25% weight (significant impact on individual skill)
+            // Win rate: 20% weight 
+            // Peak tier: 15% weight
+            // Current RR: 5% weight
+            
+            const currentScore = currentTier * 0.35;
+            
+            // KDA score: normalize to similar scale as ranks (0-27)
+            // Good KDA is around 1.0-1.5, excellent is 2.0+
+            const kdaScore = Math.min(avgKDA * 8, 27) * 0.25; // Cap at 27 equivalent points
+            
+            const winRateScore = (winRate / 100) * 8 * 0.20; // Normalize win rate to similar scale
+            const peakScore = peakTier * 0.15;
+            const rrScore = (currentRR / 100) * 0.05; // RR contributes least
+            
+            const totalScore = currentScore + kdaScore + winRateScore + peakScore + rrScore;
+            
+            console.log(`Skill calculation for player: Current(${currentTier}*0.35=${currentScore.toFixed(2)}) + KDA(${avgKDA.toFixed(2)}*8*0.25=${kdaScore.toFixed(2)}) + WR(${winRate.toFixed(1)}%*0.20=${winRateScore.toFixed(2)}) + Peak(${peakTier}*0.15=${peakScore.toFixed(2)}) + RR(${currentRR}*0.05=${rrScore.toFixed(2)}) = ${totalScore.toFixed(2)}`);
+            
+            return totalScore;
+        }
+
+        function createBalancedTeams(players) {
+            // Sort players by skill score (highest to lowest)
+            players.sort((a, b) => b.skillScore - a.skillScore);
+            
+            // Determine number of teams (try for teams of 5, minimum 2 teams)
+            const numPlayers = players.length;
+            let numTeams = Math.max(2, Math.floor(numPlayers / 5));
+            
+            // If we have exactly 10 players, make 2 teams of 5
+            if (numPlayers === 10) {
+                numTeams = 2;
+            }
+            // If we have 6-9 players, make 2 teams
+            else if (numPlayers >= 6 && numPlayers <= 9) {
+                numTeams = 2;
+            }
+            // If we have 11-15 players, make 3 teams
+            else if (numPlayers >= 11 && numPlayers <= 15) {
+                numTeams = 3;
+            }
+            
+            // Initialize teams
+            const teams = Array.from({ length: numTeams }, () => ({
+                players: [],
+                totalSkill: 0,
+                avgSkill: 0,
+                totalKDA: 0,
+                avgKDA: 0,
+                avgWinRate: 0
+            }));
+            
+            // Use snake draft algorithm for better balance
+            let teamIndex = 0;
+            let direction = 1;
+            
+            for (let i = 0; i < players.length; i++) {
+                teams[teamIndex].players.push(players[i]);
+                teams[teamIndex].totalSkill += players[i].skillScore;
+                teams[teamIndex].totalKDA += players[i].avgKDA;
+                
+                // Calculate team averages
+                const teamSize = teams[teamIndex].players.length;
+                teams[teamIndex].avgSkill = teams[teamIndex].totalSkill / teamSize;
+                teams[teamIndex].avgKDA = teams[teamIndex].totalKDA / teamSize;
+                teams[teamIndex].avgWinRate = teams[teamIndex].players.reduce((sum, p) => sum + p.winRate, 0) / teamSize;
+                
+                // Snake draft: 0,1,2,2,1,0,0,1,2,2,1,0...
+                if (direction === 1) {
+                    teamIndex++;
+                    if (teamIndex >= numTeams) {
+                        teamIndex = numTeams - 1;
+                        direction = -1;
+                    }
+                } else {
+                    teamIndex--;
+                    if (teamIndex < 0) {
+                        teamIndex = 0;
+                        direction = 1;
+                    }
+                }
+            }
+            
+            return teams;
+        }
+
+        async function displayBalancedTeams(loadingMessage, teams, totalReactors, registeredPlayers, channelName = 'current channel') {
+            const embed = new EmbedBuilder()
+                .setTitle('⚖️ Enhanced Balanced Valorant Teams')
+                .setColor('#ff4654')
+                .setDescription(`Created ${teams.length} balanced teams from reactions in ${channelName}`)
+                .addFields(
+                    { 
+                        name: '📊 Analysis Summary', 
+                        value: `**Total Reactors:** ${totalReactors}\n**Registered Players:** ${registeredPlayers}\n**Teams Created:** ${teams.length}\n**Algorithm:** Enhanced Snake Draft with KDA`, 
+                        inline: false 
+                    }
+                )
+                .setTimestamp();
+
+            // Add each team with enhanced stats
+            teams.forEach((team, index) => {
+                const teamNumber = index + 1;
+                const teamEmoji = ['🔴', '🔵', '🟢', '🟡', '🟣', '🟠'][index] || '⚪';
+                
+                let teamInfo = '';
+                team.players.forEach((player, playerIndex) => {
+                    const rankName = player.rankInfo.name;
+                    const rrText = player.currentRR > 0 ? ` (${player.currentRR} RR)` : '';
+                    const kdaText = player.avgKDA > 0 ? ` • KDA: ${player.avgKDA.toFixed(2)}` : '';
+                    const winRateText = player.winRate > 0 ? ` • ${player.winRate.toFixed(0)}% WR` : '';
+                    const acsText = player.avgACS > 0 ? ` • ${Math.round(player.avgACS)} ACS` : '';
+                    
+                    teamInfo += `${playerIndex + 1}. **${player.user.displayName || player.user.username}**\n`;
+                    teamInfo += `└ ${rankName}${rrText}${kdaText}${winRateText}\n`;
+                    teamInfo += `└ Peak: ${player.peakRankInfo.name}${acsText}\n\n`;
+                });
+
+                embed.addFields({
+                    name: `${teamEmoji} Team ${teamNumber} (KDA: ${team.avgKDA.toFixed(2)} • WR: ${team.avgWinRate.toFixed(0)}%)`,
+                    value: teamInfo || 'No players',
+                    inline: true
+                });
+            });
+
+            // Add unregistered players if any
+            const unregisteredCount = totalReactors - registeredPlayers;
+            if (unregisteredCount > 0) {
+                embed.addFields({
+                    name: '⚠️ Unregistered Players',
+                    value: `${unregisteredCount} players who reacted are not registered.\nThey can use \`!valstats\` to register and be included in future team creation.`,
+                    inline: false
+                });
+            }
+
+            // Enhanced balance information with KDA metrics (skill difference hidden from display)
+            const skillScores = teams.map(team => team.avgSkill);
+            const kdaScores = teams.map(team => team.avgKDA);
+            const minSkill = Math.min(...skillScores);
+            const maxSkill = Math.max(...skillScores);
+            const skillDifference = maxSkill - minSkill;
+            const avgKDADiff = Math.max(...kdaScores) - Math.min(...kdaScores);
+            
+            const balanceColor = skillDifference < 1 ? '🟢' : skillDifference < 2 ? '🟡' : '🔴';
+            embed.addFields({
+                name: `${balanceColor} Team Balance Analysis`,
+                value: `**KDA Difference:** ${avgKDADiff.toFixed(2)}\n` +
+                       `${skillDifference < 1 ? 'Excellent balance!' : skillDifference < 2 ? 'Good balance' : 'Teams may be unbalanced'}\n` +
+                       `*Internal skill scores used for balancing*`,
+                inline: false
+            });
+
+            embed.setFooter({ 
+                text: 'Balanced using: Current Rank (35%) + KDA (25%) + Win Rate (20%) + Peak Rank (15%) + RR (5%) • Use !valskills (admin) to view ratings' 
+            });
+
+            await loadingMessage.edit({ embeds: [embed] });
+        }
+
         async function showRegistrationPrompt(message) {
             const embed = new EmbedBuilder()
                 .setTitle('🔐 Valorant Registration Required')
@@ -766,8 +1592,9 @@ module.exports = {
                     { name: '📝 What we need:', value: '• Your Valorant username and tag (e.g., Player#1234)\n• Your region (e.g., na, eu, ap)', inline: false },
                     { name: '🔒 Privacy:', value: 'Your data is stored securely in our local database file. No personal Discord data is saved.', inline: false },
                     { name: '🌍 Valid Regions:', value: VALID_REGIONS.join(', ').toUpperCase(), inline: false },
-                    { name: '🎯 Team Builder Integration:', value: 'Once registered, your rank will show in team builder!', inline: false },
-                    { name: '💾 Persistent Storage:', value: 'Your registration will persist even if the bot restarts!', inline: false }
+                    { name: '🎯 Team Builder Integration:', value: 'Once registered, your rank and KDA will show in team builder!', inline: false },
+                    { name: '💾 Persistent Storage:', value: 'Your registration will persist even if the bot restarts!', inline: false },
+                    { name: '📊 Enhanced Stats:', value: 'Now includes comprehensive KDA analysis from stored matches!', inline: false }
                 )
                 .setFooter({ text: 'Click the button below to register!' })
                 .setTimestamp();
@@ -815,28 +1642,28 @@ module.exports = {
             const region = interaction.fields.getTextInputValue('valorant_region').toLowerCase();
 
             if (!username.includes('#') || username.split('#').length !== 2) {
-                return interaction.reply({
+                return safeInteractionResponse(interaction, 'reply', {
                     content: '❌ Invalid username format! Please use the format: Username#Tag (e.g., Player#1234)',
                     ephemeral: true
                 });
             }
 
             if (!VALID_REGIONS.includes(region)) {
-                return interaction.reply({
+                return safeInteractionResponse(interaction, 'reply', {
                     content: `❌ Invalid region! Valid regions are: ${VALID_REGIONS.join(', ').toUpperCase()}`,
                     ephemeral: true
                 });
             }
 
             const [name, tag] = username.split('#');
-            await interaction.deferReply({ ephemeral: true });
+            await safeInteractionResponse(interaction, 'defer', { ephemeral: true });
 
             try {
                 console.log(`Testing account: ${name}#${tag} in region ${region}`);
                 const accountData = await makeAPIRequest(`/v1/account/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`);
                 
                 if (accountData.status !== 200) {
-                    return interaction.editReply({
+                    return safeInteractionResponse(interaction, 'reply', {
                         content: `❌ Could not find a Valorant account with that username and tag. Please check your spelling and try again.\n\nAPI Response: ${accountData.error || 'Unknown error'}`
                     });
                 }
@@ -860,15 +1687,16 @@ module.exports = {
                         { name: '⭐ Level', value: accountData.data.account_level.toString(), inline: true },
                         { name: '💾 Storage', value: 'Saved to persistent database', inline: true },
                         { name: '🚀 Next Step', value: 'Use `!valstats` or `!valprofile` to view your stats!', inline: false },
-                        { name: '🎯 Team Builder', value: 'Your rank will now show when you join Valorant teams!', inline: false }
+                        { name: '🎯 Team Builder', value: 'Your rank and KDA will now show when you join Valorant teams!', inline: false },
+                        { name: '📊 Enhanced Features', value: 'Comprehensive match analysis with stored matches API integration!', inline: false }
                     )
                     .setTimestamp();
 
-                await interaction.editReply({ embeds: [successEmbed] });
+                await safeInteractionResponse(interaction, 'reply', { embeds: [successEmbed] });
 
             } catch (error) {
                 console.error('Registration error:', error);
-                await interaction.editReply({
+                await safeInteractionResponse(interaction, 'reply', {
                     content: '❌ There was an error validating your account. Please try again later or contact an administrator.\n\nError: ' + error.message
                 });
             }
@@ -876,15 +1704,15 @@ module.exports = {
 
         async function showUserStats(message, registration) {
             const loadingEmbed = new EmbedBuilder()
-                .setTitle('🔄 Loading Valorant Stats...')
+                .setTitle('🔄 Loading Enhanced Valorant Stats...')
                 .setColor('#ff4654')
-                .setDescription('Fetching your latest data from Riot Games...')
+                .setDescription('Fetching your latest data from Riot Games with comprehensive analysis...')
                 .setTimestamp();
 
             const loadingMessage = await message.channel.send({ embeds: [loadingEmbed] });
 
             try {
-                console.log(`Fetching stats for: ${registration.name}#${registration.tag} in ${registration.region}`);
+                console.log(`Fetching enhanced stats for: ${registration.name}#${registration.tag} in ${registration.region}`);
                 
                 const [accountData, mmrData, matchData] = await Promise.all([
                     makeAPIRequest(`/v1/account/${encodeURIComponent(registration.name)}/${encodeURIComponent(registration.tag)}`),
@@ -900,25 +1728,95 @@ module.exports = {
                     throw new Error(`Account not found - Status: ${accountData.status}`);
                 }
 
+                // Calculate enhanced map statistics
+                let mapStats = {};
+                let agentStats = {};
+                let overallStats = {
+                    totalKills: 0,
+                    totalDeaths: 0,
+                    totalAssists: 0,
+                    totalMatches: 0,
+                    wins: 0,
+                    totalACS: 0
+                };
+
+                if (matchData.status === 200 && matchData.data) {
+                    // Filter for competitive matches only
+                    const competitiveMatches = matchData.data.filter(match => 
+                        match.metadata && match.metadata.queue.name && match.metadata.queue.name.toLowerCase() === 'competitive'
+                    ).slice(0, 20); // Last 20 competitive matches
+
+                    competitiveMatches.forEach(match => {
+                        const player = match.players.find(p => p.name.toLowerCase() === registration.name.toLowerCase());
+                        if (!player) return;
+
+                        const won = player.team_id === (match.teams.find(t => t.won) || {}).team_id;
+                        const mapName = match.metadata.map.name;
+                        const agentName = player.agent.name;
+
+                        // Update overall stats
+                        overallStats.totalKills += player.stats.kills;
+                        overallStats.totalDeaths += player.stats.deaths;
+                        overallStats.totalAssists += player.stats.assists;
+                        overallStats.totalACS += player.stats.score;
+                        overallStats.totalMatches++;
+                        if (won) overallStats.wins++;
+
+                        // Track map statistics
+                        if (!mapStats[mapName]) {
+                            mapStats[mapName] = {
+                                games: 0,
+                                wins: 0,
+                                kills: 0,
+                                deaths: 0,
+                                assists: 0,
+                                totalACS: 0
+                            };
+                        }
+                        mapStats[mapName].games++;
+                        if (won) mapStats[mapName].wins++;
+                        mapStats[mapName].kills += player.stats.kills;
+                        mapStats[mapName].deaths += player.stats.deaths;
+                        mapStats[mapName].assists += player.stats.assists;
+                        mapStats[mapName].totalACS += player.stats.score;
+
+                        // Track agent statistics
+                        if (!agentStats[agentName]) {
+                            agentStats[agentName] = {
+                                games: 0,
+                                wins: 0,
+                                kills: 0,
+                                deaths: 0,
+                                assists: 0
+                            };
+                        }
+                        agentStats[agentName].games++;
+                        if (won) agentStats[agentName].wins++;
+                        agentStats[agentName].kills += player.stats.kills;
+                        agentStats[agentName].deaths += player.stats.deaths;
+                        agentStats[agentName].assists += player.stats.assists;
+                    });
+                }
+
                 const userAvatar = message.author.displayAvatarURL({ extension: 'png', size: 128 });
-                // Fix: Pass registration as the last parameter
                 const statsImage = await createStatsVisualization(
                     accountData.data, 
                     mmrData.status === 200 ? mmrData.data : null,
                     matchData.status === 200 ? matchData.data : [],
                     userAvatar,
-                    registration  // Add this parameter
+                    registration
                 );
 
-                const attachment = new AttachmentBuilder(statsImage.toBuffer(), { name: 'valorant-stats.png' });
+                const attachment = new AttachmentBuilder(statsImage.toBuffer(), { name: 'valorant-stats-enhanced.png' });
 
                 const statsEmbed = new EmbedBuilder()
                     .setTitle(`🎯 ${accountData.data.name}#${accountData.data.tag}`)
                     .setColor('#ff4654')
-                    .setImage('attachment://valorant-stats.png')
-                    .setFooter({ text: 'Stats are updated in real-time from Riot Games • Data stored persistently' })
+                    .setImage('attachment://valorant-stats-enhanced.png')
+                    .setFooter({ text: 'Enhanced stats with KDA analysis • Data from stored-matches API • Updated in real-time' })
                     .setTimestamp();
 
+                // Current rank section
                 if (mmrData.status === 200 && mmrData.data.current_data) {
                     const currentRank = mmrData.data.current_data;
                     const rankInfo = RANK_MAPPING[currentRank.currenttier] || RANK_MAPPING[0];
@@ -930,18 +1828,17 @@ module.exports = {
                     });
                 }
 
-                if (matchData.status === 200 && matchData.data.length > 0) {
-                    const recentMatch = matchData.data[0];
-                    const player = recentMatch.players.find(p => p.name.toLowerCase() === registration.name.toLowerCase());
-                    
-                    if (player) {
-                        const won = player.team_id === (recentMatch.teams.find(t => t.won) || {}).team_id;
-                        statsEmbed.addFields({
-                            name: '🎮 Last Match',
-                            value: `${won ? '✅ Victory' : '❌ Defeat'}\n${recentMatch.metadata.map.name}`,
-                            inline: true
-                        });
-                    }
+                // Overall performance stats
+                if (overallStats.totalMatches > 0) {
+                    const avgKDA = overallStats.totalDeaths > 0 ? ((overallStats.totalKills + overallStats.totalAssists) / overallStats.totalDeaths).toFixed(2) : (overallStats.totalKills + overallStats.totalAssists).toFixed(2);
+                    const winRate = ((overallStats.wins / overallStats.totalMatches) * 100).toFixed(0);
+                    const avgACS = Math.round(overallStats.totalACS / overallStats.totalMatches);
+
+                    statsEmbed.addFields({
+                        name: '📊 Performance (Last 20)',
+                        value: `**${overallStats.wins}W-${overallStats.totalMatches - overallStats.wins}L** (${winRate}% WR)\n**KDA:** ${avgKDA}\n**Avg ACS:** ${avgACS}`,
+                        inline: true
+                    });
                 }
 
                 statsEmbed.addFields({
@@ -950,19 +1847,84 @@ module.exports = {
                     inline: true
                 });
 
+                // Enhanced map statistics section
+                if (Object.keys(mapStats).length > 0) {
+                    const sortedMaps = Object.entries(mapStats)
+                        .sort((a, b) => b[1].games - a[1].games)
+                        .slice(0, 5); // Top 5 most played maps
+
+                    let mapStatsText = '';
+                    sortedMaps.forEach(([mapName, stats]) => {
+                        const winRate = ((stats.wins / stats.games) * 100).toFixed(0);
+                        const kda = stats.deaths > 0 ? ((stats.kills + stats.assists) / stats.deaths).toFixed(2) : (stats.kills + stats.assists).toFixed(2);
+                        const avgACS = Math.round(stats.totalACS / stats.games);
+                        
+                        mapStatsText += `**${mapName}**: ${stats.wins}W-${stats.games - stats.wins}L (${winRate}%)\n`;
+                        mapStatsText += `└ KDA: ${kda} • ACS: ${avgACS}\n\n`;
+                    });
+
+                    if (mapStatsText.length > 1024) {
+                        mapStatsText = mapStatsText.substring(0, 1000) + '...';
+                    }
+
+                    statsEmbed.addFields({
+                        name: '🗺️ Map Performance (Most Played)',
+                        value: mapStatsText || 'No map data available',
+                        inline: false
+                    });
+                }
+
+                // Top agents section
+                if (Object.keys(agentStats).length > 0) {
+                    const sortedAgents = Object.entries(agentStats)
+                        .sort((a, b) => b[1].games - a[1].games)
+                        .slice(0, 3); // Top 3 most played agents
+
+                    let agentStatsText = '';
+                    sortedAgents.forEach(([agentName, stats]) => {
+                        const winRate = ((stats.wins / stats.games) * 100).toFixed(0);
+                        const kda = stats.deaths > 0 ? ((stats.kills + stats.assists) / stats.deaths).toFixed(2) : (stats.kills + stats.assists).toFixed(2);
+                        
+                        agentStatsText += `**${agentName}**: ${stats.games} games (${winRate}% WR, ${kda} KDA)\n`;
+                    });
+
+                    statsEmbed.addFields({
+                        name: '👤 Top Agents',
+                        value: agentStatsText || 'No agent data available',
+                        inline: false
+                    });
+                }
+
+                // Last match info
+                if (matchData.status === 200 && matchData.data.length > 0) {
+                    const recentMatch = matchData.data[0];
+                    const player = recentMatch.players.find(p => p.name.toLowerCase() === registration.name.toLowerCase());
+                    
+                    if (player) {
+                        const won = player.team_id === (recentMatch.teams.find(t => t.won) || {}).team_id;
+                        const kda = `${player.stats.kills}/${player.stats.deaths}/${player.stats.assists}`;
+                        
+                        statsEmbed.addFields({
+                            name: '🎮 Last Match',
+                            value: `${won ? '✅ Victory' : '❌ Defeat'} on **${recentMatch.metadata.map.name}**\n${player.agent.name} • ${kda} • ${player.stats.score} ACS`,
+                            inline: false
+                        });
+                    }
+                }
+
                 const refreshButton = new ButtonBuilder()
                     .setCustomId(`valstats_refresh_${message.author.id}`)
                     .setLabel('Refresh Stats')
                     .setStyle(ButtonStyle.Primary)
                     .setEmoji('🔄');
 
-                const detailsButton = new ButtonBuilder()
-                    .setCustomId(`valstats_details_${message.author.id}`)
-                    .setLabel('Match Details')
+                const matchesButton = new ButtonBuilder()
+                    .setCustomId(`valmatches_refresh_${message.author.id}`)
+                    .setLabel('View Matches')
                     .setStyle(ButtonStyle.Secondary)
                     .setEmoji('📋');
 
-                const row = new ActionRowBuilder().addComponents(refreshButton, detailsButton);
+                const row = new ActionRowBuilder().addComponents(refreshButton, matchesButton);
 
                 await loadingMessage.edit({ 
                     embeds: [statsEmbed], 
@@ -974,7 +1936,7 @@ module.exports = {
                 console.error('Stats error:', error);
                 
                 const errorEmbed = new EmbedBuilder()
-                    .setTitle('❌ Error Loading Stats')
+                    .setTitle('❌ Error Loading Enhanced Stats')
                     .setColor('#ff0000')
                     .setDescription('There was an error loading your Valorant stats. This could be due to:')
                     .addFields(
@@ -991,15 +1953,15 @@ module.exports = {
         // New function to show detailed match history
         async function showUserMatches(message, registration) {
             const loadingEmbed = new EmbedBuilder()
-                .setTitle('🔄 Loading Match History...')
+                .setTitle('🔄 Loading Enhanced Match History...')
                 .setColor('#ff4654')
-                .setDescription('Fetching your recent competitive matches...')
+                .setDescription('Fetching your recent competitive matches with KDA analysis...')
                 .setTimestamp();
 
             const loadingMessage = await message.channel.send({ embeds: [loadingEmbed] });
 
             try {
-                console.log(`Fetching matches for: ${registration.name}#${registration.tag} in ${registration.region}`);
+                console.log(`Fetching enhanced matches for: ${registration.name}#${registration.tag} in ${registration.region}`);
                 
                 const [accountData, matchData] = await Promise.all([
                     makeAPIRequest(`/v1/account/${encodeURIComponent(registration.name)}/${encodeURIComponent(registration.tag)}`),
@@ -1044,7 +2006,7 @@ module.exports = {
                 // Take the last 10 matches
                 const recentMatches = competitiveMatches.slice(0, 10);
                 
-                // Calculate overall stats
+                // Calculate overall stats with enhanced KDA analysis
                 let totalKills = 0, totalDeaths = 0, totalAssists = 0, totalACS = 0;
                 let wins = 0, losses = 0;
                 const mapStats = {};
@@ -1079,6 +2041,7 @@ module.exports = {
 
                     const kda = `${player.stats.kills}/${player.stats.deaths}/${player.stats.assists}`;
                     const kdRatio = player.stats.deaths > 0 ? (player.stats.kills / player.stats.deaths).toFixed(2) : player.stats.kills.toFixed(2);
+                    const kdaRatio = player.stats.deaths > 0 ? ((player.stats.kills + player.stats.assists) / player.stats.deaths).toFixed(2) : (player.stats.kills + player.stats.assists).toFixed(2);
                     const acs = player.stats.score;
                     
                     // Calculate headshot percentage
@@ -1091,6 +2054,7 @@ module.exports = {
                         agent: agentName,
                         kda: kda,
                         kdRatio: kdRatio,
+                        kdaRatio: kdaRatio,
                         acs: acs,
                         hsPercent: hsPercent,
                         date: matchDate.toLocaleDateString(),
@@ -1102,21 +2066,22 @@ module.exports = {
                     throw new Error('No valid match data found');
                 }
 
-                // Calculate averages
-                const avgKDA = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : totalKills.toFixed(2);
+                // Calculate averages and enhanced KDA metrics
+                const avgKD = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : totalKills.toFixed(2);
+                const avgKDA = totalDeaths > 0 ? ((totalKills + totalAssists) / totalDeaths).toFixed(2) : (totalKills + totalAssists).toFixed(2);
                 const avgACS = Math.round(totalACS / matchDetails.length);
                 const winRate = Math.round((wins / (wins + losses)) * 100);
 
                 // Create the main embed
                 const matchesEmbed = new EmbedBuilder()
-                    .setTitle(`📊 Match History - ${accountData.data.name}#${accountData.data.tag}`)
+                    .setTitle(`📊 Enhanced Match History - ${accountData.data.name}#${accountData.data.tag}`)
                     .setColor('#ff4654')
                     .setDescription(`**Last ${matchDetails.length} Competitive Matches**`)
                     .addFields(
                         {
-                            name: '📈 Overall Performance',
+                            name: '📈 Enhanced Performance Metrics',
                             value: `**${wins}W - ${losses}L** (${winRate}% WR)\n` +
-                                   `**${totalKills}/${totalDeaths}/${totalAssists}** (${avgKDA} K/D)\n` +
+                                   `**${totalKills}/${totalDeaths}/${totalAssists}** (${avgKD} K/D | ${avgKDA} KDA)\n` +
                                    `**${avgACS} Avg ACS**`,
                             inline: true
                         },
@@ -1146,7 +2111,7 @@ module.exports = {
                 matchDetails.forEach((match, index) => {
                     const resultColor = match.result.includes('WIN') ? '🟢' : '🔴';
                     matchList += `${resultColor} **${match.result}** | ${match.map}\n`;
-                    matchList += `└ ${match.agent} • ${match.kda} (${match.kdRatio} K/D) • ${match.acs} ACS • ${match.hsPercent}% HS\n`;
+                    matchList += `└ ${match.agent} • ${match.kda} (${match.kdRatio} K/D | ${match.kdaRatio} KDA) • ${match.acs} ACS • ${match.hsPercent}% HS\n`;
                     matchList += `└ ${match.date} • ${match.rounds}\n\n`;
                 });
 
@@ -1154,7 +2119,7 @@ module.exports = {
                 const maxLength = 1024;
                 if (matchList.length <= maxLength) {
                     matchesEmbed.addFields({
-                        name: '🎮 Recent Matches',
+                        name: '🎮 Recent Matches (Enhanced)',
                         value: matchList,
                         inline: false
                     });
@@ -1176,7 +2141,7 @@ module.exports = {
 
                     chunks.forEach((chunk, index) => {
                         matchesEmbed.addFields({
-                            name: index === 0 ? '🎮 Recent Matches' : '🎮 Recent Matches (cont.)',
+                            name: index === 0 ? '🎮 Recent Matches (Enhanced)' : '🎮 Recent Matches (cont.)',
                             value: chunk,
                             inline: false
                         });
@@ -1204,10 +2169,10 @@ module.exports = {
                 });
 
             } catch (error) {
-                console.error('Matches error:', error);
+                console.error('Enhanced matches error:', error);
                 
                 const errorEmbed = new EmbedBuilder()
-                    .setTitle('❌ Error Loading Matches')
+                    .setTitle('❌ Error Loading Enhanced Matches')
                     .setColor('#ff0000')
                     .setDescription('There was an error loading your match history.')
                     .addFields(

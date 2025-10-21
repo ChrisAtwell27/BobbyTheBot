@@ -20,7 +20,7 @@ const client = new Client({
 });
 
 // Increase max listeners to prevent warnings
-client.setMaxListeners(25);
+client.setMaxListeners(50); // or higher if needed
 
 // Import and initialize event handlers
 require('./events/messageReactionHandler')(client);
@@ -47,6 +47,7 @@ require('./events/memberCountHandler')(client);
 require('./events/levelingHandler')(client);
 require('./events/discordEventHandler')(client);
 require('./events/askHandler')(client);
+require('./events/valorantMapHandler')(client);
 
 // Initialize Valorant API handler separately to prevent conflicts
 const valorantApiHandler = require('./events/valorantApiHandler');
