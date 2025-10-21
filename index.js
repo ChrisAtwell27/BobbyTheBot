@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 
 // Load environment variables
 require('dotenv').config();
@@ -61,6 +62,26 @@ require('./events/valorantMapHandler')(client);
 // Initialize Valorant API handler separately to prevent conflicts
 const valorantApiHandler = require('./events/valorantApiHandler');
 valorantApiHandler.init(client);
+
+// Create a simple HTTP server for health checks
+const PORT = process.env.PORT || 8080;
+const server = http.createServer((req, res) => {
+  if (req.url === '/health' || req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'ok',
+      botStatus: client.ws.status === 0 ? 'ready' : 'not ready',
+      uptime: process.uptime()
+    }));
+  } else {
+    res.writeHead(404);
+    res.end('Not Found');
+  }
+});
+
+server.listen(PORT, () => {
+  console.log(`Health check server listening on port ${PORT}`);
+});
 
 // Start the bot
 client.once("ready", () => {
