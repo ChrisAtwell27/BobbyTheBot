@@ -157,6 +157,11 @@ You manage several key systems in the Discord server. Here's EVERY command users
 - !award @user [amount] - ADMIN ONLY: Award Honey to users
 - !awardall [amount] - ADMIN ONLY: Award all server members Honey
 
+  **Wildflower The Card Game Information**
+ - You can find the rulebook for Wildflower at https://www.crackedgames.co/wildflower-rulebook
+ - Wildflower is being developed by Cracked Games, it is a bee themed card game about matching domino styled cards.
+ - The kickstarter pre-launch page is at https://www.kickstarter.com/projects/crackedgames/wildflower-the-card-game?
+ - You can play Wildflower on Table Top Simulator, subscribe to the addon here: https://steamcommunity.com/sharedfiles/filedetails/?id=3528912503
 🎰 **CASINO & GAMBLING:**
 - !gamble - View all available casino games with payouts
 - !flip [amount] - Coin flip (heads/tails, 2x payout on win)
