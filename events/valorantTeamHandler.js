@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, StringSelectMenuBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 
@@ -26,6 +26,9 @@ function findValorantRole(message) {
 
 // Store active teams (in production, consider using a database)
 const activeTeams = new Map();
+
+// Store teams by a persistent ID (not message ID)
+let teamIdCounter = 0;
 
 // Resend interval in milliseconds (10 minutes)
 const RESEND_INTERVAL = 10 * 60 * 1000;
@@ -321,7 +324,7 @@ async function createTeamEmbed(team) {
 function createTeamButtons(teamId, isFull) {
     // Extract just the message ID from the full team ID
     const messageId = teamId.replace('valorant_team_', '');
-    
+
     const joinButton = new ButtonBuilder()
         .setCustomId(`valorant_join_${messageId}`)
         .setLabel('Join Team')
@@ -335,13 +338,23 @@ function createTeamButtons(teamId, isFull) {
         .setStyle(ButtonStyle.Danger)
         .setEmoji('➖');
 
+    const reassignButton = new ButtonBuilder()
+        .setCustomId(`valorant_reassign_${messageId}`)
+        .setLabel('Reassign Leader')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('👑');
+
     const disbandButton = new ButtonBuilder()
         .setCustomId(`valorant_disband_${messageId}`)
         .setLabel('Disband Team')
         .setStyle(ButtonStyle.Secondary)
         .setEmoji('🗑️');
 
-    return new ActionRowBuilder().addComponents(joinButton, leaveButton, disbandButton);
+    // Create two rows of buttons
+    const row1 = new ActionRowBuilder().addComponents(joinButton, leaveButton);
+    const row2 = new ActionRowBuilder().addComponents(reassignButton, disbandButton);
+
+    return [row1, row2];
 }
 
 // Enhanced helper function to format team members list with ranks (now with persistent storage)
@@ -445,49 +458,42 @@ module.exports = (client) => {
         console.log('Features: Visual team display, persistent rank storage, enhanced UI');
         console.log('Data is now loaded from persistent storage in the data folder');
 
-        // Function to resend team message to keep it at the bottom of chat
-        async function resendTeamMessage(teamId) {
+        // Function to update team message in place (no longer creates new message)
+        async function updateTeamMessage(teamId) {
             const team = activeTeams.get(teamId);
             if (!team) return; // Team no longer exists
-            
+
             try {
                 // Get the channel
                 const channel = await client.channels.fetch(team.channelId);
                 if (!channel) return;
-                
+
+                // Get the message
+                const message = await channel.messages.fetch(team.messageId);
+                if (!message) return;
+
                 // Create updated embed and components
                 const isFull = getTotalMembers(team) >= 5;
                 const updatedEmbed = await createTeamEmbed(team);
                 const updatedComponents = createTeamButtons(teamId, isFull);
-                
-                // Delete the old message if it exists
-                try {
-                    const oldMessage = await channel.messages.fetch(team.messageId);
-                    if (oldMessage) await oldMessage.delete();
-                } catch (error) {
-                    console.log(`Couldn't delete old team message: ${error.message}`);
-                }
-                
-                // Send a new message
-                const newMessage = await channel.send({
+
+                // Edit the existing message instead of deleting/recreating
+                await message.edit({
                     embeds: [updatedEmbed.embed],
                     files: updatedEmbed.files,
-                    components: [updatedComponents]
+                    components: updatedComponents
                 });
-                
-                // Update the team with the new message ID
-                team.messageId = newMessage.id;
-                
-                // Set up the next resend timer if team isn't full
+
+                // Set up the next update timer if team isn't full
                 if (!isFull) {
                     // Clear any existing timer
                     if (team.resendTimer) clearTimeout(team.resendTimer);
-                    
+
                     // Set new timer
-                    team.resendTimer = setTimeout(() => resendTeamMessage(teamId), RESEND_INTERVAL);
+                    team.resendTimer = setTimeout(() => updateTeamMessage(teamId), RESEND_INTERVAL);
                 }
             } catch (error) {
-                console.error(`Error resending team message: ${error}`);
+                console.error(`Error updating team message: ${error}`);
             }
         }
 
@@ -540,38 +546,82 @@ module.exports = (client) => {
                     const teamMessage = await message.channel.send({
                         embeds: [embed.embed],
                         files: embed.files,
-                        components: [components]
+                        components: components
                     });
                     // Store the team with message ID immediately after sending
                     team.messageId = teamMessage.id;
                     activeTeams.set(teamId, team);
                     console.log('Team created successfully:', teamId);
-                    // Set up the resend timer to keep message at bottom of chat
-                    team.resendTimer = setTimeout(() => resendTeamMessage(teamId), RESEND_INTERVAL);
+                    // Set up the update timer to refresh the message periodically
+                    team.resendTimer = setTimeout(() => updateTeamMessage(teamId), RESEND_INTERVAL);
 
-                    // Delete after 30 minutes if team isn't full
-                    setTimeout(() => {
-                        const currentTeam = activeTeams.get(teamId);
-                        if (currentTeam && getTotalMembers(currentTeam) < 5) {
-                            // Clear the resend timer before removing
-                            if (currentTeam.resendTimer) {
-                                clearTimeout(currentTeam.resendTimer);
-                            }
-                            
-                            activeTeams.delete(teamId);
-                            
-                            // Attempt to delete the most recent message
-                            client.channels.fetch(currentTeam.channelId).then(channel => {
-                                channel.messages.fetch(currentTeam.messageId).then(msg => {
-                                    msg.delete().catch(() => {});
-                                }).catch(() => {});
-                            }).catch(() => {});
-                        }
-                    }, 30 * 60 * 1000); // 30 minutes
+                    // Note: Removed auto-delete timer to prevent kicking players out
+                    // Teams now persist until manually disbanded or completed
 
                 } catch (error) {
                     console.error('Error creating team message:', error);
                     message.reply('❌ There was an error creating the team. Please try again in a moment.');
+                }
+            }
+        });
+
+        // Handle select menu interactions for leader reassignment
+        client.on('interactionCreate', async (interaction) => {
+            if (interaction.isStringSelectMenu() && interaction.customId.startsWith('valorant_selectleader_')) {
+                const parts = interaction.customId.split('_');
+                const teamId = parts.slice(2).join('_');
+                const fullTeamId = `valorant_team_${teamId}`;
+                const team = activeTeams.get(fullTeamId);
+
+                if (!team) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ This team is no longer active.',
+                        ephemeral: true
+                    });
+                }
+
+                const newLeaderId = interaction.values[0];
+                const memberIndex = team.members.findIndex(m => m.id === newLeaderId);
+
+                if (memberIndex === -1) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Selected member is no longer in the team.',
+                        ephemeral: true
+                    });
+                }
+
+                // Defer the interaction
+                await safeInteractionResponse(interaction, 'defer');
+
+                // Swap leader and member
+                const newLeader = team.members[memberIndex];
+                const oldLeader = team.leader;
+
+                team.leader = newLeader;
+                team.members[memberIndex] = oldLeader;
+
+                try {
+                    // Update the team display
+                    const isFull = getTotalMembers(team) >= 5;
+                    const updatedEmbed = await createTeamEmbed(team);
+                    const updatedComponents = createTeamButtons(fullTeamId, isFull);
+
+                    // Update the main team message
+                    const channel = await client.channels.fetch(team.channelId);
+                    const message = await channel.messages.fetch(team.messageId);
+                    await message.edit({
+                        embeds: [updatedEmbed.embed],
+                        files: updatedEmbed.files,
+                        components: updatedComponents
+                    });
+
+                    // Confirm the reassignment
+                    await safeInteractionResponse(interaction, 'update', {
+                        content: `✅ Leadership transferred to ${newLeader.displayName}!`,
+                        components: []
+                    });
+                } catch (error) {
+                    console.error('Error reassigning leader:', error);
                 }
             }
         });
@@ -643,7 +693,7 @@ module.exports = (client) => {
                     const success = await safeInteractionResponse(interaction, 'update', {
                         embeds: [updatedEmbed.embed],
                         files: updatedEmbed.files,
-                        components: [updatedComponents]
+                        components: updatedComponents
                     });
 
                     if (!success) {
@@ -735,12 +785,49 @@ module.exports = (client) => {
                     await safeInteractionResponse(interaction, 'update', {
                         embeds: [updatedEmbed.embed],
                         files: updatedEmbed.files,
-                        components: [updatedComponents]
+                        components: updatedComponents
                     });
                 } catch (error) {
                     console.error('Error updating team after leave:', error);
                     // The team was already updated, so don't try to respond again
                 }
+
+            } else if (action === 'reassign') {
+                // Only leader can reassign
+                if (userId !== team.leader.id) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Only the team leader can reassign leadership!',
+                        ephemeral: true
+                    });
+                }
+
+                // Check if there are any members to reassign to
+                if (team.members.length === 0) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ There are no team members to reassign leadership to!',
+                        ephemeral: true
+                    });
+                }
+
+                // Create a select menu for choosing the new leader
+                const selectMenu = new StringSelectMenuBuilder()
+                    .setCustomId(`valorant_selectleader_${teamId}`)
+                    .setPlaceholder('Select new team leader')
+                    .addOptions(
+                        team.members.map((member) => ({
+                            label: member.displayName || member.username,
+                            description: `Make ${member.displayName || member.username} the new leader`,
+                            value: member.id
+                        }))
+                    );
+
+                const row = new ActionRowBuilder().addComponents(selectMenu);
+
+                return safeInteractionResponse(interaction, 'reply', {
+                    content: '👑 Select who you want to make the new team leader:',
+                    components: [row],
+                    ephemeral: true
+                });
 
             } else if (action === 'disband') {
                 // Only leader can disband
