@@ -40,7 +40,7 @@ require('./events/thinIceHandler')(client);
 require('./events/eggbuckHandler')(client);
 require('./events/gamblingHandler')(client);
 require('./events/blackjackHandler')(client);
-require('./events/interactionHandler')(client);
+//require('./events/interactionHandler')(client);
 require('./events/clipHandler')(client);
 require('./events/valorantTeamHandler')(client);
 // require('./events/activityAwardsHandler')(client); // Module not found - commented out
@@ -58,7 +58,7 @@ require('./events/memberCountHandler')(client);
 //require('./events/discordEventHandler')(client);
 require('./events/askHandler')(client);
 require('./events/valorantMapHandler')(client);
-
+require('./events/bumpHandler')(client);
 // Initialize Valorant API handler separately to prevent conflicts
 const valorantApiHandler = require('./events/valorantApiHandler');
 valorantApiHandler.init(client);
