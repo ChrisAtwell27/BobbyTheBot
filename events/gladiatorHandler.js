@@ -3,13 +3,13 @@ const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-
-const eggBucksFilePath = path.join(__dirname, '../data/bobby_bucks.txt');
-const houseFilePath = path.join(__dirname, '../data/house.txt');
+const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
+const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
+const Challenge = require('../database/models/Challenge');
 
 // Store active gladiator matches
 const activeMatches = new Map();
-const activeChallenges = new Map();
+const activeChallenges = new Map(); // In-memory cache
 
 // Configuration
 const CHALLENGE_TIMEOUT = 3 * 60 * 1000; // 3 minutes
@@ -239,10 +239,10 @@ async function createArenaVisualization(match, combatLog = []) {
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 14px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(`Pot: B${match.pot.toLocaleString()}`, 400, 500);
-    
+    ctx.fillText(`Pot: 🍯${match.pot.toLocaleString()}`, 400, 500);
+
     if (match.spectatorBets && Object.keys(match.spectatorBets).length > 0) {
-        ctx.fillText(`Spectator Bets: B${Object.values(match.spectatorBets).reduce((sum, bet) => sum + bet.amount, 0).toLocaleString()}`, 400, 520);
+        ctx.fillText(`Spectator Bets: 🍯${Object.values(match.spectatorBets).reduce((sum, bet) => sum + bet.amount, 0).toLocaleString()}`, 400, 520);
     }
     
     return canvas.toBuffer();
@@ -416,7 +416,7 @@ module.exports = (client) => {
                             { name: 'Example', value: '`!gladiator @friend 100 WARRIOR`', inline: false },
                             { name: 'Classes', value: Object.entries(GLADIATOR_CLASSES).map(([key, data]) => 
                                 `**${key}** ${data.emoji} - ${data.description}`).join('\n'), inline: false },
-                            { name: 'Bet Range', value: `B${MIN_BET} - B${MAX_BET.toLocaleString()}`, inline: true }
+                            { name: 'Bet Range', value: `🍯{MIN_BET} - 🍯{MAX_BET.toLocaleString()}`, inline: true }
                         )
                         .setTimestamp()]
                 });
@@ -440,7 +440,7 @@ module.exports = (client) => {
             }
 
             if (isNaN(betAmount) || betAmount < MIN_BET || betAmount > MAX_BET) {
-                return message.channel.send(`❌ Bet amount must be between B${MIN_BET} and B${MAX_BET.toLocaleString()}!`);
+                return message.channel.send(`❌ Bet amount must be between 🍯{MIN_BET} and 🍯{MAX_BET.toLocaleString()}!`);
             }
 
             if (!GLADIATOR_CLASSES[gladiatorClass]) {
@@ -448,15 +448,15 @@ module.exports = (client) => {
             }
 
             // Check balances
-            const challengerBalance = getEggBucks(message.author.id);
-            const challengedBalance = getEggBucks(challengedUser.id);
+            const challengerBalance = await getBobbyBucks(message.author.id);
+            const challengedBalance = await getBobbyBucks(challengedUser.id);
 
             if (challengerBalance < betAmount) {
-                return message.channel.send(`❌ You don't have enough Bobby Bucks! You need B${betAmount}, but only have B${challengerBalance}.`);
+                return message.channel.send(`❌ You don't have enough Honey! You need 🍯{betAmount}, but only have 🍯{challengerBalance}.`);
             }
 
             if (challengedBalance < betAmount) {
-                return message.channel.send(`❌ ${challengedUser.username} doesn't have enough Bobby Bucks for this bet!`);
+                return message.channel.send(`❌ ${challengedUser.username} doesn't have enough Honey for this bet!`);
             }
 
             // Check for existing challenges
@@ -502,6 +502,25 @@ module.exports = (client) => {
 
             activeChallenges.set(challengeId, challenge);
 
+            // Save to database
+            try {
+                await Challenge.create({
+                    challengeId,
+                    type: 'gladiator',
+                    creator: message.author.id,
+                    creatorName: message.author.displayName || message.author.username,
+                    challenged: challengedUser.id,
+                    challengedName: challengedUser.displayName || challengedUser.username,
+                    amount: betAmount,
+                    channelId: message.channel.id,
+                    gladiatorClass: gladiatorClass,
+                    challengerAvatarURL: message.author.displayAvatarURL({ extension: 'png', size: 128 }),
+                    challengedAvatarURL: challengedUser.displayAvatarURL({ extension: 'png', size: 128 })
+                });
+            } catch (dbError) {
+                console.error('[GLADIATOR] Error saving challenge to database:', dbError);
+            }
+
             // Create challenge embed
             const challengeEmbed = await createChallengeEmbed(challenge);
             const challengeButtons = createChallengeButtons(challengeId);
@@ -514,10 +533,17 @@ module.exports = (client) => {
             });
 
             // Auto-expire challenge
-            setTimeout(() => {
+            setTimeout(async () => {
                 if (activeChallenges.has(challengeId)) {
                     activeChallenges.delete(challengeId);
-                    
+
+                    // Delete from database
+                    try {
+                        await Challenge.deleteOne({ challengeId });
+                    } catch (dbError) {
+                        console.error('[GLADIATOR] Error deleting expired challenge from database:', dbError);
+                    }
+
                     const expiredEmbed = new EmbedBuilder()
                         .setColor('#666666')
                         .setTitle('⏰ Gladiator Challenge Expired')
@@ -539,14 +565,14 @@ module.exports = (client) => {
             const user = message.mentions.users.first() || message.author;
             
             // This would require a persistent stats system - for now just show basic info
-            const balance = getEggBucks(userId);
+            const balance = await getBobbyBucks(userId);
             
             const statsEmbed = new EmbedBuilder()
                 .setColor('#FFD700')
                 .setTitle(`⚔️ ${user.displayName || user.username}'s Arena Stats`)
                 .setDescription('*Gladiator statistics coming soon!*')
                 .addFields(
-                    { name: '💰 Current Balance', value: `B${balance.toLocaleString()}`, inline: true },
+                    { name: '💰 Current Balance', value: `🍯{balance.toLocaleString()}`, inline: true },
                     { name: '🏆 Arena Status', value: 'Ready for Combat', inline: true }
                 )
                 .setTimestamp();
@@ -570,11 +596,44 @@ module.exports = (client) => {
             // Handle challenge buttons (accept/decline)
             if (['accept', 'decline'].includes(action)) {
                 const challengeId = parts.slice(1).join('_');
-                const challenge = activeChallenges.get(challengeId);
-                
+                let challenge = activeChallenges.get(challengeId);
+
+                // Try to load from database if not in memory
+                if (!challenge) {
+                    try {
+                        const dbChallenge = await Challenge.findOne({ challengeId });
+                        if (dbChallenge) {
+                            challenge = {
+                                id: dbChallenge.challengeId,
+                                challenger: {
+                                    id: dbChallenge.creator,
+                                    username: dbChallenge.creatorName,
+                                    displayName: dbChallenge.creatorName,
+                                    avatarURL: dbChallenge.challengerAvatarURL,
+                                    gladiatorClass: dbChallenge.gladiatorClass
+                                },
+                                challenged: {
+                                    id: dbChallenge.challenged,
+                                    username: dbChallenge.challengedName,
+                                    displayName: dbChallenge.challengedName,
+                                    avatarURL: dbChallenge.challengedAvatarURL,
+                                    gladiatorClass: null
+                                },
+                                betAmount: dbChallenge.amount,
+                                channelId: dbChallenge.channelId,
+                                timestamp: dbChallenge.createdAt.getTime()
+                            };
+                            activeChallenges.set(challengeId, challenge);
+                            console.log(`[GLADIATOR] Loaded challenge ${challengeId} from database`);
+                        }
+                    } catch (dbError) {
+                        console.error('[GLADIATOR] Error loading challenge from database:', dbError);
+                    }
+                }
+
                 if (!challenge) {
                     return interaction.reply({
-                        content: '❌ This challenge is no longer active.',
+                        content: '❌ This challenge is no longer active. It may have expired.\n\n💡 **Tip:** Ask the challenger to create a new challenge with `!gladiator`!',
                         ephemeral: true
                     });
                 }
@@ -588,7 +647,14 @@ module.exports = (client) => {
 
                 if (action === 'decline') {
                     activeChallenges.delete(challengeId);
-                    
+
+                    // Delete from database
+                    try {
+                        await Challenge.deleteOne({ challengeId });
+                    } catch (dbError) {
+                        console.error('[GLADIATOR] Error deleting declined challenge from database:', dbError);
+                    }
+
                     const declineEmbed = new EmbedBuilder()
                         .setColor('#FF4444')
                         .setTitle('❌ Challenge Declined')
@@ -634,10 +700,10 @@ module.exports = (client) => {
                 const challengeId = parts.slice(2).join('_');
                 const selectedClass = parts[1];
                 const challenge = activeChallenges.get(challengeId);
-                
+
                 if (!challenge) {
                     return interaction.reply({
-                        content: '❌ This challenge is no longer active.',
+                        content: '❌ This challenge is no longer active. It may have expired or the bot was restarted.\n\n💡 **Tip:** Ask the challenger to create a new challenge with `!gladiator`!',
                         ephemeral: true
                     });
                 }
@@ -660,7 +726,7 @@ module.exports = (client) => {
                     .addFields(
                         { name: '⚔️ Challenger', value: `${challenge.challenger.displayName}\n${GLADIATOR_CLASSES[challenge.challenger.gladiatorClass].emoji} ${challenge.challenger.gladiatorClass}`, inline: true },
                         { name: '🛡️ Defender', value: `${challenge.challenged.displayName}\n${GLADIATOR_CLASSES[selectedClass].emoji} ${selectedClass}`, inline: true },
-                        { name: '💰 Prize Pot', value: `B${(challenge.betAmount * 2).toLocaleString()}`, inline: true }
+                        { name: '💰 Prize Pot', value: `🍯{(challenge.betAmount * 2).toLocaleString()}`, inline: true }
                     )
                     .setTimestamp();
                 
@@ -732,8 +798,15 @@ module.exports = (client) => {
                 });
             }
         } catch (error) {
+            // Handle interaction errors gracefully
+            if (error.code === 10062 || error.code === 40060) {
+                // Interaction expired or unknown - this is normal for old buttons
+                console.log('Gladiator interaction expired or unknown - user clicked an old button');
+                return;
+            }
+
             console.error('Error handling gladiator interaction:', error);
-            
+
             // Only try to respond if interaction hasn't been acknowledged yet
             if (!interaction.replied && !interaction.deferred) {
                 try {
@@ -742,7 +815,10 @@ module.exports = (client) => {
                         ephemeral: true
                     });
                 } catch (replyError) {
-                    console.error('Error sending error reply:', replyError);
+                    // Silently ignore if we can't send the error message
+                    if (replyError.code !== 10062 && replyError.code !== 40060) {
+                        console.error('Error sending error reply:', replyError);
+                    }
                 }
             }
         }
@@ -751,10 +827,17 @@ module.exports = (client) => {
     // Function to start a gladiator match in a channel (separate from interactions)
     async function startGladiatorMatchInChannel(channel, challenge) {
         activeChallenges.delete(challenge.id);
-        
+
+        // Delete from database
+        try {
+            await Challenge.deleteOne({ challengeId: challenge.id });
+        } catch (dbError) {
+            console.error('[GLADIATOR] Error deleting accepted challenge from database:', dbError);
+        }
+
         // Lock both players' bets
-        updateEggBucks(challenge.challenger.id, -challenge.betAmount);
-        updateEggBucks(challenge.challenged.id, -challenge.betAmount);
+        await updateBobbyBucks(challenge.challenger.id, -challenge.betAmount);
+        await updateBobbyBucks(challenge.challenged.id, -challenge.betAmount);
         
         // Create match
         const matchId = `match_${Date.now()}`;
@@ -916,8 +999,8 @@ module.exports = (client) => {
         const houseCut = Math.floor(match.pot * 0.05);
         const winnings = match.pot - houseCut;
         
-        updateEggBucks(winner.id, winnings);
-        updateHouse(houseCut);
+        await updateBobbyBucks(winner.id, winnings);
+        await updateHouse(houseCut);
         
         // Create victory visualization
         const victoryEmbed = await createVictoryEmbed(match, winner, loser, winnings);
@@ -950,8 +1033,8 @@ module.exports = (client) => {
                 .setTitle('🏆 VICTORY IN THE ARENA!')
                 .setDescription(`You have emerged victorious from gladiator combat!`)
                 .addFields(
-                    { name: '💰 Winnings', value: `B${winnings.toLocaleString()}`, inline: true },
-                    { name: '💳 New Balance', value: `B${getEggBucks(winner.id).toLocaleString()}`, inline: true }
+                    { name: '💰 Winnings', value: `🍯{winnings.toLocaleString()}`, inline: true },
+                    { name: '💳 New Balance', value: `🍯${(await getBobbyBucks(winner.id)).toLocaleString()}`, inline: true }
                 )
                 .setTimestamp();
             
@@ -1018,8 +1101,8 @@ module.exports = (client) => {
             .setTitle('⚔️ GLADIATOR CHALLENGE!')
             .setDescription(`**${challenge.challenger.displayName}** challenges **${challenge.challenged.displayName}** to combat in the arena!`)
             .addFields(
-                { name: '💰 Bet Amount', value: `B${challenge.betAmount.toLocaleString()} each`, inline: true },
-                { name: '🏆 Total Pot', value: `B${(challenge.betAmount * 2).toLocaleString()}`, inline: true },
+                { name: '💰 Bet Amount', value: `🍯{challenge.betAmount.toLocaleString()} each`, inline: true },
+                { name: '🏆 Total Pot', value: `🍯{(challenge.betAmount * 2).toLocaleString()}`, inline: true },
                 { name: '⚔️ Challenger Class', value: `${challengerClass.emoji} ${challengerClass.name}`, inline: true }
             )
             .setFooter({ text: 'The challenged player must accept and choose their class!' })
@@ -1043,7 +1126,7 @@ module.exports = (client) => {
         ctx.fillStyle = '#FFFFFF';
         ctx.font = 'bold 16px Arial';
         ctx.fillText('A challenge has been issued!', 200, 100);
-        ctx.fillText(`Pot: B${(challenge.betAmount * 2).toLocaleString()}`, 200, 130);
+        ctx.fillText(`Pot: 🍯${(challenge.betAmount * 2).toLocaleString()}`, 200, 130);
         
         const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'challenge.png' });
         embed.setImage('attachment://challenge.png');
@@ -1100,7 +1183,7 @@ module.exports = (client) => {
             .setTitle('⚔️ GLADIATOR COMBAT IN PROGRESS')
             .setDescription(`**Turn ${match.turnCount}** - ${currentPlayer.displayName}'s turn`)
             .addFields(
-                { name: '💰 Prize Pot', value: `B${match.pot.toLocaleString()}`, inline: true },
+                { name: '💰 Prize Pot', value: `🍯{match.pot.toLocaleString()}`, inline: true },
                 { name: '⏱️ Turn Timer', value: `${TURN_TIMEOUT/1000} seconds`, inline: true },
                 { name: '📊 Combat Stats', value: `${match.combatLog.length} attacks made`, inline: true }
             )
@@ -1159,7 +1242,7 @@ module.exports = (client) => {
             .addFields(
                 { name: '🏆 Winner', value: `${winner.displayName} (${GLADIATOR_CLASSES[winner.gladiatorClass].emoji} ${winner.gladiatorClass})`, inline: true },
                 { name: '💀 Defeated', value: `${loser.displayName} (${GLADIATOR_CLASSES[loser.gladiatorClass].emoji} ${loser.gladiatorClass})`, inline: true },
-                { name: '💰 Winnings', value: `B${winnings.toLocaleString()}`, inline: true },
+                { name: '💰 Winnings', value: `🍯{winnings.toLocaleString()}`, inline: true },
                 { name: '⚔️ Combat Summary', value: `${match.turnCount} turns • ${match.combatLog.length} attacks`, inline: true },
                 { name: '🏥 Final Health', value: `Winner: ${winner.health}/${winner.maxHealth} HP`, inline: true },
                 { name: '⏱️ Match Duration', value: `${Math.floor((Date.now() - match.startTime) / 1000)} seconds`, inline: true }
@@ -1192,7 +1275,7 @@ module.exports = (client) => {
         
         ctx.font = '18px Arial';
         ctx.fillText(`Defeats ${loser.displayName}`, 300, 150);
-        ctx.fillText(`Wins B${winnings.toLocaleString()}`, 300, 180);
+        ctx.fillText(`Wins 🍯${winnings.toLocaleString()}`, 300, 180);
         
         // Champion laurel wreath effect
         ctx.strokeStyle = '#228B22';
@@ -1239,53 +1322,11 @@ module.exports = (client) => {
         return { embed, files: [attachment] };
     }
 
-    // Bobby Bucks helper functions
-    function getEggBucks(userId) {
-        if (!fs.existsSync(eggBucksFilePath)) {
-            fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
-        }
-        const data = fs.readFileSync(eggBucksFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        return userRecord ? parseInt(userRecord.split(':')[1], 10) : 0;
-    }
-
-    function updateEggBucks(userId, amount) {
-        if (!fs.existsSync(eggBucksFilePath)) {
-            fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
-        }
-
-        let data = fs.readFileSync(eggBucksFilePath, 'utf-8').trim();
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-
-        if (userRecord) {
-            const currentBalance = parseInt(userRecord.split(':')[1], 10);
-            const newBalance = currentBalance + amount;
-            data = data.replace(userRecord, `${userId}:${newBalance}`);
-        } else {
-            data += `\n${userId}:${amount}`;
-        }
-
-        fs.writeFileSync(eggBucksFilePath, data.trim(), 'utf-8');
-    }
-
-    function updateHouse(amount) {
-        const houseBalance = getHouseBalance();
-        const newBalance = houseBalance + amount;
-        fs.writeFileSync(houseFilePath, newBalance.toString(), 'utf-8');
-    }
-
-    function getHouseBalance() {
-        if (!fs.existsSync(houseFilePath)) {
-            fs.writeFileSync(houseFilePath, '0', 'utf-8');
-        }
-        return parseInt(fs.readFileSync(houseFilePath, 'utf-8'), 10);
-    }
-
-    // Clean up on startup
-    client.once('ready', () => {
+    // Clean up on startup and load challenges from database
+    client.once('ready', async () => {
         console.log('Gladiator Arena Handler loaded! ⚔️🏛️');
-        
-        // Clear all existing matches and challenges
+
+        // Clear all existing matches
         activeMatches.forEach(match => {
             if (match.turnTimer) {
                 clearTimeout(match.turnTimer);
@@ -1293,5 +1334,37 @@ module.exports = (client) => {
         });
         activeMatches.clear();
         activeChallenges.clear();
+
+        // Load active gladiator challenges from database
+        try {
+            const gladiatorChallenges = await Challenge.find({ type: 'gladiator' });
+            console.log(`[GLADIATOR] Loaded ${gladiatorChallenges.length} active challenges from database`);
+
+            for (const dbChallenge of gladiatorChallenges) {
+                const challenge = {
+                    id: dbChallenge.challengeId,
+                    challenger: {
+                        id: dbChallenge.creator,
+                        username: dbChallenge.creatorName,
+                        displayName: dbChallenge.creatorName,
+                        avatarURL: dbChallenge.challengerAvatarURL,
+                        gladiatorClass: dbChallenge.gladiatorClass
+                    },
+                    challenged: {
+                        id: dbChallenge.challenged,
+                        username: dbChallenge.challengedName,
+                        displayName: dbChallenge.challengedName,
+                        avatarURL: dbChallenge.challengedAvatarURL,
+                        gladiatorClass: null
+                    },
+                    betAmount: dbChallenge.amount,
+                    channelId: dbChallenge.channelId,
+                    timestamp: dbChallenge.createdAt.getTime()
+                };
+                activeChallenges.set(dbChallenge.challengeId, challenge);
+            }
+        } catch (error) {
+            console.error('[GLADIATOR] Error loading challenges from database:', error);
+        }
     });
 };

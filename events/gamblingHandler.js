@@ -1,17 +1,46 @@
-const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+﻿const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
-const fs = require('fs');
-const path = require('path');
+const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
+const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
+const Challenge = require('../database/models/Challenge');
 const cooldowns = new Map(); // Track cooldowns
-const challenges = new Map(); // Track pending challenges
+const challenges = new Map(); // Track pending challenges (in-memory cache)
 const activeGames = new Map(); // Track active games
 
-const eggBucksFilePath = path.join(__dirname, '../data/bobby_bucks.txt');
-const houseFilePath = path.join(__dirname, '../data/house.txt');
 const COOLDOWN_SECONDS = 3; // Cooldown in seconds
-const CHALLENGE_TIMEOUT = 60000; // 1 minute timeout for challenges
+const CHALLENGE_TIMEOUT = 5 * 60 * 1000; // 5 minute timeout for challenges
+
+// Load active challenges from database on startup
+async function loadActiveChallenges() {
+    try {
+        const activeChallenges = await Challenge.find({});
+        console.log(`[GAMBLING] Loaded ${activeChallenges.length} active challenges from database`);
+
+        for (const challenge of activeChallenges) {
+            challenges.set(challenge.challengeId, {
+                type: challenge.type,
+                creator: challenge.creator,
+                creatorName: challenge.creatorName,
+                challenged: challenge.challenged,
+                challengedName: challenge.challengedName,
+                amount: challenge.amount,
+                channelId: challenge.channelId,
+                gladiatorClass: challenge.gladiatorClass,
+                challengerAvatarURL: challenge.challengerAvatarURL,
+                challengedAvatarURL: challenge.challengedAvatarURL,
+                timestamp: challenge.createdAt.getTime()
+            });
+        }
+    } catch (error) {
+        console.error('[GAMBLING] Error loading challenges from database:', error);
+    }
+}
 
 module.exports = (client) => {
+    // Load challenges when the bot starts
+    client.once('ready', () => {
+        loadActiveChallenges();
+    });
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
 
@@ -81,17 +110,19 @@ module.exports = (client) => {
 
         // Command to get a list of all games
         if (command === '!gamble') {
+            const balance = await getBobbyBucks(userId);
+            const houseBalance = await getHouseBalance();
             const gameList = new EmbedBuilder()
                 .setTitle('🎰 CASINO GAMES')
                 .setColor('#ffd700')
-                .setDescription('**Welcome to the Egg Bucks Casino!** 🎲\nChoose your game and test your luck!')
+                .setDescription('**Welcome to the Honey Casino!** 🎲\nChoose your game and test your luck!')
                 .addFields(
                     { name: '🏠 **HOUSE GAMES** (Solo Play)', value: '`!dice [amount] [guess (1-6)]` - **6x payout**\n`!flip [amount]` - **2x payout**\n`!roulette [amount] [red/black/number]` - **2x/36x payout**\n`!blackjack [amount]` - Beat the dealer!', inline: false },
                     { name: '⚔️ **PVP GAMES** (Player vs Player)', value: '`!rps [amount]` - Rock Paper Scissors duel\n`!highercard [amount]` - Higher card wins\n`!quickdraw [amount]` - Type random word fastest\n`!numberduel [amount]` - Closest number guess wins', inline: false },
                     { name: '🎯 **CHALLENGE SYSTEM**', value: 'Create challenges with buttons - just click to accept!\nWinner takes the pot! 🏆', inline: false }
                 )
                 .addFields(
-                    { name: '💰 Your Stats', value: `**Balance:** E${getEggBucks(userId)}\n**House:** E${getHouseBalance()}`, inline: true },
+                    { name: '💰 Your Stats', value: `**Balance:** 🍯${balance}\n**House:** 🍯${houseBalance}`, inline: true },
                     { name: '🎯 Payouts', value: '**Solo:** Various multipliers\n**PvP:** Winner takes all!\n**House Cut:** 5% of pot', inline: true }
                 )
                 .setFooter({ text: '🍀 Good luck and gamble responsibly!' })
@@ -128,28 +159,66 @@ module.exports = (client) => {
         const userId = interaction.user.id;
         const customId = interaction.customId;
 
-        // Handle challenge acceptance buttons
-        if (customId.startsWith('accept_')) {
-            const challengeId = customId.replace('accept_', '');
-            
-            if (!challenges.has(challengeId)) {
-                return interaction.reply({ content: "❌ Challenge not found or has expired!", ephemeral: true });
-            }
+        try {
+            // Handle challenge acceptance buttons
+            if (customId.startsWith('accept_')) {
+                const challengeId = customId.replace('accept_', '');
 
-            const challenge = challenges.get(challengeId);
+                // Try to get from memory first, then from database
+                let challenge = challenges.get(challengeId);
+
+                if (!challenge) {
+                    // Try to load from database
+                    try {
+                        const dbChallenge = await Challenge.findOne({ challengeId });
+                        if (dbChallenge) {
+                            challenge = {
+                                type: dbChallenge.type,
+                                creator: dbChallenge.creator,
+                                creatorName: dbChallenge.creatorName,
+                                amount: dbChallenge.amount,
+                                channelId: dbChallenge.channelId,
+                                timestamp: dbChallenge.createdAt.getTime()
+                            };
+                            challenges.set(challengeId, challenge);
+                            console.log(`[GAMBLING] Loaded challenge ${challengeId} from database`);
+                        }
+                    } catch (dbError) {
+                        console.error('[GAMBLING] Error loading challenge from database:', dbError);
+                    }
+                }
+
+                if (!challenge) {
+                    return interaction.reply({
+                        content: "❌ This challenge is no longer active. It may have expired.\n\n💡 **Tip:** Ask the challenger to create a new challenge!",
+                        ephemeral: true
+                    }).catch(err => {
+                        // Silently catch interaction errors (expired tokens, etc.)
+                        if (err.code !== 10062 && err.code !== 40060) {
+                            console.error('Error replying to expired challenge interaction:', err);
+                        }
+                    });
+                }
 
             if (challenge.creator === userId) {
                 return interaction.reply({ content: "❌ You can't accept your own challenge!", ephemeral: true });
             }
 
-            const balance = getEggBucks(userId);
+            const balance = await getBobbyBucks(userId);
             if (balance < challenge.amount) {
-                return interaction.reply({ content: `❌ You don't have enough Egg Bucks. You need E${challenge.amount}. Your balance: E${balance}`, ephemeral: true });
+                return interaction.reply({ content: `❌ You don't have enough Honey. You need 🍯${challenge.amount}. Your balance: 🍯${balance}`, ephemeral: true });
             }
 
             // Lock opponent's bet
-            updateEggBucks(userId, -challenge.amount);
+            await updateBobbyBucks(userId, -challenge.amount);
             challenges.delete(challengeId);
+
+            // Delete from database
+            try {
+                await Challenge.deleteOne({ challengeId });
+            } catch (dbError) {
+                console.error('[GAMBLING] Error deleting challenge from database:', dbError);
+            }
 
             // Start the game
             const gameId = `game_${Date.now()}`;
@@ -241,6 +310,15 @@ module.exports = (client) => {
                 resolveRPSGame(client, gameId, game);
             }
         }
+        } catch (error) {
+            // Handle interaction errors gracefully
+            if (error.code === 10062 || error.code === 40060) {
+                // Interaction expired or unknown - this is normal for old buttons
+                console.log('Interaction expired or unknown - user clicked an old button');
+            } else {
+                console.error('Error handling gambling interaction:', error);
+            }
+        }
     });
 
     // Create Rock Paper Scissors challenge
@@ -251,10 +329,10 @@ module.exports = (client) => {
 
         const betAmount = parseInt(args[1], 10);
         const userId = message.author.id;
-        const balance = getEggBucks(userId);
+        const balance = await getBobbyBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
         }
 
         const challengeId = `rps_${Date.now()}_${userId}`;
@@ -268,14 +346,28 @@ module.exports = (client) => {
         };
 
         challenges.set(challengeId, challenge);
-        updateEggBucks(userId, -betAmount); // Lock the bet
+        await updateBobbyBucks(userId, -betAmount); // Lock the bet
+
+        // Save to database
+        try {
+            await Challenge.create({
+                challengeId,
+                type: 'rps',
+                creator: userId,
+                creatorName: message.author.username,
+                amount: betAmount,
+                channelId: message.channel.id
+            });
+        } catch (dbError) {
+            console.error('[GAMBLING] Error saving challenge to database:', dbError);
+        }
 
         const embed = new EmbedBuilder()
             .setTitle('⚔️ Rock Paper Scissors Challenge!')
             .setColor('#ff6b6b')
             .setDescription(`**${message.author.username}** challenges someone to Rock Paper Scissors!`)
             .addFields(
-                { name: '💰 Pot', value: `E${betAmount * 2} (minus 5% house cut)`, inline: true },
+                { name: '💰 Pot', value: `🍯${betAmount * 2} (minus 5% house cut)`, inline: true },
                 { name: '🎯 To Accept', value: `Click the button below!`, inline: true },
                 { name: '⏰ Expires', value: '<t:' + Math.floor((Date.now() + CHALLENGE_TIMEOUT) / 1000) + ':R>', inline: true },
                 { name: '🎮 Game Play', value: 'Once accepted, both players use buttons in this channel!', inline: false }
@@ -295,11 +387,18 @@ module.exports = (client) => {
         const challengeMessage = await message.channel.send({ embeds: [embed], components: [acceptButton] });
 
         // Auto-expire challenge
-        setTimeout(() => {
+        setTimeout(async () => {
             if (challenges.has(challengeId)) {
                 challenges.delete(challengeId);
-                updateEggBucks(userId, betAmount); // Refund
-                
+                await updateBobbyBucks(userId, betAmount); // Refund
+
+                // Delete from database
+                try {
+                    await Challenge.deleteOne({ challengeId });
+                } catch (dbError) {
+                    console.error('[GAMBLING] Error deleting expired challenge from database:', dbError);
+                }
+
                 // Disable the button
                 const disabledButton = new ActionRowBuilder()
                     .addComponents(
@@ -325,10 +424,10 @@ module.exports = (client) => {
 
         const betAmount = parseInt(args[1], 10);
         const userId = message.author.id;
-        const balance = getEggBucks(userId);
+        const balance = await getBobbyBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
         }
 
         const challengeId = `card_${Date.now()}_${userId}`;
@@ -342,14 +441,28 @@ module.exports = (client) => {
         };
 
         challenges.set(challengeId, challenge);
-        updateEggBucks(userId, -betAmount);
+        await updateBobbyBucks(userId, -betAmount);
+
+        // Save to database
+        try {
+            await Challenge.create({
+                challengeId,
+                type: 'highercard',
+                creator: userId,
+                creatorName: message.author.username,
+                amount: betAmount,
+                channelId: message.channel.id
+            });
+        } catch (dbError) {
+            console.error('[GAMBLING] Error saving challenge to database:', dbError);
+        }
 
         const embed = new EmbedBuilder()
             .setTitle('🃏 Higher Card Challenge!')
             .setColor('#4ecdc4')
             .setDescription(`**${message.author.username}** challenges someone to Higher Card!`)
             .addFields(
-                { name: '💰 Pot', value: `E${betAmount * 2} (minus 5% house cut)`, inline: true },
+                { name: '💰 Pot', value: `🍯${betAmount * 2} (minus 5% house cut)`, inline: true },
                 { name: '🎯 To Accept', value: `Click the button below!`, inline: true },
                 { name: '📋 Rules', value: 'Both draw a card - highest wins!', inline: true }
             )
@@ -367,11 +480,11 @@ module.exports = (client) => {
 
         const challengeMessage = await message.channel.send({ embeds: [embed], components: [acceptButton] });
 
-        setTimeout(() => {
+        setTimeout(async () => {
             if (challenges.has(challengeId)) {
                 challenges.delete(challengeId);
-                updateEggBucks(userId, betAmount);
-                
+                await updateBobbyBucks(userId, betAmount);
+
                 const disabledButton = new ActionRowBuilder()
                     .addComponents(
                         new ButtonBuilder()
@@ -381,7 +494,7 @@ module.exports = (client) => {
                             .setDisabled(true)
                             .setEmoji('⏰')
                     );
-                
+
                 challengeMessage.edit({ components: [disabledButton] });
                 message.channel.send(`⏰ Higher Card challenge by **${message.author.username}** has expired and been refunded.`);
             }
@@ -406,10 +519,10 @@ module.exports = (client) => {
 
         const betAmount = parseInt(args[1], 10);
         const userId = message.author.id;
-        const balance = getEggBucks(userId);
+        const balance = await getBobbyBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
         }
 
         const challengeId = `quick_${Date.now()}_${userId}`;
@@ -423,14 +536,28 @@ module.exports = (client) => {
         };
 
         challenges.set(challengeId, challenge);
-        updateEggBucks(userId, -betAmount);
+        await updateBobbyBucks(userId, -betAmount);
+
+        // Save to database
+        try {
+            await Challenge.create({
+                challengeId,
+                type: 'quickdraw',
+                creator: userId,
+                creatorName: message.author.username,
+                amount: betAmount,
+                channelId: message.channel.id
+            });
+        } catch (dbError) {
+            console.error('[GAMBLING] Error saving challenge to database:', dbError);
+        }
 
         const embed = new EmbedBuilder()
             .setTitle('⚡ Quick Draw Challenge!')
             .setColor('#f39c12')
             .setDescription(`**${message.author.username}** challenges someone to Quick Draw!`)
             .addFields(
-                { name: '💰 Pot', value: `E${betAmount * 2} (minus 5% house cut)`, inline: true },
+                { name: '💰 Pot', value: `🍯${betAmount * 2} (minus 5% house cut)`, inline: true },
                 { name: '🎯 To Accept', value: `Click the button below!`, inline: true },
                 { name: '📋 Rules', value: 'First to type the random word when prompted wins!', inline: true }
             )
@@ -448,11 +575,11 @@ module.exports = (client) => {
 
         const challengeMessage = await message.channel.send({ embeds: [embed], components: [acceptButton] });
 
-        setTimeout(() => {
+        setTimeout(async () => {
             if (challenges.has(challengeId)) {
                 challenges.delete(challengeId);
-                updateEggBucks(userId, betAmount);
-                
+                await updateBobbyBucks(userId, betAmount);
+
                 const disabledButton = new ActionRowBuilder()
                     .addComponents(
                         new ButtonBuilder()
@@ -462,7 +589,7 @@ module.exports = (client) => {
                             .setDisabled(true)
                             .setEmoji('⏰')
                     );
-                
+
                 challengeMessage.edit({ components: [disabledButton] });
                 message.channel.send(`⏰ Quick Draw challenge by **${message.author.username}** has expired and been refunded.`);
             }
@@ -477,10 +604,10 @@ module.exports = (client) => {
 
         const betAmount = parseInt(args[1], 10);
         const userId = message.author.id;
-        const balance = getEggBucks(userId);
+        const balance = await getBobbyBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
         }
 
         const challengeId = `number_${Date.now()}_${userId}`;
@@ -494,14 +621,28 @@ module.exports = (client) => {
         };
 
         challenges.set(challengeId, challenge);
-        updateEggBucks(userId, -betAmount);
+        await updateBobbyBucks(userId, -betAmount);
+
+        // Save to database
+        try {
+            await Challenge.create({
+                challengeId,
+                type: 'numberduel',
+                creator: userId,
+                creatorName: message.author.username,
+                amount: betAmount,
+                channelId: message.channel.id
+            });
+        } catch (dbError) {
+            console.error('[GAMBLING] Error saving challenge to database:', dbError);
+        }
 
         const embed = new EmbedBuilder()
             .setTitle('🎯 Number Duel Challenge!')
             .setColor('#9b59b6')
             .setDescription(`**${message.author.username}** challenges someone to Number Duel!`)
             .addFields(
-                { name: '💰 Pot', value: `E${betAmount * 2} (minus 5% house cut)`, inline: true },
+                { name: '💰 Pot', value: `🍯${betAmount * 2} (minus 5% house cut)`, inline: true },
                 { name: '🎯 To Accept', value: `Click the button below!`, inline: true },
                 { name: '📋 Rules', value: 'Guess 1-100, closest to target wins!', inline: true }
             )
@@ -519,11 +660,11 @@ module.exports = (client) => {
 
         const challengeMessage = await message.channel.send({ embeds: [embed], components: [acceptButton] });
 
-        setTimeout(() => {
+        setTimeout(async () => {
             if (challenges.has(challengeId)) {
                 challenges.delete(challengeId);
-                updateEggBucks(userId, betAmount);
-                
+                await updateBobbyBucks(userId, betAmount);
+
                 const disabledButton = new ActionRowBuilder()
                     .addComponents(
                         new ButtonBuilder()
@@ -533,7 +674,7 @@ module.exports = (client) => {
                             .setDisabled(true)
                             .setEmoji('⏰')
                     );
-                
+
                 challengeMessage.edit({ components: [disabledButton] });
                 message.channel.send(`⏰ Number Duel challenge by **${message.author.username}** has expired and been refunded.`);
             }
@@ -554,7 +695,7 @@ module.exports = (client) => {
             .setColor('#ff6b6b')
             .setDescription(`**${game.player1Name}** vs **${game.player2Name}**`)
             .addFields(
-                { name: '💰 Total Pot', value: `E${game.amount * 2}`, inline: true },
+                { name: '💰 Total Pot', value: `🍯${game.amount * 2}`, inline: true },
                 { name: '🎯 How to Play', value: `Both players click your move below!`, inline: true },
                 { name: '🔒 Privacy', value: 'Your moves will be hidden until both choose!', inline: false },
                 { name: '🆔 Game ID', value: `\`${gameId}\``, inline: true }
@@ -611,8 +752,8 @@ module.exports = (client) => {
             loser = game.player1;
         } else {
             // Tie - refund both players
-            updateEggBucks(game.player1, game.amount);
-            updateEggBucks(game.player2, game.amount);
+            await updateBobbyBucks(game.player1, game.amount);
+            await updateBobbyBucks(game.player2, game.amount);
             activeGames.delete(gameId);
 
             const embed = new EmbedBuilder()
@@ -631,8 +772,8 @@ module.exports = (client) => {
         // Pay out winner
         const houseCut = Math.floor(game.amount * 2 * 0.05);
         const winnings = (game.amount * 2) - houseCut;
-        updateEggBucks(winner, winnings);
-        updateHouse(houseCut);
+        await updateBobbyBucks(winner, winnings);
+        await updateHouse(houseCut);
         activeGames.delete(gameId);
 
         const winnerName = winner === game.player1 ? game.player1Name : game.player2Name;
@@ -643,7 +784,7 @@ module.exports = (client) => {
             .addFields(
                 { name: `${game.player1Name}'s Card`, value: `${player1Card.rank}${player1Card.suit} (${player1Card.value})`, inline: true },
                 { name: `${game.player2Name}'s Card`, value: `${player2Card.rank}${player2Card.suit} (${player2Card.value})`, inline: true },
-                { name: '💰 Winnings', value: `E${winnings} (after 5% house cut)`, inline: false }
+                { name: '💰 Winnings', value: `🍯${winnings} (after 5% house cut)`, inline: false }
             )
             .setTimestamp();
 
@@ -661,7 +802,7 @@ module.exports = (client) => {
             .setColor('#f39c12')
             .setDescription(`**${game.player1Name}** vs **${game.player2Name}**`)
             .addFields(
-                { name: '💰 Total Pot', value: `E${game.amount * 2}`, inline: true },
+                { name: '💰 Total Pot', value: `🍯${game.amount * 2}`, inline: true },
                 { name: '🎯 Get Ready!', value: 'Wait for the signal...', inline: false },
                 { name: '📝 Instructions', value: 'When prompted, type the **exact word** shown to win!', inline: false }
             )
@@ -694,14 +835,14 @@ module.exports = (client) => {
 
             const collector = interaction.channel.createMessageCollector({ filter, max: 1, time: 15000 });
 
-            collector.on('collect', (msg) => {
+            collector.on('collect', async (msg) => {
                 const winner = msg.author.id;
                 const winnerName = winner === game.player1 ? game.player1Name : game.player2Name;
-                
+
                 const houseCut = Math.floor(game.amount * 2 * 0.05);
                 const winnings = (game.amount * 2) - houseCut;
-                updateEggBucks(winner, winnings);
-                updateHouse(houseCut);
+                await updateBobbyBucks(winner, winnings);
+                await updateHouse(houseCut);
                 activeGames.delete(gameId);
 
                 const resultEmbed = new EmbedBuilder()
@@ -711,7 +852,7 @@ module.exports = (client) => {
                     .addFields(
                         { name: '🏆 Winner', value: winnerName, inline: true },
                         { name: '🎯 Target Word', value: randomWord, inline: true },
-                        { name: '💰 Winnings', value: `E${winnings}`, inline: true },
+                        { name: '💰 Winnings', value: `🍯${winnings}`, inline: true },
                         { name: '⚡ Victory Message', value: `"${msg.content}" - Lightning fast!`, inline: false }
                     )
                     .setTimestamp();
@@ -719,11 +860,11 @@ module.exports = (client) => {
                 interaction.channel.send({ embeds: [resultEmbed] });
             });
 
-            collector.on('end', (collected) => {
+            collector.on('end', async (collected) => {
                 if (collected.size === 0) {
                     // No one responded in time - refund both
-                    updateEggBucks(game.player1, game.amount);
-                    updateEggBucks(game.player2, game.amount);
+                    await updateBobbyBucks(game.player1, game.amount);
+                    await updateBobbyBucks(game.player2, game.amount);
                     activeGames.delete(gameId);
                     
                     const timeoutEmbed = new EmbedBuilder()
@@ -752,7 +893,7 @@ module.exports = (client) => {
             .setColor('#9b59b6')
             .setDescription(`**${game.player1Name}** vs **${game.player2Name}**`)
             .addFields(
-                { name: '💰 Total Pot', value: `E${game.amount * 2}`, inline: true },
+                { name: '💰 Total Pot', value: `🍯${game.amount * 2}`, inline: true },
                 { name: '🎯 How to Play', value: `**DM the bot your guess:** \`!play ${gameId} [1-100]\``, inline: false },
                 { name: '📋 Rules', value: 'Closest to the secret number wins!', inline: false },
                 { name: '📩 Important', value: 'Both players must send their guesses via **Direct Message**!', inline: false }
@@ -773,7 +914,7 @@ module.exports = (client) => {
                 .setDescription(`Send your guess: \`!play ${gameId} [number]\``)
                 .addFields(
                     { name: '🎯 Range', value: '1 to 100', inline: true },
-                    { name: '💰 Pot', value: `E${game.amount * 2}`, inline: true }
+                    { name: '💰 Pot', value: `🍯${game.amount * 2}`, inline: true }
                 )
                 .setFooter({ text: 'Closest to the secret number wins!' });
 
@@ -821,8 +962,8 @@ module.exports = (client) => {
         const moveEmojis = { rock: '🪨', paper: '📄', scissors: '✂️' };
 
         if (result === 'tie') {
-            updateEggBucks(game.player1, game.amount);
-            updateEggBucks(game.player2, game.amount);
+            await updateBobbyBucks(game.player1, game.amount);
+            await updateBobbyBucks(game.player2, game.amount);
             const embed = new EmbedBuilder()
                 .setTitle('⚔️ Rock Paper Scissors - TIE!')
                 .setColor('#95a5a6')
@@ -838,10 +979,10 @@ module.exports = (client) => {
             const winnerName = result === 'player1' ? game.player1Name : game.player2Name;
             const houseCut = Math.floor(game.amount * 2 * 0.05);
             const winnings = (game.amount * 2) - houseCut;
-            
-            updateEggBucks(winner, winnings);
-            updateHouse(houseCut);
-            
+
+            await updateBobbyBucks(winner, winnings);
+            await updateHouse(houseCut);
+
             const embed = new EmbedBuilder()
                 .setTitle('⚔️ Rock Paper Scissors Results!')
                 .setColor('#2ecc71')
@@ -849,7 +990,7 @@ module.exports = (client) => {
                 .addFields(
                     { name: game.player1Name, value: `${moveEmojis[move1]} ${move1}`, inline: true },
                     { name: game.player2Name, value: `${moveEmojis[move2]} ${move2}`, inline: true },
-                    { name: '💰 Winnings', value: `E${winnings} (after 5% house cut)`, inline: false }
+                    { name: '💰 Winnings', value: `🍯${winnings} (after 5% house cut)`, inline: false }
                 );
             
             channel.send({ embeds: [embed] });
@@ -870,9 +1011,9 @@ module.exports = (client) => {
         const channel = client.channels.cache.get(game.channelId);
 
         if (diff1 === diff2) {
-            updateEggBucks(game.player1, game.amount);
-            updateEggBucks(game.player2, game.amount);
-            
+            await updateBobbyBucks(game.player1, game.amount);
+            await updateBobbyBucks(game.player2, game.amount);
+
             const embed = new EmbedBuilder()
                 .setTitle('🎯 Number Duel - TIE!')
                 .setColor('#95a5a6')
@@ -883,17 +1024,17 @@ module.exports = (client) => {
                     { name: game.player2Name, value: `${guess2} (off by ${diff2})`, inline: true },
                     { name: '💰 Result', value: 'Both players refunded!', inline: false }
                 );
-            
+
             channel.send({ embeds: [embed] });
         } else {
             const winner = diff1 < diff2 ? game.player1 : game.player2;
             const winnerName = diff1 < diff2 ? game.player1Name : game.player2Name;
             const houseCut = Math.floor(game.amount * 2 * 0.05);
             const winnings = (game.amount * 2) - houseCut;
-            
-            updateEggBucks(winner, winnings);
-            updateHouse(houseCut);
-            
+
+            await updateBobbyBucks(winner, winnings);
+            await updateHouse(houseCut);
+
             const embed = new EmbedBuilder()
                 .setTitle('🎯 Number Duel Results!')
                 .setColor('#2ecc71')
@@ -902,7 +1043,7 @@ module.exports = (client) => {
                     { name: '🎯 Target Number', value: target.toString(), inline: true },
                     { name: game.player1Name, value: `${guess1} (off by ${diff1})`, inline: true },
                     { name: game.player2Name, value: `${guess2} (off by ${diff2})`, inline: true },
-                    { name: '💰 Winnings', value: `E$${winnings} (after 5% house cut)`, inline: false }
+                    { name: '💰 Winnings', value: `🍯${winnings} (after 5% house cut)`, inline: false }
                 );
             
             channel.send({ embeds: [embed] });
@@ -934,7 +1075,7 @@ module.exports = (client) => {
 
             embed.addFields({
                 name: gameNames[challenge.type],
-                value: `**By:** ${challenge.creatorName}\n**Bet:** E${challenge.amount}\n**Status:** Click button to accept`,
+                value: `**By:** ${challenge.creatorName}\n**Bet:** 🍯${challenge.amount}\n**Status:** Click button to accept`,
                 inline: true
             });
         }
@@ -967,7 +1108,7 @@ module.exports = (client) => {
         // Player info
         ctx.fillStyle = '#ffffff';
         ctx.font = '16px Arial';
-        ctx.fillText(`${playerName} - Bet: E$${betAmount}`, 200, 50);
+        ctx.fillText(`${playerName} - Bet: 🍯${betAmount}`, 200, 50);
         
         // Coin
         ctx.save();
@@ -1014,7 +1155,7 @@ module.exports = (client) => {
         ctx.fillStyle = isWin ? '#00ff00' : '#ff0000';
         ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(isWin ? `YOU WIN E$${winnings}!` : `YOU LOSE E$${Math.abs(winnings)}!`, 200, 250);
+        ctx.fillText(isWin ? `YOU WIN 🍯${winnings}!` : `YOU LOSE 🍯${Math.abs(winnings)}!`, 200, 250);
         
         return canvas;
     }
@@ -1040,7 +1181,7 @@ module.exports = (client) => {
         // Player info
         ctx.fillStyle = '#ffffff';
         ctx.font = '14px Arial';
-        ctx.fillText(`${playerName} bet E$${betAmount} on ${userChoice.toUpperCase()}`, 250, 50);
+        ctx.fillText(`${playerName} bet 🍯${betAmount} on ${userChoice.toUpperCase()}`, 250, 50);
         
         // Roulette wheel base
         ctx.save();
@@ -1114,7 +1255,7 @@ module.exports = (client) => {
         const isWin = winnings > 0;
         ctx.fillStyle = isWin ? '#00ff00' : '#ff0000';
         ctx.font = 'bold 20px Arial';
-        ctx.fillText(isWin ? `YOU WIN E$${winnings}!` : `YOU LOSE E$${Math.abs(winnings)}!`, 250, 350);
+        ctx.fillText(isWin ? `YOU WIN 🍯${winnings}!` : `YOU LOSE 🍯${Math.abs(winnings)}!`, 250, 350);
         
         return canvas;
     }
@@ -1144,7 +1285,7 @@ module.exports = (client) => {
         // Player info
         ctx.fillStyle = '#ffffff';
         ctx.font = '16px Arial';
-        ctx.fillText(`${playerName} guessed ${userGuess} - Bet: E$${betAmount}`, 200, 50);
+        ctx.fillText(`${playerName} guessed ${userGuess} - Bet: 🍯${betAmount}`, 200, 50);
         
         // Dice
         ctx.save();
@@ -1190,7 +1331,7 @@ module.exports = (client) => {
         ctx.fillStyle = isWin ? '#00ff00' : '#ff0000';
         ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(isWin ? `YOU WIN E$${winnings}!` : `YOU LOSE E$${Math.abs(winnings)}!`, 200, 250);
+        ctx.fillText(isWin ? `YOU WIN 🍯${winnings}!` : `YOU LOSE 🍯${Math.abs(winnings)}!`, 200, 250);
         
         return canvas;
     }
@@ -1202,18 +1343,18 @@ module.exports = (client) => {
 
         const betAmount = parseInt(args[1], 10);
         const userId = message.author.id;
-        const balance = getEggBucks(userId);
+        const balance = await getBobbyBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
         }
 
         const result = Math.random() < 0.5 ? 'heads' : 'tails';
         const winnings = result === 'heads' ? betAmount * 2 : 0;
         const netGain = winnings - betAmount;
 
-        updateEggBucks(userId, netGain);
-        updateHouse(-netGain);
+        await updateBobbyBucks(userId, netGain);
+        await updateHouse(-netGain);
 
         // Create visual
         const coinCanvas = await createCoinFlipAnimation(result, message.author.username, betAmount, netGain);
@@ -1226,8 +1367,8 @@ module.exports = (client) => {
             .setImage('attachment://coin-flip.png')
             .addFields(
                 { name: '🎯 Result', value: `**${result.toUpperCase()}**`, inline: true },
-                { name: '💰 Outcome', value: netGain > 0 ? `Won E$${netGain}` : `Lost E$${Math.abs(netGain)}`, inline: true },
-                { name: '🏦 New Balance', value: `E$${getEggBucks(userId)}`, inline: true }
+                { name: '💰 Outcome', value: netGain > 0 ? `Won 🍯${netGain}` : `Lost 🍯${Math.abs(netGain)}`, inline: true },
+                { name: '🏦 New Balance', value: `🍯${await getBobbyBucks(userId)}`, inline: true }
             )
             .setFooter({ text: result === 'heads' ? '🍀 Lady Luck smiles upon you!' : '😔 Better luck next time!' })
             .setTimestamp();
@@ -1242,10 +1383,10 @@ module.exports = (client) => {
 
         const betAmount = parseInt(args[1], 10);
         const userId = message.author.id;
-        const balance = getEggBucks(userId);
+        const balance = await getBobbyBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
         }
 
         const redNumbers = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
@@ -1256,10 +1397,10 @@ module.exports = (client) => {
         let winnings = 0;
         if (userChoice === chosenColor && chosenNumber !== 0) winnings = betAmount * 2;
         if (userChoice === String(chosenNumber)) winnings = betAmount * 36;
-        
+
         const netGain = winnings - betAmount;
-        updateEggBucks(userId, netGain);
-        updateHouse(-netGain);
+        await updateBobbyBucks(userId, netGain);
+        await updateHouse(-netGain);
 
         // Create visual
         const rouletteCanvas = await createRouletteWheel(chosenNumber, chosenColor, userChoice, message.author.username, betAmount, netGain);
@@ -1273,11 +1414,11 @@ module.exports = (client) => {
             .addFields(
                 { name: '🎯 Result', value: `**${chosenColor.toUpperCase()} ${chosenNumber}**`, inline: true },
                 { name: '🎲 Your Bet', value: `**${userChoice.toUpperCase()}**`, inline: true },
-                { name: '💰 Outcome', value: netGain > 0 ? `Won E$${netGain}` : `Lost E$${Math.abs(netGain)}`, inline: true }
+                { name: '💰 Outcome', value: netGain > 0 ? `Won 🍯${netGain}` : `Lost 🍯${Math.abs(netGain)}`, inline: true }
             )
             .addFields(
-                { name: '🏦 New Balance', value: `E$${getEggBucks(userId)}`, inline: true },
-                { name: '🏛️ House Edge', value: `E$${getHouseBalance()}`, inline: true },
+                { name: '🏦 New Balance', value: `🍯${await getBobbyBucks(userId)}`, inline: true },
+                { name: '🏛️ House Edge', value: `🍯${await getHouseBalance()}`, inline: true },
                 { name: '🎰 Payout Rate', value: userChoice === String(chosenNumber) ? '36:1' : '2:1', inline: true }
             )
             .setFooter({ text: netGain > 0 ? '🎉 The wheel of fortune favors you!' : '🎲 The house always wins... sometimes!' })
@@ -1293,10 +1434,10 @@ module.exports = (client) => {
 
         const betAmount = parseInt(args[1], 10);
         const userId = message.author.id;
-        const balance = getEggBucks(userId);
+        const balance = await getBobbyBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Egg Bucks. Your balance is E$${balance}.`);
+            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
         }
 
         const diceRoll = Math.ceil(Math.random() * 6);
@@ -1304,8 +1445,8 @@ module.exports = (client) => {
         const winnings = userGuess === diceRoll ? betAmount * 6 : 0;
         const netGain = winnings - betAmount;
 
-        updateEggBucks(userId, netGain);
-        updateHouse(-netGain);
+        await updateBobbyBucks(userId, netGain);
+        await updateHouse(-netGain);
 
         // Create visual
         const diceCanvas = await createDiceRoll(diceRoll, userGuess, message.author.username, betAmount, netGain);
@@ -1322,8 +1463,8 @@ module.exports = (client) => {
                 { name: '🎰 Match?', value: userGuess === diceRoll ? '✅ **WINNER!**' : '❌ **Miss**', inline: true }
             )
             .addFields(
-                { name: '💰 Outcome', value: netGain > 0 ? `Won E$${netGain}` : `Lost E$${Math.abs(netGain)}`, inline: true },
-                { name: '🏦 New Balance', value: `E$${getEggBucks(userId)}`, inline: true },
+                { name: '💰 Outcome', value: netGain > 0 ? `Won 🍯${netGain}` : `Lost 🍯${Math.abs(netGain)}`, inline: true },
+                { name: '🏦 New Balance', value: `🍯${await getBobbyBucks(userId)}`, inline: true },
                 { name: '📊 Odds', value: '1 in 6 (16.7%)', inline: true }
             )
             .setFooter({ text: netGain > 0 ? '🎉 Perfect prediction! You nailed it!' : '🎲 Close call! Try again!' })
@@ -1332,39 +1473,5 @@ module.exports = (client) => {
         return message.channel.send({ embeds: [embed], files: [attachment] });
     }
 
-    // Functions to handle Egg Bucks and House balance
-    function getEggBucks(userId) {
-        if (!fs.existsSync(eggBucksFilePath)) {
-            fs.writeFileSync(eggBucksFilePath, '', 'utf-8');
-        }
-        const data = fs.readFileSync(eggBucksFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        return userRecord ? parseInt(userRecord.split(':')[1], 10) : 0;
-    }
-
-    function updateEggBucks(userId, amount) {
-        let data = fs.readFileSync(eggBucksFilePath, 'utf-8');
-        const userRecord = data.split('\n').find(line => line.startsWith(userId));
-        if (userRecord) {
-            const currentBalance = parseInt(userRecord.split(':')[1], 10);
-            const newBalance = currentBalance + amount;
-            data = data.replace(userRecord, `${userId}:${newBalance}`);
-        } else {
-            data += `${userId}:${amount}\n`;
-        }
-        fs.writeFileSync(eggBucksFilePath, data, 'utf-8');
-    }
-
-    function getHouseBalance() {
-        if (!fs.existsSync(houseFilePath)) {
-            fs.writeFileSync(houseFilePath, '0', 'utf-8');
-        }
-        return parseInt(fs.readFileSync(houseFilePath, 'utf-8'), 10);
-    }
-
-    function updateHouse(amount) {
-        const houseBalance = getHouseBalance();
-        const newBalance = houseBalance + amount;
-        fs.writeFileSync(houseFilePath, newBalance.toString(), 'utf-8');
-    }
+    // Functions to handle Honey and House balance
 };

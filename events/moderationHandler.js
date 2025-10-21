@@ -4,34 +4,45 @@ module.exports = (client) => {
     // Configuration options
     const config = {
         deadRoleName: 'dead.',
-        graveyardChannelName: 'the-graveyard', // Channel where dead users can see
+        graveyardChannelName: 'the-graveyard',
         spamThreshold: 2, // Number of channels for spam detection
         timeWindow: 30000, // 30 seconds window
         maxWarnings: 3,
-        logChannelId: null // Set this to your log channel ID if you want logging
+        logChannelId: null, // Set this to your log channel ID if you want logging
+        exemptRoles: ['Admin', 'Moderator', 'Top Egg'], // Roles exempt from moderation
+        messageRateLimit: 10, // Max messages per timeWindow
+        duplicateMessageThreshold: 3 // How many duplicate messages trigger action
     };
-    
+
     // Track user messages for spam detection
     const userMessages = new Collection();
     const userWarnings = new Collection();
-    
-    console.log('🛡️ Moderation Handler initialized');
+    const userMessageCount = new Collection(); // Track message rate limiting
+
+    console.log('🛡️ Moderation Handler initialized with enhanced spam detection');
     
     // Listen for messages
     client.on('messageCreate', async (message) => {
         // Ignore bots and system messages
         if (message.author.bot || message.system) return;
-        
+
         // Ignore DMs
         if (!message.guild) return;
-        
+
+        // Check if user is exempt from moderation
+        if (isExemptFromModeration(message.member)) return;
+
         // Ignore commands (messages starting with !)
         if (message.content.startsWith('!')) return;
-        
+
         // Ignore empty messages or messages with only embeds/attachments
         if (!message.content.trim()) return;
-        
+
         try {
+            // Check for rate limiting
+            await checkMessageRateLimit(message);
+
+            // Check for spam patterns
             await checkForSpam(message);
         } catch (error) {
             console.error('Error in moderation handler:', error);
@@ -42,7 +53,77 @@ module.exports = (client) => {
     setInterval(() => {
         cleanupOldData();
     }, 5 * 60 * 1000);
-    
+
+    // Check if user is exempt from moderation
+    function isExemptFromModeration(member) {
+        if (!member) return false;
+
+        // Check if user has admin permissions
+        if (member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return true;
+        }
+
+        // Check if user has any exempt roles
+        return config.exemptRoles.some(roleName =>
+            member.roles.cache.some(role => role.name === roleName)
+        );
+    }
+
+    // Check message rate limiting
+    async function checkMessageRateLimit(message) {
+        const userId = message.author.id;
+        const currentTime = Date.now();
+
+        if (!userMessageCount.has(userId)) {
+            userMessageCount.set(userId, []);
+        }
+
+        const timestamps = userMessageCount.get(userId);
+
+        // Remove timestamps outside the time window
+        const recentTimestamps = timestamps.filter(
+            time => currentTime - time <= config.timeWindow
+        );
+
+        recentTimestamps.push(currentTime);
+        userMessageCount.set(userId, recentTimestamps);
+
+        // Check if user exceeded message rate limit
+        if (recentTimestamps.length > config.messageRateLimit) {
+            await handleRateLimitViolation(message);
+        }
+    }
+
+    // Handle rate limit violations
+    async function handleRateLimitViolation(message) {
+        try {
+            const embed = new EmbedBuilder()
+                .setColor(0xFFA500) // Orange
+                .setTitle('⚠️ Message Rate Limit')
+                .setDescription(`${message.author}, please slow down! You're sending messages too quickly.`)
+                .addFields(
+                    { name: '🚫 Action', value: 'Messages deleted', inline: true },
+                    { name: '⏱️ Cooldown', value: '30 seconds', inline: true }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'Spam Prevention System' });
+
+            const warningMsg = await message.channel.send({ embeds: [embed] });
+
+            // Delete the warning after 5 seconds
+            setTimeout(() => {
+                warningMsg.delete().catch(console.error);
+            }, 5000);
+
+            // Delete the spam message
+            await message.delete().catch(console.error);
+
+            console.log(`⚠️ Rate limit: ${message.author.tag} exceeded message limit`);
+        } catch (error) {
+            console.error('Error handling rate limit violation:', error);
+        }
+    }
+
     // Function to check for spam
     async function checkForSpam(message) {
         const userId = message.author.id;
@@ -259,12 +340,13 @@ module.exports = (client) => {
     function cleanupOldData() {
         const currentTime = Date.now();
         let cleanedUsers = 0;
-        
+
+        // Clean up message history
         for (const [userId, messages] of userMessages) {
             const recentMessages = messages.filter(
                 msg => currentTime - msg.timestamp <= config.timeWindow
             );
-            
+
             if (recentMessages.length === 0) {
                 userMessages.delete(userId);
                 cleanedUsers++;
@@ -272,7 +354,20 @@ module.exports = (client) => {
                 userMessages.set(userId, recentMessages);
             }
         }
-        
+
+        // Clean up message count tracking
+        for (const [userId, timestamps] of userMessageCount) {
+            const recentTimestamps = timestamps.filter(
+                time => currentTime - time <= config.timeWindow
+            );
+
+            if (recentTimestamps.length === 0) {
+                userMessageCount.delete(userId);
+            } else {
+                userMessageCount.set(userId, recentTimestamps);
+            }
+        }
+
         if (cleanedUsers > 0) {
             console.log(`🧹 Cleaned up data for ${cleanedUsers} users`);
         }
@@ -334,27 +429,76 @@ module.exports = (client) => {
                     targetUser = mentionedUser;
                 }
             }
-            
+
             const stats = getUserStats(targetUser.id, message.guild);
             const targetMember = message.guild.members.cache.get(targetUser.id);
-            
+
             const embed = new EmbedBuilder()
-                .setColor(0x4A90E2)
+                .setColor(stats.hasDeadRole ? 0xFF6B6B : 0x4A90E2)
                 .setTitle('📊 Moderation Stats')
                 .setDescription(`**User:** ${targetUser.tag}`)
                 .addFields(
                     { name: '📝 Recent Messages Tracked', value: `${stats.recentMessages}`, inline: true },
                     { name: '⚠️ Warnings', value: `${stats.warnings}`, inline: true },
-                    { name: '💀 Has Dead Role', value: stats.hasDeadRole ? 'Yes' : 'No', inline: true }
+                    { name: '💀 Has Dead Role', value: stats.hasDeadRole ? '✅ Yes' : '❌ No', inline: true },
+                    { name: '📊 Message Rate', value: `${stats.messageRate}/30s`, inline: true },
+                    { name: '🛡️ Status', value: stats.isExempt ? 'Exempt' : 'Active', inline: true },
+                    { name: '🕒 Tracked Since', value: '<t:' + Math.floor(Date.now() / 1000) + ':R>', inline: true }
                 )
                 .setTimestamp()
-                .setFooter({ text: 'Moderation Handler' });
-            
+                .setFooter({ text: 'Moderation System | Type !modhelp for commands' });
+
             if (targetUser.displayAvatarURL) {
                 embed.setThumbnail(targetUser.displayAvatarURL());
             }
-            
-            message.channel.send({ embeds: [embed] });
+
+            await message.channel.send({ embeds: [embed] });
+        }
+
+        // Command to show moderation help
+        if (args[0] === '!modhelp') {
+            const embed = new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setTitle('🛡️ Moderation Commands')
+                .setDescription('Available moderation commands and features')
+                .addFields(
+                    { name: '!undead [@user]', value: 'Remove the dead role from a user (Requires: Manage Roles)', inline: false },
+                    { name: '!modstats [@user]', value: 'View moderation statistics for yourself or another user', inline: false },
+                    { name: '!modconfig', value: 'View current moderation configuration (Requires: Admin)', inline: false }
+                )
+                .addFields({
+                    name: '📋 Automatic Features',
+                    value: '• Spam detection across channels\n• Message rate limiting\n• Duplicate message detection\n• Auto-role assignment for violations',
+                    inline: false
+                })
+                .setFooter({ text: 'Moderation Handler' })
+                .setTimestamp();
+
+            await message.channel.send({ embeds: [embed] });
+        }
+
+        // Command to view config (admin only)
+        if (args[0] === '!modconfig') {
+            if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                return message.reply('❌ You need Administrator permission to use this command.');
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setTitle('⚙️ Moderation Configuration')
+                .addFields(
+                    { name: '💀 Dead Role Name', value: config.deadRoleName, inline: true },
+                    { name: '🪦 Graveyard Channel', value: config.graveyardChannelName, inline: true },
+                    { name: '🚨 Spam Threshold', value: `${config.spamThreshold} channels`, inline: true },
+                    { name: '⏱️ Time Window', value: `${config.timeWindow / 1000}s`, inline: true },
+                    { name: '📊 Message Rate Limit', value: `${config.messageRateLimit} msgs/30s`, inline: true },
+                    { name: '⚠️ Max Warnings', value: config.maxWarnings.toString(), inline: true },
+                    { name: '🛡️ Exempt Roles', value: config.exemptRoles.join(', ') || 'None', inline: false }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'Moderation Handler Configuration' });
+
+            await message.channel.send({ embeds: [embed] });
         }
     });
     
@@ -377,14 +521,18 @@ module.exports = (client) => {
     function getUserStats(userId, guild) {
         const messages = userMessages.get(userId) || [];
         const warnings = userWarnings.get(userId) || 0;
+        const messageRate = userMessageCount.get(userId)?.length || 0;
         const member = guild.members.cache.get(userId);
         const deadRole = guild.roles.cache.find(role => role.name === config.deadRoleName);
         const hasDeadRole = member && deadRole ? member.roles.cache.has(deadRole.id) : false;
-        
+        const isExempt = member ? isExemptFromModeration(member) : false;
+
         return {
             recentMessages: messages.length,
             warnings: warnings,
-            hasDeadRole: hasDeadRole
+            hasDeadRole: hasDeadRole,
+            messageRate: messageRate,
+            isExempt: isExempt
         };
     }
 };
