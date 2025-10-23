@@ -1,3 +1,12 @@
+# Dependencies
+/node_modules
+node_modules/.package-lock.json
+node_modules/form-data/lib/browser.js
+
+# Environment variables
+.env
+
+# Data files
 bobby_bucks.txt
 booster_roles.txt
 formatted_badwords.txt
@@ -11,13 +20,9 @@ valorant_inhouse_events.json
 valorant_users.json
 virtual_pets.txt
 wordle_scores.txt
-/node_modules
-.env
+user_memories.txt
+
+# Claude Code settings
 .claude
 .claude/settings.local.json
 /.claude
-/node_modules
-user_memories.txt
-.claude/settings.local.json
-node_modules/.package-lock.json
-node_modules/form-data/lib/browser.js

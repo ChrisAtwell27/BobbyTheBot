@@ -40,25 +40,24 @@ require('./events/thinIceHandler')(client);
 require('./events/eggbuckHandler')(client);
 require('./events/gamblingHandler')(client);
 require('./events/blackjackHandler')(client);
-//require('./events/interactionHandler')(client);
 require('./events/clipHandler')(client);
 require('./events/valorantTeamHandler')(client);
-// require('./events/activityAwardsHandler')(client); // Module not found - commented out
 require('./events/russianRouletteHandler')(client);
 require('./events/gladiatorHandler')(client);
 require('./events/pokerHandler')(client);
-//require('./events/repoTeamHandler')(client);
 require('./events/virtualPetHandler')(client);
 require('./events/helpHandler')(client);
 require('./events/kothHandler')(client);
 require('./events/moderationHandler')(client);
 require('./events/boosterRoleHandler')(client);
 require('./events/memberCountHandler')(client);
-//require('./events/levelingHandler')(client);
-//require('./events/discordEventHandler')(client);
 require('./events/askHandler')(client);
 require('./events/valorantMapHandler')(client);
 require('./events/bumpHandler')(client);
+require('./events/birthdayHandler')(client);
+require('./events/wordleHandler')(client);
+require('./events/socialMediaPostHandler')(client);
+require('./events/valorantInhouseHandler')(client);
 // Initialize Valorant API handler separately to prevent conflicts
 const valorantApiHandler = require('./events/valorantApiHandler');
 valorantApiHandler.init(client);
@@ -88,5 +87,4 @@ client.once("ready", () => {
   console.log("Role bot is online!");
 });
 
-client.login("MTI3NjI0Nzg3NTA2MzUxMzA5OA.GZNqnp.35UImMB1mi2D119PYwUD8sxZmhG1t-DBoJOxmw"); // Replace with your bot token
-//DONT DELETE MTI3NjI0Nzg3NTA2MzUxMzA5OA.GZNqnp.35UImMB1mi2D119PYwUD8sxZmhG1t-DBoJOxmw
+client.login(process.env.DISCORD_BOT_TOKEN);
