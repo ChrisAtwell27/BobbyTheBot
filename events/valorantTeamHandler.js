@@ -466,11 +466,19 @@ module.exports = (client) => {
             try {
                 // Get the channel
                 const channel = await client.channels.fetch(team.channelId);
-                if (!channel) return;
+                if (!channel) {
+                    console.log(`[VALORANT TEAM] Channel not found for team ${teamId}, removing team`);
+                    activeTeams.delete(teamId);
+                    return;
+                }
 
                 // Get the message
-                const message = await channel.messages.fetch(team.messageId);
-                if (!message) return;
+                const message = await channel.messages.fetch(team.messageId).catch(() => null);
+                if (!message) {
+                    console.log(`[VALORANT TEAM] Message not found for team ${teamId}, removing team`);
+                    activeTeams.delete(teamId);
+                    return;
+                }
 
                 // Create updated embed and components
                 const isFull = getTotalMembers(team) >= 5;
@@ -493,7 +501,12 @@ module.exports = (client) => {
                     team.resendTimer = setTimeout(() => updateTeamMessage(teamId), RESEND_INTERVAL);
                 }
             } catch (error) {
-                console.error(`Error updating team message: ${error}`);
+                console.error(`[VALORANT TEAM] Error updating team message: ${error.message}`);
+                // If the message was deleted or another error occurred, remove the team
+                if (error.code === 10008) { // Unknown Message
+                    console.log(`[VALORANT TEAM] Message was deleted for team ${teamId}, removing team`);
+                    activeTeams.delete(teamId);
+                }
             }
         }
 
@@ -565,8 +578,9 @@ module.exports = (client) => {
             }
         });
 
-        // Handle select menu interactions for leader reassignment
+        // Handle all interactions (buttons and select menus) in one listener
         client.on('interactionCreate', async (interaction) => {
+            // Handle select menu for leader reassignment
             if (interaction.isStringSelectMenu() && interaction.customId.startsWith('valorant_selectleader_')) {
                 const parts = interaction.customId.split('_');
                 const teamId = parts.slice(2).join('_');
@@ -590,9 +604,6 @@ module.exports = (client) => {
                     });
                 }
 
-                // Defer the interaction
-                await safeInteractionResponse(interaction, 'defer');
-
                 // Swap leader and member
                 const newLeader = team.members[memberIndex];
                 const oldLeader = team.leader;
@@ -607,27 +618,40 @@ module.exports = (client) => {
                     const updatedComponents = createTeamButtons(fullTeamId, isFull);
 
                     // Update the main team message
-                    const channel = await client.channels.fetch(team.channelId);
-                    const message = await channel.messages.fetch(team.messageId);
-                    await message.edit({
-                        embeds: [updatedEmbed.embed],
-                        files: updatedEmbed.files,
-                        components: updatedComponents
-                    });
+                    try {
+                        const channel = await client.channels.fetch(team.channelId);
+                        const message = await channel.messages.fetch(team.messageId);
+                        await message.edit({
+                            embeds: [updatedEmbed.embed],
+                            files: updatedEmbed.files,
+                            components: updatedComponents
+                        });
 
-                    // Confirm the reassignment
-                    await safeInteractionResponse(interaction, 'update', {
-                        content: `✅ Leadership transferred to ${newLeader.displayName}!`,
-                        components: []
-                    });
+                        // Confirm the reassignment
+                        await safeInteractionResponse(interaction, 'reply', {
+                            content: `✅ Leadership transferred to ${newLeader.displayName}!`,
+                            ephemeral: true
+                        });
+                    } catch (messageError) {
+                        console.error('[VALORANT TEAM] Error updating team message during leadership transfer:', messageError.message);
+                        // Team message might have been deleted, but we still transferred leadership internally
+                        await safeInteractionResponse(interaction, 'reply', {
+                            content: `⚠️ Leadership transferred to ${newLeader.displayName}, but couldn't update the team display (message may have been deleted).`,
+                            ephemeral: true
+                        });
+                        return;
+                    }
                 } catch (error) {
-                    console.error('Error reassigning leader:', error);
+                    console.error('[VALORANT TEAM] Error transferring leadership:', error);
+                    await safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Failed to transfer leadership. Please try again.',
+                        ephemeral: true
+                    });
                 }
+                return;
             }
-        });
 
-        // Handle button interactions (FIXED - only handle Valorant team buttons)
-        client.on('interactionCreate', async (interaction) => {
+            // Handle button interactions (only handle Valorant team buttons)
             if (!interaction.isButton()) return;
             
             // CRITICAL FIX: Only handle Valorant team buttons
@@ -733,9 +757,13 @@ module.exports = (client) => {
                             )
                             .setTimestamp();
 
-                        await safeInteractionResponse(interaction, 'reply', {
-                            embeds: [celebrationEmbed]
-                        });
+                        // Send celebration as a new message in the channel (not as a reply to interaction)
+                        try {
+                            const channel = await client.channels.fetch(team.channelId);
+                            await channel.send({ embeds: [celebrationEmbed] });
+                        } catch (error) {
+                            console.error('[VALORANT TEAM] Error sending celebration message:', error.message);
+                        }
 
                         // Auto-delete team after 5 minutes when full
                         setTimeout(() => {
@@ -787,6 +815,11 @@ module.exports = (client) => {
                         files: updatedEmbed.files,
                         components: updatedComponents
                     });
+
+                    // Restart the update timer if team is no longer full
+                    if (!isFull && !team.resendTimer) {
+                        team.resendTimer = setTimeout(() => updateTeamMessage(fullTeamId), RESEND_INTERVAL);
+                    }
                 } catch (error) {
                     console.error('Error updating team after leave:', error);
                     // The team was already updated, so don't try to respond again
