@@ -373,13 +373,177 @@ module.exports = (client) => {
         }
     }
     
-    // Command to manually remove dead role
+    // Command to manually assign dead role and delete messages
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
         if (!message.guild) return;
-        
+
         const args = message.content.split(' ');
-        
+
+        // Command to assign dead role and delete user messages
+        if (args[0] === '!dead') {
+            // Check if user has permission (admin or manage roles)
+            if (!message.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+                return message.channel.send('❌ You need the "Manage Roles" permission to use this command.');
+            }
+
+            let targetMember;
+            if (args[1]) {
+                const mentionedUser = message.mentions.users.first() || message.guild.members.cache.find(member => member.user.username === args[1])?.user;
+                if (!mentionedUser) {
+                    return message.channel.send('❌ User not found.');
+                }
+                targetMember = message.guild.members.cache.get(mentionedUser.id);
+            } else {
+                return message.channel.send('❌ Please mention a user or provide their username.');
+            }
+
+            if (!targetMember) {
+                return message.channel.send('❌ Could not find that member in this server.');
+            }
+
+            // Send initial status message
+            const statusMsg = await message.channel.send(`🔄 Processing... This may take a moment.`);
+
+            try {
+                // Delete messages from the past 5 days
+                const fiveDaysAgo = Date.now() - (5 * 24 * 60 * 60 * 1000);
+                let totalDeleted = 0;
+                const channelsProcessed = [];
+
+                for (const [channelId, channel] of message.guild.channels.cache) {
+                    if (channel.isTextBased() && channel.permissionsFor(message.guild.members.me).has(PermissionsBitField.Flags.ViewChannel)) {
+                        try {
+                            let lastId;
+                            let messagesDeleted = 0;
+                            let keepFetching = true;
+
+                            while (keepFetching) {
+                                const options = { limit: 100 };
+                                if (lastId) options.before = lastId;
+
+                                const messages = await channel.messages.fetch(options);
+                                if (messages.size === 0) break;
+
+                                const userMessages = messages.filter(msg =>
+                                    msg.author.id === targetMember.id &&
+                                    msg.createdTimestamp >= fiveDaysAgo
+                                );
+
+                                if (userMessages.size > 0) {
+                                    for (const msg of userMessages.values()) {
+                                        try {
+                                            await msg.delete();
+                                            messagesDeleted++;
+                                            totalDeleted++;
+                                            // Small delay to avoid rate limiting
+                                            await new Promise(resolve => setTimeout(resolve, 100));
+                                        } catch (deleteErr) {
+                                            console.error(`Failed to delete message ${msg.id}:`, deleteErr);
+                                        }
+                                    }
+                                }
+
+                                // Check if oldest message is beyond 5 days
+                                const oldestMessage = messages.last();
+                                if (oldestMessage && oldestMessage.createdTimestamp < fiveDaysAgo) {
+                                    keepFetching = false;
+                                } else if (messages.size < 100) {
+                                    keepFetching = false;
+                                }
+
+                                lastId = messages.last()?.id;
+                            }
+
+                            if (messagesDeleted > 0) {
+                                channelsProcessed.push(`${channel.name} (${messagesDeleted})`);
+                            }
+                        } catch (channelErr) {
+                            console.error(`Error processing channel ${channel.name}:`, channelErr);
+                        }
+                    }
+                }
+
+                // Assign the specific role
+                let roleAssigned = false;
+                try {
+                    const role = message.guild.roles.cache.get('756551561047572580');
+                    if (role) {
+                        await targetMember.roles.add(role, `Manual moderation by ${message.author.tag}`);
+                        roleAssigned = true;
+                    } else {
+                        console.error('Role 756551561047572580 not found');
+                    }
+                } catch (roleErr) {
+                    console.error('Error assigning role:', roleErr);
+                }
+
+                // Update status message with results
+                const embed = new EmbedBuilder()
+                    .setColor(0xFF6B6B)
+                    .setTitle('💀 Dead Role Applied')
+                    .setDescription(`**${targetMember.user.tag}** has been given the dead role.`)
+                    .addFields(
+                        { name: '🗑️ Messages Deleted', value: `${totalDeleted} messages`, inline: true },
+                        { name: '📁 Channels Affected', value: `${channelsProcessed.length} channels`, inline: true },
+                        { name: '👤 Role Assigned', value: roleAssigned ? '✅ Yes' : '❌ Failed', inline: true }
+                    )
+                    .setTimestamp()
+                    .setFooter({ text: `Executed by ${message.author.tag}` });
+
+                if (channelsProcessed.length > 0 && channelsProcessed.length <= 10) {
+                    embed.addFields({ name: '📋 Channel Details', value: channelsProcessed.join('\n'), inline: false });
+                }
+
+                await statusMsg.edit({ content: null, embeds: [embed] });
+
+                // Log the action
+                await logModerationAction({
+                    type: 'MANUAL_DEAD_ROLE',
+                    user: targetMember.user,
+                    reason: `Manually given dead role by ${message.author.tag}. ${totalDeleted} messages deleted from past 5 days.`,
+                    channels: channelsProcessed,
+                    guild: message.guild
+                });
+
+                // Send notification to graveyard channel
+                try {
+                    const graveyardChannel = message.guild.channels.cache.find(channel =>
+                        channel.name === config.graveyardChannelName
+                    );
+
+                    if (graveyardChannel && graveyardChannel.isTextBased()) {
+                        const graveyardEmbed = new EmbedBuilder()
+                            .setColor(0xFF6B6B)
+                            .setTitle('💀 Welcome to the Graveyard')
+                            .setDescription(`**${targetMember.user.tag}** has been manually given the dead role.`)
+                            .addFields(
+                                { name: '⚖️ Moderator', value: message.author.tag, inline: true },
+                                { name: '🗑️ Messages Deleted', value: `${totalDeleted}`, inline: true },
+                                { name: '📞 Appeal Process', value: 'Contact a moderator if you believe this was a mistake', inline: false }
+                            )
+                            .setTimestamp()
+                            .setFooter({ text: 'Manual Moderation Action' });
+
+                        if (targetMember.user.displayAvatarURL) {
+                            graveyardEmbed.setThumbnail(targetMember.user.displayAvatarURL());
+                        }
+
+                        await graveyardChannel.send({
+                            content: `${targetMember.user}`,
+                            embeds: [graveyardEmbed]
+                        });
+                    }
+                } catch (graveyardError) {
+                    console.error(`Could not send message to graveyard channel:`, graveyardError);
+                }
+
+            } catch (error) {
+                console.error('Error in !dead command:', error);
+                await statusMsg.edit(`❌ An error occurred while processing the command: ${error.message}`);
+            }
+        }
+
         // Command to remove dead role from a user
         if (args[0] === '!undead') {
             // Check if user has permission (admin or manage roles)
@@ -462,6 +626,7 @@ module.exports = (client) => {
                 .setTitle('🛡️ Moderation Commands')
                 .setDescription('Available moderation commands and features')
                 .addFields(
+                    { name: '!dead [@user]', value: 'Delete all messages from the past 5 days and assign dead role (Requires: Manage Roles)', inline: false },
                     { name: '!undead [@user]', value: 'Remove the dead role from a user (Requires: Manage Roles)', inline: false },
                     { name: '!modstats [@user]', value: 'View moderation statistics for yourself or another user', inline: false },
                     { name: '!modconfig', value: 'View current moderation configuration (Requires: Admin)', inline: false }
