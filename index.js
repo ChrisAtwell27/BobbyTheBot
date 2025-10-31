@@ -83,6 +83,7 @@ server.listen(PORT, () => {
 });
 
 // Start the bot
+const { setupVerificationChannel, handleMemberJoin, handleReactionAdd } = require('./verification');
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}`);
     
