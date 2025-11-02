@@ -24,7 +24,8 @@ const client = new Client({
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildModeration
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildVoiceStates
   ],
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
@@ -58,6 +59,7 @@ require('./events/birthdayHandler')(client);
 require('./events/wordleHandler')(client);
 require('./events/socialMediaPostHandler')(client);
 require('./events/valorantInhouseHandler')(client);
+require('./events/mafiaHandler')(client);
 // Initialize Valorant API handler separately to prevent conflicts
 const valorantApiHandler = require('./events/valorantApiHandler');
 valorantApiHandler.init(client);

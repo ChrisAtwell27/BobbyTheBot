@@ -162,6 +162,21 @@ const userSchema = new mongoose.Schema({
         },
         favoriteClass: String
     },
+    // Mafia game stats
+    mafiaStats: {
+        gamesPlayed: {
+            type: Number,
+            default: 0
+        },
+        gamesWon: {
+            type: Number,
+            default: 0
+        },
+        rolesPlayed: {
+            type: [String],
+            default: []
+        }
+    },
     // Timestamps
     createdAt: {
         type: Date,
