@@ -83,8 +83,22 @@ server.listen(PORT, () => {
 });
 
 // Start the bot
-client.once("ready", () => {
-  console.log("Role bot is online!");
+const { setupVerificationChannel, handleMemberJoin, handleReactionAdd } = require('./verification');
+client.once('ready', async () => {
+    console.log(`Logged in as ${client.user.tag}`);
+    
+    // Setup verification channels for all guilds
+    for (const guild of client.guilds.cache.values()) {
+        await setupVerificationChannel(guild);
+    }
+});
+
+client.on('guildMemberAdd', async (member) => {
+    await handleMemberJoin(member);
+});
+
+client.on('messageReactionAdd', async (reaction, user) => {
+    await handleReactionAdd(reaction, user);
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
