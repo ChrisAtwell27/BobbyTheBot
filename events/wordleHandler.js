@@ -1,4 +1,5 @@
 const WordleScore = require('../database/models/WordleScore');
+const WordleMonthlyWinner = require('../database/models/WordleMonthlyWinner');
 const { updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const { topEggRoleId } = require('../data/config');
 
@@ -110,6 +111,257 @@ function parseWordleMessage(content) {
     }
 
     return results;
+}
+
+// Get the current month in YYYY-MM format
+function getCurrentMonth() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    return `${year}-${month}`;
+}
+
+// Get the start and end dates for a specific month (YYYY-MM format)
+function getMonthBounds(monthStr = null) {
+    const now = new Date();
+    let year, month;
+
+    if (monthStr) {
+        const parts = monthStr.split('-');
+        year = parseInt(parts[0]);
+        month = parseInt(parts[1]) - 1; // JavaScript months are 0-indexed
+    } else {
+        year = now.getFullYear();
+        month = now.getMonth();
+    }
+
+    const start = new Date(year, month, 1);
+    const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+    return { start, end };
+}
+
+// Force end the current month and declare winner
+async function forceEndCurrentMonth(channel) {
+    try {
+        const currentMonthStr = getCurrentMonth();
+
+        // Check if we've already announced this month's winner
+        const existingWinner = await WordleMonthlyWinner.findOne({ month: currentMonthStr });
+        if (existingWinner && existingWinner.announcedAt) {
+            return { success: false, message: 'Current month has already been force-ended.' };
+        }
+
+        // Calculate stats for current month
+        const monthBounds = getMonthBounds(currentMonthStr);
+        const stats = await calculateStats(monthBounds);
+
+        if (Object.keys(stats).length === 0) {
+            return { success: false, message: 'No games played in the current month yet.' };
+        }
+
+        // Sort users by weighted score (lower is better)
+        const sortedUsers = Object.entries(stats).sort((a, b) => a[1].weightedScore - b[1].weightedScore);
+        const [winnerId, winnerStats] = sortedUsers[0];
+
+        // Get winner's username
+        const guild = channel.guild;
+        await guild.members.fetch();
+        const winnerMember = guild.members.cache.get(winnerId);
+        const winnerUsername = winnerMember ? winnerMember.user.username : `Unknown User (${winnerId})`;
+
+        // Prepare top ten data
+        const topTen = sortedUsers.slice(0, 10).map((entry, index) => {
+            const [userId, userStats] = entry;
+            const member = guild.members.cache.get(userId);
+            return {
+                userId,
+                username: member ? member.user.username : `Unknown User (${userId})`,
+                totalGames: userStats.totalGames,
+                avgScore: userStats.avgScore,
+                bestScore: userStats.bestScore,
+                weightedScore: userStats.weightedScore,
+                totalHoney: userStats.totalHoney || 0,
+                position: index + 1
+            };
+        });
+
+        // Save monthly winner
+        const winnerDoc = {
+            month: currentMonthStr,
+            winner: {
+                userId: winnerId,
+                username: winnerUsername,
+                stats: {
+                    totalGames: winnerStats.totalGames,
+                    avgScore: winnerStats.avgScore,
+                    bestScore: winnerStats.bestScore,
+                    weightedScore: winnerStats.weightedScore,
+                    totalHoney: winnerStats.totalHoney || 0
+                }
+            },
+            topTen,
+            announcedAt: new Date(),
+            totalPlayers: Object.keys(stats).length,
+            totalGamesPlayed: Object.values(stats).reduce((sum, s) => sum + s.totalGames, 0)
+        };
+
+        await WordleMonthlyWinner.findOneAndUpdate(
+            { month: currentMonthStr },
+            winnerDoc,
+            { upsert: true, new: true }
+        );
+
+        // Create announcement embed
+        const { EmbedBuilder } = require('discord.js');
+        const monthName = new Date(currentMonthStr + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+        const embed = new EmbedBuilder()
+            .setTitle(`⚡ MONTH FORCE-ENDED: ${monthName} Wordle Champion!`)
+            .setColor('#FF6B6B')
+            .setDescription(`## Congratulations <@${winnerId}>! 👑\n\nThe **${monthName} Wordle Competition** has been manually ended early.\nYou are declared the winner!`)
+            .addFields(
+                { name: '📊 Champion Stats', value: `Average: **${winnerStats.avgScore.toFixed(2)}**\nGames Played: **${winnerStats.totalGames}**\nBest Score: **${winnerStats.bestScore}/6**`, inline: true },
+                { name: '🏅 Competition', value: `Total Players: **${Object.keys(stats).length}**\nTotal Games: **${Object.values(stats).reduce((sum, s) => sum + s.totalGames, 0)}**`, inline: true },
+                { name: '⚠️ Notice', value: 'This month was ended early by an administrator. Scores have been reset for a fresh start!', inline: false }
+            )
+            .setFooter({ text: `A new monthly competition has begun!` })
+            .setTimestamp();
+
+        await channel.send({ embeds: [embed] });
+
+        // Send top 10 summary
+        let summaryText = `**${monthName} Final Rankings (Force-Ended):**\n\n`;
+        topTen.forEach((player, index) => {
+            const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+            summaryText += `${medal} **${player.username}** - Avg: ${player.avgScore.toFixed(2)}, Games: ${player.totalGames}\n`;
+        });
+
+        const summaryEmbed = new EmbedBuilder()
+            .setTitle('📋 Final Monthly Leaderboard (Force-Ended)')
+            .setColor('#FF6B6B')
+            .setDescription(summaryText)
+            .setTimestamp();
+
+        await channel.send({ embeds: [summaryEmbed] });
+
+        return { success: true, winner: winnerUsername };
+    } catch (error) {
+        console.error('Error force ending month:', error);
+        return { success: false, message: 'An error occurred while force ending the month.' };
+    }
+}
+
+// Check if we need to announce a monthly winner
+async function checkAndAnnounceMonthlyWinner(channel) {
+    try {
+        const now = new Date();
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastMonthStr = `${lastMonth.getFullYear()}-${(lastMonth.getMonth() + 1).toString().padStart(2, '0')}`;
+
+        // Check if we've already announced this month's winner
+        const existingWinner = await WordleMonthlyWinner.findOne({ month: lastMonthStr });
+        if (existingWinner && existingWinner.announcedAt) {
+            return false; // Already announced
+        }
+
+        // Calculate stats for last month
+        const monthBounds = getMonthBounds(lastMonthStr);
+        const stats = await calculateStats(monthBounds);
+
+        if (Object.keys(stats).length === 0) {
+            return false; // No games played last month
+        }
+
+        // Sort users by weighted score (lower is better)
+        const sortedUsers = Object.entries(stats).sort((a, b) => a[1].weightedScore - b[1].weightedScore);
+        const [winnerId, winnerStats] = sortedUsers[0];
+
+        // Get winner's username
+        const guild = channel.guild;
+        await guild.members.fetch();
+        const winnerMember = guild.members.cache.get(winnerId);
+        const winnerUsername = winnerMember ? winnerMember.user.username : `Unknown User (${winnerId})`;
+
+        // Prepare top ten data
+        const topTen = sortedUsers.slice(0, 10).map((entry, index) => {
+            const [userId, userStats] = entry;
+            const member = guild.members.cache.get(userId);
+            return {
+                userId,
+                username: member ? member.user.username : `Unknown User (${userId})`,
+                totalGames: userStats.totalGames,
+                avgScore: userStats.avgScore,
+                bestScore: userStats.bestScore,
+                weightedScore: userStats.weightedScore,
+                totalHoney: userStats.totalHoney || 0,
+                position: index + 1
+            };
+        });
+
+        // Save or update monthly winner
+        const winnerDoc = {
+            month: lastMonthStr,
+            winner: {
+                userId: winnerId,
+                username: winnerUsername,
+                stats: {
+                    totalGames: winnerStats.totalGames,
+                    avgScore: winnerStats.avgScore,
+                    bestScore: winnerStats.bestScore,
+                    weightedScore: winnerStats.weightedScore,
+                    totalHoney: winnerStats.totalHoney || 0
+                }
+            },
+            topTen,
+            announcedAt: new Date(),
+            totalPlayers: Object.keys(stats).length,
+            totalGamesPlayed: Object.values(stats).reduce((sum, s) => sum + s.totalGames, 0)
+        };
+
+        await WordleMonthlyWinner.findOneAndUpdate(
+            { month: lastMonthStr },
+            winnerDoc,
+            { upsert: true, new: true }
+        );
+
+        // Create announcement embed
+        const { EmbedBuilder } = require('discord.js');
+        const monthName = new Date(lastMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+        const embed = new EmbedBuilder()
+            .setTitle(`🏆 ${monthName} Wordle Champion!`)
+            .setColor('#FFD700')
+            .setDescription(`## Congratulations <@${winnerId}>! 👑\n\nYou are the **${monthName} Wordle Champion** with an incredible performance!`)
+            .addFields(
+                { name: '📊 Champion Stats', value: `Average: **${winnerStats.avgScore.toFixed(2)}**\nGames Played: **${winnerStats.totalGames}**\nBest Score: **${winnerStats.bestScore}/6**`, inline: true },
+                { name: '🏅 Competition', value: `Total Players: **${Object.keys(stats).length}**\nTotal Games: **${Object.values(stats).reduce((sum, s) => sum + s.totalGames, 0)}**`, inline: true }
+            )
+            .setFooter({ text: `A new monthly competition has begun for ${new Date().toLocaleDateString('en-US', { month: 'long' })}!` })
+            .setTimestamp();
+
+        await channel.send({ embeds: [embed] });
+
+        // Send top 10 summary
+        let summaryText = `**${monthName} Final Rankings:**\n\n`;
+        topTen.forEach((player, index) => {
+            const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+            summaryText += `${medal} **${player.username}** - Avg: ${player.avgScore.toFixed(2)}, Games: ${player.totalGames}\n`;
+        });
+
+        const summaryEmbed = new EmbedBuilder()
+            .setTitle('📋 Final Monthly Leaderboard')
+            .setColor('#6aaa64')
+            .setDescription(summaryText)
+            .setTimestamp();
+
+        await channel.send({ embeds: [summaryEmbed] });
+
+        return true;
+    } catch (error) {
+        console.error('Error checking/announcing monthly winner:', error);
+        return false;
+    }
 }
 
 // Calculate statistics for leaderboard
@@ -243,12 +495,19 @@ module.exports = (client) => {
                 await message.channel.send({ embeds: [honeyEmbed] });
             }
 
-            // After processing scores, send the leaderboard
-            const stats = await calculateStats();
+            // Check if we need to announce monthly winner (first of the month)
+            const now = new Date();
+            if (now.getDate() === 1) {
+                await checkAndAnnounceMonthlyWinner(message.channel);
+            }
 
-            if (Object.keys(stats).length > 0) {
+            // After processing scores, send the MONTHLY leaderboard
+            const currentMonthBounds = getMonthBounds();
+            const monthlyStats = await calculateStats(currentMonthBounds);
+
+            if (Object.keys(monthlyStats).length > 0) {
                 // Sort users by weighted score (lower is better)
-                const sortedUsers = Object.entries(stats).sort((a, b) => a[1].weightedScore - b[1].weightedScore);
+                const sortedUsers = Object.entries(monthlyStats).sort((a, b) => a[1].weightedScore - b[1].weightedScore);
 
                 const { EmbedBuilder } = require('discord.js');
 
@@ -271,16 +530,18 @@ module.exports = (client) => {
                     leaderboardText += `└ Avg: **${userStats.avgScore.toFixed(2)}** | Games: **${userStats.totalGames}** | Best: **${userStats.bestScore}/6**\n\n`;
                 }
 
+                const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
                 const embed = new EmbedBuilder()
-                    .setTitle('🟩 Wordle Leaderboard - Top Word Masters')
+                    .setTitle(`🟩 ${currentMonth} Wordle Competition`)
                     .setColor('#6aaa64')
                     .setDescription(leaderboardText.trim())
                     .addFields(
-                        { name: '📊 Total Players', value: `${Object.keys(stats).length}`, inline: true },
-                        { name: '🎮 Total Games Played', value: `${Object.values(stats).reduce((sum, s) => sum + s.totalGames, 0)}`, inline: true },
-                        { name: '⭐ Best Score', value: `${Math.min(...Object.values(stats).map(s => s.bestScore))}/6`, inline: true }
+                        { name: '📊 Monthly Players', value: `${Object.keys(monthlyStats).length}`, inline: true },
+                        { name: '🎮 Monthly Games', value: `${Object.values(monthlyStats).reduce((sum, s) => sum + s.totalGames, 0)}`, inline: true },
+                        { name: '⭐ Best Score', value: `${Math.min(...Object.values(monthlyStats).map(s => s.bestScore))}/6`, inline: true }
                     )
-                    .setFooter({ text: 'Rankings favor consistency and volume. Play more to climb! 🟩' })
+                    .setFooter({ text: `Monthly competition resets on the 1st! Use !wordletop for all-time stats.` })
                     .setTimestamp();
 
                 message.channel.send({ embeds: [embed] });
@@ -527,6 +788,109 @@ module.exports = (client) => {
                 console.error('Error during backfill:', error);
                 message.channel.send('L An error occurred during backfill. Check console for details.');
             }
+        }
+
+        // Handle !wordlewinner command (show past monthly winners)
+        if (message.content.toLowerCase().startsWith('!wordlewinner')) {
+            try {
+                const args = message.content.split(' ').slice(1);
+
+                // If no argument, show all winners
+                if (args.length === 0) {
+                    const winners = await WordleMonthlyWinner.find({}).sort({ month: -1 }).limit(12);
+
+                    if (winners.length === 0) {
+                        return message.channel.send('No monthly winners recorded yet! Winners are crowned on the 1st of each month.');
+                    }
+
+                    const { EmbedBuilder } = require('discord.js');
+
+                    let winnersText = '';
+                    for (const winner of winners) {
+                        const monthDate = new Date(winner.month + '-01');
+                        const monthName = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                        winnersText += `**${monthName}**: <@${winner.winner.userId}> (${winner.winner.username})\n`;
+                        winnersText += `└ Avg: ${winner.winner.stats.avgScore.toFixed(2)} | Games: ${winner.winner.stats.totalGames}\n\n`;
+                    }
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('🏆 Wordle Monthly Champions Hall of Fame')
+                        .setColor('#FFD700')
+                        .setDescription(winnersText.trim())
+                        .setFooter({ text: 'Monthly competitions reset on the 1st of each month!' })
+                        .setTimestamp();
+
+                    message.channel.send({ embeds: [embed] });
+                } else {
+                    // Show specific month's winner (format: YYYY-MM or MM/YYYY)
+                    let monthStr = args[0];
+
+                    // Convert MM/YYYY to YYYY-MM
+                    if (monthStr.includes('/')) {
+                        const parts = monthStr.split('/');
+                        monthStr = `${parts[1]}-${parts[0].padStart(2, '0')}`;
+                    }
+
+                    const winner = await WordleMonthlyWinner.findOne({ month: monthStr });
+
+                    if (!winner) {
+                        return message.channel.send(`No winner found for ${monthStr}. Use format: !wordlewinner or !wordlewinner 2024-03`);
+                    }
+
+                    const { EmbedBuilder } = require('discord.js');
+                    const monthDate = new Date(winner.month + '-01');
+                    const monthName = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+                    let topTenText = '';
+                    winner.topTen.forEach((player, index) => {
+                        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+                        topTenText += `${medal} **${player.username}** - Avg: ${player.avgScore.toFixed(2)}, Games: ${player.totalGames}\n`;
+                    });
+
+                    const embed = new EmbedBuilder()
+                        .setTitle(`🏆 ${monthName} Wordle Champion`)
+                        .setColor('#FFD700')
+                        .setDescription(`## <@${winner.winner.userId}> (${winner.winner.username})\n\n**Champion Stats:**\n• Average: ${winner.winner.stats.avgScore.toFixed(2)}\n• Games Played: ${winner.winner.stats.totalGames}\n• Best Score: ${winner.winner.stats.bestScore}/6`)
+                        .addFields(
+                            { name: '📋 Top 10 Leaderboard', value: topTenText || 'No data', inline: false },
+                            { name: '📊 Competition Stats', value: `Total Players: ${winner.totalPlayers}\nTotal Games: ${winner.totalGamesPlayed}`, inline: true }
+                        )
+                        .setFooter({ text: `Winner announced on ${winner.announcedAt ? new Date(winner.announcedAt).toLocaleDateString() : 'Not announced yet'}` })
+                        .setTimestamp();
+
+                    message.channel.send({ embeds: [embed] });
+                }
+            } catch (error) {
+                console.error('Error fetching winners:', error);
+                message.channel.send('An error occurred while fetching monthly winners.');
+            }
+        }
+
+        // Handle !wordleannounce command (Top Egg only - manually trigger monthly winner announcement)
+        if (message.content.toLowerCase() === '!wordleannounce') {
+            // Check if user has Top Egg role
+            if (!message.member.roles.cache.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            }
+
+            const announced = await checkAndAnnounceMonthlyWinner(message.channel);
+            if (!announced) {
+                message.channel.send('No monthly winner to announce (either already announced or no games played last month).');
+            }
+        }
+
+        // Handle !wordleforceend command (Top Egg only - force end current month and declare winner)
+        if (message.content.toLowerCase() === '!wordleforceend') {
+            // Check if user has Top Egg role
+            if (!message.member.roles.cache.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            }
+
+            const result = await forceEndCurrentMonth(message.channel);
+            if (!result.success) {
+                message.channel.send(`Cannot force end the current month: ${result.message}`);
+            }
+            // Success message is handled by the forceEndCurrentMonth function itself
         }
 
         // Handle !clearwordle command (Top Egg only)

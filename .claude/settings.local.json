@@ -16,7 +16,8 @@
       "Bash(git log:*)",
       "Bash(find:*)",
       "Bash(findstr:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(del test-monthly-bounds.js)"
     ],
     "deny": [],
     "ask": []
