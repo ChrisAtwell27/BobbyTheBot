@@ -59,11 +59,8 @@ require('./events/birthdayHandler')(client);
 require('./events/wordleHandler')(client);
 require('./events/socialMediaPostHandler')(client);
 require('./events/valorantInhouseHandler')(client);
-<<<<<<< Updated upstream
 require('./events/mafiaHandler')(client);
-=======
 require('./events/triviaHandler')(client);
->>>>>>> Stashed changes
 // Initialize Valorant API handler separately to prevent conflicts
 const valorantApiHandler = require('./events/valorantApiHandler');
 valorantApiHandler.init(client);
