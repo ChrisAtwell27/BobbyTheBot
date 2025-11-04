@@ -1,6 +1,6 @@
 const { PermissionFlagsBits, ChannelType } = require('discord.js');
+const { TARGET_GUILD_ID } = require('./config/guildConfig');
 
-const TARGET_GUILD_ID = '701308904877064193'; // Cracked Hive
 const VERIFY_CHANNEL_ID = '1433901636610428998';
 const UNVERIFIED_ROLE_ID = '1433901263820685374';
 const VERIFICATION_EMOJI = '✅';

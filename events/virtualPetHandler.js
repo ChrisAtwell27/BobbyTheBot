@@ -4,6 +4,7 @@ const https = require('https');
 const { getPet: getPetFromDB, savePet: savePetToDB, deletePet: deletePetFromDB, getPetInventory: getPetInventoryFromDB, savePetInventory: savePetInventoryToDB, getTopPets: getTopPetsFromDB } = require('../database/helpers/petHelpers');
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const User = require('../database/models/User');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // Active games tracker
 const activeGames = new Map();
@@ -206,6 +207,10 @@ module.exports = (client) => {
 
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+
         if (!message.guild) return;
 
         const args = message.content.split(' ');

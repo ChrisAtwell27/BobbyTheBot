@@ -2,6 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBu
 const { createCanvas, loadImage } = require('canvas');
 const fs = require('fs');
 const path = require('path');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // ===============================================
 // VALORANT MAP SELECTOR HANDLER WITH AUTO-CONVERSION
@@ -621,6 +622,10 @@ module.exports = (client) => {
 
         client.on('messageCreate', async (message) => {
             if (message.author.bot) return;
+
+            // Only run in target guild
+            if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+
             if (!message.guild) return;
 
             const command = message.content.toLowerCase();

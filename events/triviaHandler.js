@@ -2,6 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 const axios = require('axios');
 const cron = require('node-cron');
 const TriviaSession = require('../database/models/TriviaSession');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 const TRIVIA_CHANNEL_ID = '701308905434644512'; // #General
 const CATEGORY_VIDEO_GAMES = 15;
@@ -318,6 +319,9 @@ module.exports = (client) => {
     // Manual commands
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
         const command = message.content.toLowerCase();
 

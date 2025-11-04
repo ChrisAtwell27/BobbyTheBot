@@ -4,6 +4,7 @@ const https = require('https');
 const { topEggRoleId } = require('../data/config');
 const { getBobbyBucks, updateBobbyBucks, setBobbyBucks, getTopBalances, getTotalEconomy, getUserRank } = require('../database/helpers/economyHelpers');
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // Function to load image from URL
 async function loadImageFromURL(url) {
@@ -26,6 +27,9 @@ async function loadImageFromURL(url) {
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
         // Skip DM messages for this handler since it's for guild-only commands
         if (!message.guild) return;

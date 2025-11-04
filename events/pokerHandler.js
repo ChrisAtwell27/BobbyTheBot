@@ -2,6 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBu
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // Store active poker lobbies and games
 const activeLobbies = new Map();
@@ -383,6 +384,10 @@ function createHandView(player, communityCards) {
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+
         if (!message.guild) return;
 
         const args = message.content.split(' ');

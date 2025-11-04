@@ -1,5 +1,6 @@
 // alertHandler.js
 const { EmbedBuilder, Collection } = require('discord.js');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 module.exports = (client, alertKeywords, alertChannelId) => {
   // Rate limiting: Track alerts to prevent spam
@@ -27,6 +28,9 @@ module.exports = (client, alertKeywords, alertChannelId) => {
 
     // Ignore messages from bots
     if (message.author.bot) return;
+
+    // Only run in target guild
+    if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
     // Ignore DMs
     if (!message.guild) return;

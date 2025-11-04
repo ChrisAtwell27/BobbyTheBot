@@ -3,6 +3,7 @@ const { createCanvas, loadImage } = require('canvas');
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 const Challenge = require('../database/models/Challenge');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 const cooldowns = new Map(); // Track cooldowns
 const challenges = new Map(); // Track pending challenges (in-memory cache)
 const activeGames = new Map(); // Track active games
@@ -43,6 +44,9 @@ module.exports = (client) => {
     });
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
         const args = message.content.split(' ');
         const command = args[0].toLowerCase();

@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const User = require('../database/models/User');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 const UPDATES_ROLE_ID = '1428572559523188746';
 
@@ -8,6 +9,9 @@ module.exports = (client, announcementsChannelId) => {
     client.on('messageCreate', async (message) => {
         // Ignore bot messages
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
         const content = message.content.trim();
 

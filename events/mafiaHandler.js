@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const User = require('../database/models/User');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // Constants
 const MAFIA_VC_ID = '1434633691455426600';
@@ -701,6 +702,9 @@ module.exports = (client) => {
     // Handle !createmafia command
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
         const args = message.content.split(' ');
         const command = args[0].toLowerCase();

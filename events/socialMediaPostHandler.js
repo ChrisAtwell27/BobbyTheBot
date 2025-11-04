@@ -1,6 +1,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // Instagram Graph API configuration
 // Get these from: https://developers.facebook.com/apps/
@@ -16,6 +17,9 @@ module.exports = (client) => {
   client.on('messageCreate', async (message) => {
     // Ignore bot messages and only monitor specific channel
     if (message.author.bot || message.channelId !== MONITORED_CHANNEL_ID) return;
+
+    // Only run in target guild
+    if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
     try {
       // Check if message has attachments (images)

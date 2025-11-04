@@ -2,6 +2,7 @@ const WordleScore = require('../database/models/WordleScore');
 const WordleMonthlyWinner = require('../database/models/WordleMonthlyWinner');
 const { updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const { topEggRoleId } = require('../data/config');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 const WORDLE_CHANNEL_ID = '1382796270036586608';
 
@@ -416,6 +417,9 @@ async function calculateStats(timeFilter = null) {
 module.exports = (client) => {
     // Listen for messages from the Wordle bot
     client.on('messageCreate', async (message) => {
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+
         // Only process messages in the Wordle channel
         if (message.channel.id !== WORDLE_CHANNEL_ID) return;
 

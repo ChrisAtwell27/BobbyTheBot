@@ -5,6 +5,7 @@ const path = require('path');
 const https = require('https');
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // Game constants
 const GAME_DURATION = 300000; // 5 minutes in milliseconds
@@ -35,6 +36,9 @@ async function loadImageFromURL(url) {
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
         // Skip DM messages
         if (!message.guild) return;

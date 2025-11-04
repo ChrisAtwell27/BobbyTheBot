@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
 const { thinIceRoleId } = require('../data/config');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // Load bad words from the formatted_badwords.txt file
 const badWordsFilePath = path.join(__dirname, '../data/formatted_badwords.txt');
@@ -47,6 +48,10 @@ module.exports = async (client) => {
 
     client.on('messageCreate', async message => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+
         if (!message.guild) return;
         if (!message.member) return;
 
@@ -180,6 +185,10 @@ module.exports = async (client) => {
 
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+
         if (!message.guild) return;
 
         // Command structure: !Reset Thinice @User

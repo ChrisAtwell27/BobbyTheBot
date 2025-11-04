@@ -1,6 +1,7 @@
 const OpenAI = require('openai');
 const { EmbedBuilder } = require('discord.js');
 const User = require('../database/models/User');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // OpenAI API configuration - Uses environment variable
 // Set OPENAI_API_KEY in DigitalOcean or .env file
@@ -594,6 +595,9 @@ module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         // Ignore bot messages
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
         // Only respond in guilds (not DMs for this handler)
         if (!message.guild) return;

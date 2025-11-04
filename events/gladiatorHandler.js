@@ -6,6 +6,7 @@ const path = require('path');
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 const Challenge = require('../database/models/Challenge');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // Store active gladiator matches
 const activeMatches = new Map();
@@ -399,6 +400,10 @@ function drawStaminaBar(ctx, stamina, maxStamina, x, y) {
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+
         if (!message.guild) return;
 
         const args = message.content.split(' ');

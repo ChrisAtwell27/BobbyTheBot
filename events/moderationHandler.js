@@ -1,4 +1,5 @@
 const { Collection, PermissionsBitField, EmbedBuilder } = require('discord.js');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 module.exports = (client) => {
     // Configuration options
@@ -25,6 +26,9 @@ module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         // Ignore bots and system messages
         if (message.author.bot || message.system) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
         // Ignore DMs
         if (!message.guild) return;
@@ -376,6 +380,10 @@ module.exports = (client) => {
     // Command to manually assign dead role and delete messages
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+
         if (!message.guild) return;
 
         const args = message.content.split(' ');

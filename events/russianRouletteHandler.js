@@ -4,6 +4,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { getBobbyBucks, updateBobbyBucks, setBobbyBucks } = require('../database/helpers/economyHelpers');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // Store active Russian Roulette lobbies
 const activeLobbies = new Map();
@@ -341,6 +342,10 @@ async function createDeathResultVisualization(victim, survivors, totalPot, winni
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+
         if (!message.guild) return; // Skip DMs
 
         const args = message.content.split(' ');

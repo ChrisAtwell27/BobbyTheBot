@@ -1,4 +1,5 @@
 const { topEggRoleId } = require('../data/config');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 const COMMANDS_CHANNEL_ID = '701461029602721873';
 const DISBOARD_BOT_ID = '302050872383242240';
@@ -11,6 +12,9 @@ module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         // Only listen for messages from DISBOARD bot
         if (message.author.id !== DISBOARD_BOT_ID) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
         // Check if message is in the commands channel
         if (message.channelId !== COMMANDS_CHANNEL_ID) return;

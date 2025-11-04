@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // Function to load image from URL with timeout and error handling
 async function loadImageFromURL(url, timeout = 5000) {
@@ -366,6 +367,10 @@ module.exports = (client) => {
 
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+
         if (!message.guild) return;
 
         const args = message.content.split(' ');

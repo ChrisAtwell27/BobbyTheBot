@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, StringSelectMenuBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // Import functions from the API handler (with persistent storage)
 const apiHandler = require('./valorantApiHandler');
@@ -512,6 +513,9 @@ module.exports = (client) => {
 
         client.on('messageCreate', async (message) => {
             if (message.author.bot) return;
+
+            // Only run in target guild
+            if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
             // Debug command to find Valorant role ID
             if (message.content === '!findrole') {

@@ -87,8 +87,6 @@ server.listen(PORT, () => {
 
 // Start the bot
 const { setupVerificationChannel, handleMemberJoin, handleReactionAdd } = require('./verification');
-const TARGET_GUILD_ID = '701308904877064193'; // Cracked Hive
-const SERVER_INVITE_LINK = 'https://discord.gg/mTvFpxNe58';
 
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}`);
@@ -112,29 +110,6 @@ client.on('guildMemberAdd', async (member) => {
 
 client.on('messageReactionAdd', async (reaction, user) => {
     await handleReactionAdd(reaction, user);
-});
-
-// Intercept commands in non-target servers
-client.on('messageCreate', (message) => {
-    // Ignore bot messages
-    if (message.author.bot) return;
-
-    // Only respond in guild channels (not DMs)
-    if (!message.guild) return;
-
-    // If message is in target server, let other handlers process it
-    if (message.guild.id === TARGET_GUILD_ID) return;
-
-    // Check if message starts with a command prefix (! or /)
-    if (message.content.startsWith('!') || message.content.startsWith('/')) {
-        message.reply({
-            content: '⚠️ **This bot is not available in this server.**\n\n' +
-                     '🎮 This bot only works in **Cracked Hive**!\n' +
-                     `🔗 Join here: ${SERVER_INVITE_LINK}`
-        }).catch(err => {
-            console.error(`Failed to send bot restriction message in ${message.guild.name}:`, err.message);
-        });
-    }
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);

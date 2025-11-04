@@ -1,4 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder } = require('discord.js');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // ===============================================
 // VALORANT STATS & API HANDLER (REFACTORED)
@@ -654,6 +655,9 @@ module.exports = {
 
             client.on('messageCreate', async (message) => {
                 if (message.author.bot) return;
+
+                // Only run in target guild
+                if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
                 const command = message.content.toLowerCase().split(' ')[0];
 

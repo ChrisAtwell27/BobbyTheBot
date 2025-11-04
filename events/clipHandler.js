@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 // Configuration - Update these values as needed
 const CLIP_SUBMISSION_CHANNEL = 'clip-submission'; // Channel name for submissions
@@ -15,6 +16,9 @@ const lastVotingFilePath = path.join(__dirname, '../data/last_voting_date.txt');
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
+
+        // Only run in target guild
+        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
         const args = message.content.split(' ');
 

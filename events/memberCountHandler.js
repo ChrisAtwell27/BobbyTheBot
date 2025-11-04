@@ -1,6 +1,5 @@
 const { ChannelType } = require('discord.js');
-
-const TARGET_GUILD_ID = '701308904877064193'; // Cracked Hive
+const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
 module.exports = (client) => {
     let updateInterval;
