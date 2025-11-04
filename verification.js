@@ -1,10 +1,16 @@
 const { PermissionFlagsBits, ChannelType } = require('discord.js');
 
+const TARGET_GUILD_ID = '701308904877064193'; // Cracked Hive
 const VERIFY_CHANNEL_ID = '1433901636610428998';
 const UNVERIFIED_ROLE_ID = '1433901263820685374';
 const VERIFICATION_EMOJI = '✅';
 
 async function setupVerificationChannel(guild) {
+    // Only run on target guild
+    if (guild.id !== TARGET_GUILD_ID) {
+        return null;
+    }
+
     // Get Unverified role by ID
     let unverifiedRole = guild.roles.cache.get(UNVERIFIED_ROLE_ID);
     if (!unverifiedRole) {
@@ -66,7 +72,10 @@ async function handleReactionAdd(reaction, user) {
     }
 
     const { guild, channel } = reaction.message;
-    
+
+    // Only run on target guild
+    if (guild.id !== TARGET_GUILD_ID) return;
+
     // Check if reaction is in verify channel
     if (channel.id !== VERIFY_CHANNEL_ID) return;
     if (reaction.emoji.name !== VERIFICATION_EMOJI) return;

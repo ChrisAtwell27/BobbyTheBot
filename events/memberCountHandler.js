@@ -1,19 +1,24 @@
 const { ChannelType } = require('discord.js');
 
+const TARGET_GUILD_ID = '701308904877064193'; // Cracked Hive
+
 module.exports = (client) => {
     let updateInterval;
-    
+
     // Function to update member count for all guilds
     async function updateMemberCount() {
         try {
             for (const guild of client.guilds.cache.values()) {
+                // Only run on target guild
+                if (guild.id !== TARGET_GUILD_ID) continue;
+
                 try {
                     // Find the member count voice channel
-                    const memberCountChannel = guild.channels.cache.find(channel => 
-                        channel.type === ChannelType.GuildVoice && 
+                    const memberCountChannel = guild.channels.cache.find(channel =>
+                        channel.type === ChannelType.GuildVoice &&
                         channel.name.startsWith('Member Count: ')
                     );
-                    
+
                     if (!memberCountChannel) {
                         console.log(`No "Member Count: " voice channel found in ${guild.name}`);
                         continue;
@@ -77,8 +82,10 @@ module.exports = (client) => {
     
     // Update member count when a member joins
     client.on('guildMemberAdd', async (member) => {
+        // Only run on target guild
+        if (member.guild.id !== TARGET_GUILD_ID) return;
         if (member.user.bot) return; // Skip bots for immediate updates
-        
+
         try {
             const guild = member.guild;
             const memberCountChannel = guild.channels.cache.find(channel => 
@@ -102,8 +109,10 @@ module.exports = (client) => {
     
     // Update member count when a member leaves
     client.on('guildMemberRemove', async (member) => {
+        // Only run on target guild
+        if (member.guild.id !== TARGET_GUILD_ID) return;
         if (member.user.bot) return; // Skip bots for immediate updates
-        
+
         try {
             const guild = member.guild;
             const memberCountChannel = guild.channels.cache.find(channel => 
@@ -140,7 +149,9 @@ module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
         if (!message.guild) return;
-        
+        // Only run on target guild
+        if (message.guild.id !== TARGET_GUILD_ID) return;
+
         const args = message.content.split(' ');
         
         // Command to create member count channel

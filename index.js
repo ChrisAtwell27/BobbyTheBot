@@ -90,10 +90,39 @@ const { setupVerificationChannel, handleMemberJoin, handleReactionAdd } = requir
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}`);
 
+    const TARGET_GUILD_ID = '701308904877064193'; // Cracked Hive
+
     // Log all servers the bot is in
     console.log('\n=== Servers this bot is in ===');
     for (const guild of client.guilds.cache.values()) {
         console.log(`- ${guild.name} (ID: ${guild.id}) - ${guild.memberCount} members`);
+
+        // Send warning to other servers
+        if (guild.id !== TARGET_GUILD_ID) {
+            try {
+                // Try to find a general channel to send the warning
+                const generalChannel = guild.channels.cache.find(channel =>
+                    (channel.name === 'general' ||
+                     channel.name === 'general-chat' ||
+                     channel.name.includes('general')) &&
+                    channel.isTextBased() &&
+                    channel.permissionsFor(guild.members.me).has('SendMessages')
+                );
+
+                if (generalChannel) {
+                    await generalChannel.send(
+                        '⚠️ **Warning:** This bot is configured to only work in **Cracked Hive** server.\n' +
+                        'Commands and features will not function in this server.\n\n' +
+                        'If you want this bot to work here, please contact the bot owner.'
+                    );
+                    console.log(`Sent warning message to ${guild.name}`);
+                } else {
+                    console.log(`Could not find general channel in ${guild.name} to send warning`);
+                }
+            } catch (error) {
+                console.error(`Failed to send warning to ${guild.name}:`, error.message);
+            }
+        }
     }
     console.log('==============================\n');
 
