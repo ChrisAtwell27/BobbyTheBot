@@ -16,11 +16,11 @@ function decodeHTML(text) {
         '&gt;': '>',
         '&ldquo;': '"',
         '&rdquo;': '"',
-        '&lsquo;': ''',
-        '&rsquo;': ''',
-        '&ndash;': '–',
-        '&mdash;': '—',
-        '&hellip;': '…',
+        '&lsquo;': "'",
+        '&rsquo;': "'",
+        '&ndash;': '-',
+        '&mdash;': '-',
+        '&hellip;': '...',
         '&nbsp;': ' '
     };
 
