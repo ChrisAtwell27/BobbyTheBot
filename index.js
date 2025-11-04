@@ -89,7 +89,14 @@ server.listen(PORT, () => {
 const { setupVerificationChannel, handleMemberJoin, handleReactionAdd } = require('./verification');
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}`);
-    
+
+    // Log all servers the bot is in
+    console.log('\n=== Servers this bot is in ===');
+    for (const guild of client.guilds.cache.values()) {
+        console.log(`- ${guild.name} (ID: ${guild.id}) - ${guild.memberCount} members`);
+    }
+    console.log('==============================\n');
+
     // Setup verification channels for all guilds
     for (const guild of client.guilds.cache.values()) {
         await setupVerificationChannel(guild);
