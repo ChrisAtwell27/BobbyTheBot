@@ -3,6 +3,7 @@ const axios = require('axios');
 const cron = require('node-cron');
 const TriviaSession = require('../database/models/TriviaSession');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { topEggRoleId } = require('../data/config');
 
 const TRIVIA_CHANNEL_ID = '701308905434644512'; // #General
 const CATEGORY_VIDEO_GAMES = 15;
@@ -325,24 +326,39 @@ module.exports = (client) => {
 
         const command = message.content.toLowerCase();
 
-        // Manual trivia post (for testing or manual trigger)
+        // Manual trivia post (for testing or manual trigger - Top Egg only)
         if (command === '!trivia') {
+            // Check if user has Top Egg role
+            if (!message.member.roles.cache.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            }
+
             if (message.channel.id !== TRIVIA_CHANNEL_ID) {
                 return message.reply(`Trivia questions can only be posted in <#${TRIVIA_CHANNEL_ID}>!`);
             }
             await postDailyTrivia(client);
         }
 
-        // Manual answer reveal (for testing)
+        // Manual answer reveal (for testing - Top Egg only)
         if (command === '!triviaanswer') {
+            // Check if user has Top Egg role
+            if (!message.member.roles.cache.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            }
+
             if (message.channel.id !== TRIVIA_CHANNEL_ID) {
                 return message.reply(`Trivia commands can only be used in <#${TRIVIA_CHANNEL_ID}>!`);
             }
             await revealAnswer(client);
         }
 
-        // Show current question
+        // Show current question (Top Egg only)
         if (command === '!triviacurrent') {
+            // Check if user has Top Egg role
+            if (!message.member.roles.cache.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            }
+
             try {
                 const session = await TriviaSession.findOne({ serverId: 'default' });
 
@@ -374,8 +390,13 @@ module.exports = (client) => {
             }
         }
 
-        // Stats command
+        // Stats command (Top Egg only)
         if (command === '!triviastats') {
+            // Check if user has Top Egg role
+            if (!message.member.roles.cache.has(topEggRoleId)) {
+                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            }
+
             try {
                 const session = await TriviaSession.findOne({ serverId: 'default' });
 
