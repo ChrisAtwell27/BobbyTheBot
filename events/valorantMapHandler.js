@@ -3,6 +3,7 @@ const { createCanvas, loadImage } = require('canvas');
 const fs = require('fs');
 const path = require('path');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { LimitedMap } = require('../utils/memoryUtils');
 
 // ===============================================
 // VALORANT MAP SELECTOR HANDLER WITH AUTO-CONVERSION
@@ -119,8 +120,8 @@ const BACKUP_DIR = path.join(MAPS_DIR, 'originals');
 // Supported input image formats
 const SUPPORTED_FORMATS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff'];
 
-// Store active map veto sessions
-const activeVetos = new Map();
+// Store active map veto sessions (limit to 20 concurrent veto sessions)
+const activeVetos = new LimitedMap(20);
 
 // Function to ensure directories exist
 function ensureDirectoriesExist() {

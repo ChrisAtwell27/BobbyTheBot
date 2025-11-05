@@ -4,9 +4,16 @@ const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economy
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 const Challenge = require('../database/models/Challenge');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
-const cooldowns = new Map(); // Track cooldowns
-const challenges = new Map(); // Track pending challenges (in-memory cache)
-const activeGames = new Map(); // Track active games
+const { CleanupMap, LimitedMap } = require('../utils/memoryUtils');
+
+// Auto-cleanup cooldowns after 5 minutes (way longer than needed)
+const cooldowns = new CleanupMap(5 * 60 * 1000, 1 * 60 * 1000);
+
+// Auto-cleanup challenges after timeout period
+const challenges = new CleanupMap(5 * 60 * 1000, 1 * 60 * 1000);
+
+// Limited active games to prevent memory leak (max 100 concurrent games)
+const activeGames = new LimitedMap(100);
 
 const COOLDOWN_SECONDS = 3; // Cooldown in seconds
 const CHALLENGE_TIMEOUT = 5 * 60 * 1000; // 5 minute timeout for challenges

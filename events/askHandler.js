@@ -2,6 +2,7 @@ const OpenAI = require('openai');
 const { EmbedBuilder } = require('discord.js');
 const User = require('../database/models/User');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { CleanupMap } = require('../utils/memoryUtils');
 
 // OpenAI API configuration - Uses environment variable
 // Set OPENAI_API_KEY in DigitalOcean or .env file
@@ -20,7 +21,8 @@ if (OPENAI_API_KEY) {
 }
 
 // Conversation history storage (in-memory, per user)
-const conversationHistory = new Map();
+// Auto-cleanup conversations after 1 hour of inactivity
+const conversationHistory = new CleanupMap(60 * 60 * 1000, 10 * 60 * 1000);
 const MAX_HISTORY_LENGTH = 5; // Keep last 5 message pairs per user (user message + Bobby's response)
 
 // Function to get or create user in database

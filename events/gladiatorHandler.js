@@ -7,10 +7,11 @@ const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economy
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 const Challenge = require('../database/models/Challenge');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { CleanupMap, LimitedMap } = require('../utils/memoryUtils');
 
-// Store active gladiator matches
-const activeMatches = new Map();
-const activeChallenges = new Map(); // In-memory cache
+// Store active gladiator matches (auto-cleanup after 1 hour, max 50 concurrent matches)
+const activeMatches = new LimitedMap(50);
+const activeChallenges = new CleanupMap(3 * 60 * 1000, 1 * 60 * 1000); // In-memory cache with auto-cleanup
 
 // Configuration
 const CHALLENGE_TIMEOUT = 3 * 60 * 1000; // 3 minutes

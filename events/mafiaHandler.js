@@ -2,6 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const User = require('../database/models/User');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { LimitedMap } = require('../utils/memoryUtils');
 
 // Constants
 const MAFIA_VC_ID = '1434633691455426600';
@@ -49,9 +50,9 @@ const ROLES = {
     }
 };
 
-// Game state storage
-const activeGames = new Map();
-const playerGameMap = new Map(); // Track which game each player is in
+// Game state storage (limit to 5 concurrent mafia games)
+const activeGames = new LimitedMap(5);
+const playerGameMap = new LimitedMap(100); // Track which game each player is in (max 100 players)
 
 // Role distribution based on player count
 function getRoleDistribution(playerCount) {

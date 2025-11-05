@@ -2,6 +2,8 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBu
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { LimitedMap } = require('../utils/memoryUtils');
+const { loadImageFromURL } = require('../utils/valorantCanvasUtils');
 
 // Import functions from the API handler (with persistent storage)
 const apiHandler = require('./valorantApiHandler');
@@ -25,39 +27,14 @@ function findValorantRole(message) {
     }
 }
 
-// Store active teams (in production, consider using a database)
-const activeTeams = new Map();
+// Store active teams (auto-cleanup with size limit of 50)
+const activeTeams = new LimitedMap(50);
 
 // Store teams by a persistent ID (not message ID)
 let teamIdCounter = 0;
 
 // Resend interval in milliseconds (10 minutes)
 const RESEND_INTERVAL = 10 * 60 * 1000;
-
-// Function to load image from URL with timeout
-async function loadImageFromURL(url) {
-    return new Promise((resolve, reject) => {
-        const request = https.get(url, { timeout: 5000 }, (res) => {
-            const chunks = [];
-            res.on('data', (chunk) => chunks.push(chunk));
-            res.on('end', () => {
-                try {
-                    const buffer = Buffer.concat(chunks);
-                    resolve(loadImage(buffer));
-                } catch (error) {
-                    reject(error);
-                }
-            });
-        });
-        
-        request.on('timeout', () => {
-            request.destroy();
-            reject(new Error('Image load timeout'));
-        });
-        
-        request.on('error', reject);
-    });
-}
 
 // Function to get user rank information (now uses persistent storage)
 async function getUserRankInfo(userId) {

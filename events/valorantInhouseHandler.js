@@ -2,6 +2,8 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBu
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { CleanupMap, LimitedMap } = require('../utils/memoryUtils');
+const { loadImageFromURL } = require('../utils/valorantCanvasUtils');
 
 // Import functions from the API handler (with persistent storage)
 const apiHandler = require('./valorantApiHandler');
@@ -12,42 +14,17 @@ const INHOUSE_SIZE = 10; // In-house needs 10 players (2 teams of 5)
 const MAX_INHOUSES_PER_USER = 1; // Limit active in-houses per user
 const INHOUSE_COOLDOWN = 60000; // 1 minute cooldown between in-house creations
 
-// Store active in-houses (in production, consider using a database)
-const activeInhouses = new Map();
+// Store active in-houses (auto-cleanup with size limit of 30)
+const activeInhouses = new LimitedMap(30);
 
-// Track user cooldowns for in-house creation
-const userCooldowns = new Map();
+// Track user cooldowns for in-house creation (auto-cleanup after 2 minutes)
+const userCooldowns = new CleanupMap(2 * 60 * 1000, 1 * 60 * 1000);
 
-// Track user active in-houses count
-const userActiveInhouses = new Map();
+// Track user active in-houses count (limit to 200 users)
+const userActiveInhouses = new LimitedMap(200);
 
 // Resend interval in milliseconds (10 minutes)
 const RESEND_INTERVAL = 10 * 60 * 1000;
-
-// Function to load image from URL with timeout
-async function loadImageFromURL(url) {
-    return new Promise((resolve, reject) => {
-        const request = https.get(url, { timeout: 5000 }, (res) => {
-            const chunks = [];
-            res.on('data', (chunk) => chunks.push(chunk));
-            res.on('end', () => {
-                try {
-                    const buffer = Buffer.concat(chunks);
-                    resolve(loadImage(buffer));
-                } catch (error) {
-                    reject(error);
-                }
-            });
-        });
-        
-        request.on('timeout', () => {
-            request.destroy();
-            reject(new Error('Image load timeout'));
-        });
-        
-        request.on('error', reject);
-    });
-}
 
 // Function to get user rank information
 async function getUserRankInfo(userId) {

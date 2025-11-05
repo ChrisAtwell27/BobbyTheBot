@@ -3,10 +3,11 @@ const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { CleanupMap, LimitedMap } = require('../utils/memoryUtils');
 
-// Store active poker lobbies and games
-const activeLobbies = new Map();
-const activeGames = new Map();
+// Store active poker lobbies and games (with auto-cleanup and size limits)
+const activeLobbies = new CleanupMap(10 * 60 * 1000, 2 * 60 * 1000); // Auto-cleanup after 10 min
+const activeGames = new LimitedMap(30); // Max 30 concurrent poker games
 
 // Configuration
 const MIN_PLAYERS = 2;

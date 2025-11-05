@@ -1,9 +1,8 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, PermissionsBitField } = require('discord.js');
 const axios = require('axios');
 const cron = require('node-cron');
 const TriviaSession = require('../database/models/TriviaSession');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
-const { topEggRoleId } = require('../data/config');
 
 const TRIVIA_CHANNEL_ID = '701308905434644512'; // #General
 const CATEGORY_VIDEO_GAMES = 15;
@@ -326,11 +325,11 @@ module.exports = (client) => {
 
         const command = message.content.toLowerCase();
 
-        // Manual trivia post (for testing or manual trigger - Top Egg only)
+        // Manual trivia post (for testing or manual trigger - Admin only)
         if (command === '!trivia') {
-            // Check if user has Top Egg role
-            if (!message.member.roles.cache.has(topEggRoleId)) {
-                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            // Check if user has administrator permissions
+            if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                return message.reply("You don't have permission to use this command. (Administrator only)");
             }
 
             if (message.channel.id !== TRIVIA_CHANNEL_ID) {
@@ -339,11 +338,11 @@ module.exports = (client) => {
             await postDailyTrivia(client);
         }
 
-        // Manual answer reveal (for testing - Top Egg only)
+        // Manual answer reveal (for testing - Admin only)
         if (command === '!triviaanswer') {
-            // Check if user has Top Egg role
-            if (!message.member.roles.cache.has(topEggRoleId)) {
-                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            // Check if user has administrator permissions
+            if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                return message.reply("You don't have permission to use this command. (Administrator only)");
             }
 
             if (message.channel.id !== TRIVIA_CHANNEL_ID) {
@@ -352,11 +351,11 @@ module.exports = (client) => {
             await revealAnswer(client);
         }
 
-        // Show current question (Top Egg only)
+        // Show current question (Admin only)
         if (command === '!triviacurrent') {
-            // Check if user has Top Egg role
-            if (!message.member.roles.cache.has(topEggRoleId)) {
-                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            // Check if user has administrator permissions
+            if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                return message.reply("You don't have permission to use this command. (Administrator only)");
             }
 
             try {
@@ -390,11 +389,11 @@ module.exports = (client) => {
             }
         }
 
-        // Stats command (Top Egg only)
+        // Stats command (Admin only)
         if (command === '!triviastats') {
-            // Check if user has Top Egg role
-            if (!message.member.roles.cache.has(topEggRoleId)) {
-                return message.reply("You don't have permission to use this command. (Top Egg only)");
+            // Check if user has administrator permissions
+            if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                return message.reply("You don't have permission to use this command. (Administrator only)");
             }
 
             try {

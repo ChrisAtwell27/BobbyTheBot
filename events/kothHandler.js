@@ -6,14 +6,15 @@ const https = require('https');
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { LimitedMap } = require('../utils/memoryUtils');
 
 // Game constants
 const GAME_DURATION = 300000; // 5 minutes in milliseconds
 const MIN_BET = 100; // Minimum bet to start/challenge
 const HOUSE_CUT = 0.05; // 5% house cut
 
-// Active games storage
-const activeKothGames = new Map();
+// Active games storage (limit to 20 concurrent KOTH games)
+const activeKothGames = new LimitedMap(20);
 
 // Function to load image from URL
 async function loadImageFromURL(url) {

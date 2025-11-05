@@ -5,9 +5,10 @@ const fs = require('fs');
 const path = require('path');
 const { getBobbyBucks, updateBobbyBucks, setBobbyBucks } = require('../database/helpers/economyHelpers');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { CleanupMap } = require('../utils/memoryUtils');
 
-// Store active Russian Roulette lobbies
-const activeLobbies = new Map();
+// Store active Russian Roulette lobbies (auto-cleanup after 5 minutes)
+const activeLobbies = new CleanupMap(5 * 60 * 1000, 1 * 60 * 1000);
 
 // Configuration
 const MIN_PLAYERS = 2;

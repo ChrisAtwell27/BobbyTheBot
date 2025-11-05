@@ -6,10 +6,16 @@ const { TARGET_GUILD_ID } = require('../config/guildConfig');
 // Instagram Graph API configuration
 // Get these from: https://developers.facebook.com/apps/
 const INSTAGRAM_CONFIG = {
-  accessToken: process.env.INSTAGRAM_ACCESS_TOKEN || 'YOUR_INSTAGRAM_ACCESS_TOKEN',
-  instagramBusinessAccountId: process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || 'YOUR_INSTAGRAM_BUSINESS_ACCOUNT_ID',
+  accessToken: process.env.INSTAGRAM_ACCESS_TOKEN,
+  instagramBusinessAccountId: process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID,
   apiVersion: 'v21.0'
 };
+
+// Validate configuration on startup
+if (!INSTAGRAM_CONFIG.accessToken || !INSTAGRAM_CONFIG.instagramBusinessAccountId) {
+  console.warn('⚠️ Instagram credentials not configured. Social media posting disabled.');
+  console.warn('Set INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_BUSINESS_ACCOUNT_ID in .env to enable.');
+}
 
 const MONITORED_CHANNEL_ID = '1408581411933519944';
 
@@ -57,11 +63,11 @@ async function postToInstagram(imageUrl, caption) {
   const { accessToken, instagramBusinessAccountId, apiVersion } = INSTAGRAM_CONFIG;
 
   // Validate configuration
-  if (!accessToken || accessToken === 'YOUR_INSTAGRAM_ACCESS_TOKEN') {
-    throw new Error('Instagram access token not configured');
+  if (!accessToken) {
+    throw new Error('Instagram access token not configured. Set INSTAGRAM_ACCESS_TOKEN in .env file.');
   }
-  if (!instagramBusinessAccountId || instagramBusinessAccountId === 'YOUR_INSTAGRAM_BUSINESS_ACCOUNT_ID') {
-    throw new Error('Instagram Business Account ID not configured');
+  if (!instagramBusinessAccountId) {
+    throw new Error('Instagram Business Account ID not configured. Set INSTAGRAM_BUSINESS_ACCOUNT_ID in .env file.');
   }
 
   try {
