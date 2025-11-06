@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const User = require('../database/models/User');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
@@ -18,14 +18,22 @@ const VOTING_DURATION = 120000; // 2 minutes for voting
 const WINNER_REWARD = 500; // BobbyBucks
 const GAME_INACTIVITY_TIMEOUT = 3600000; // 1 hour - games inactive longer than this will be cleaned up
 
+// Store pending game configurations
+const pendingGameConfigs = new Map();
+
 // Debug mode constants (shorter timers for testing)
 const DEBUG_SETUP_DELAY = 5000; // 5 seconds
 const DEBUG_NIGHT_DURATION = 20000; // 20 seconds
 const DEBUG_DAY_DISCUSSION_DURATION = 30000; // 30 seconds
 const DEBUG_VOTING_DURATION = 20000; // 20 seconds
 
-// Helper to get phase durations based on debug mode
+// Helper to get phase durations based on debug mode and custom settings
 function getPhaseDuration(game, phaseType) {
+    // Check for custom durations first
+    if (game.customDurations && game.customDurations[phaseType]) {
+        return game.customDurations[phaseType] * 1000; // Convert seconds to milliseconds
+    }
+
     if (!game.debugMode) {
         switch (phaseType) {
             case 'setup': return SETUP_DELAY;
@@ -41,6 +49,68 @@ function getPhaseDuration(game, phaseType) {
             case 'voting': return DEBUG_VOTING_DURATION;
         }
     }
+}
+
+// Helper function to start a mafia game after configuration
+async function startMafiaGame(client, config) {
+    const { gameId, players, organizerId, randomMode, customDurations } = config;
+
+    // Create game using game state module
+    const game = createGame(gameId, players, organizerId, MAFIA_TEXT_CHANNEL_ID);
+
+    // Store custom durations if provided
+    if (customDurations) {
+        game.customDurations = customDurations;
+    }
+
+    // Send initial message
+    const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+    game.cachedChannel = channel; // Cache the channel for future use
+
+    // Build time configuration display
+    let timeConfigText = '';
+    if (customDurations) {
+        timeConfigText = `\n\n⏱️ **Custom Time Limits:**\n• Setup: ${customDurations.setup}s\n• Night Phase: ${customDurations.night}s\n• Day Phase: ${customDurations.day}s\n• Voting Phase: ${customDurations.voting}s`;
+    }
+
+    const setupEmbed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}🐝`)
+        .setDescription(`A game has been created with **${players.length} players**!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}${timeConfigText}\n\nRoles are being assigned... Check your DMs!`)
+        .addFields({
+            name: 'Players',
+            value: players.map(p => `• ${p.displayName}`).join('\n'),
+            inline: false
+        })
+        .setTimestamp();
+
+    const gameMessage = await channel.send({ embeds: [setupEmbed] });
+    game.messageId = gameMessage.id;
+
+    // Send role DMs
+    const { sendRoleDMs, startNightPhase } = require('../mafia/game/mafiaPhases');
+    const dmFailures = await sendRoleDMs(game, client);
+
+    // Notify organizer if any DMs failed
+    if (dmFailures.length > 0) {
+        try {
+            const organizer = await client.users.fetch(game.organizerId);
+            await organizer.send(`⚠️ **Warning:** Could not send role DMs to the following players: ${dmFailures.join(', ')}. They may have DMs disabled. Consider restarting the game or asking them to enable DMs.`);
+        } catch (error) {
+            console.error('Could not notify organizer about DM failures:', error);
+            await channel.send(`⚠️ <@${game.organizerId}> Some players could not receive their role DMs: ${dmFailures.join(', ')}. They may have DMs disabled.`);
+        }
+    }
+
+    // Wait then start night phase
+    const setupDelay = getPhaseDuration(game, 'setup');
+    await channel.send(`The night phase will begin in ${setupDelay / 1000} seconds...`);
+
+    setTimeout(async () => {
+        await startNightPhase(game, client);
+    }, setupDelay);
+
+    return game;
 }
 
 // Create game embed
@@ -1138,15 +1208,22 @@ async function startVotingPhase(game, client) {
     }
     const channel = game.cachedChannel;
 
+    const alivePlayers = game.players.filter(p => p.alive);
+
     const votingEmbed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('🗳️ Voting Phase')
-        .setDescription('Vote for who you think is a Wasp! The player with the most votes will be eliminated.')
+        .setDescription(`Vote for who you think is a Wasp! The player with the most votes will be eliminated.\n\n**Alive Players:** ${alivePlayers.length}\n**Time Remaining:** ${votingDuration / 1000} seconds`)
         .setTimestamp();
 
-    await channel.send({ embeds: [votingEmbed] });
+    // Create voting buttons
+    const votingButtons = createVotingButtons(game.id, alivePlayers);
 
-    await updateGameDisplay(game, client);
+    // Send new voting message with buttons
+    await channel.send({
+        embeds: [votingEmbed],
+        components: votingButtons
+    });
 
     // Set timer for vote results
     game.phaseTimer = setTimeout(async () => {
@@ -1575,17 +1652,21 @@ module.exports = (client) => {
                 }
             });
 
-            // Create game using game state module
-            const game = createGame(gameId, players, message.author.id, MAFIA_TEXT_CHANNEL_ID);
+            // Store pending game configuration
+            pendingGameConfigs.set(message.author.id, {
+                gameId,
+                players,
+                organizerId: message.author.id,
+                randomMode
+            });
 
-            // Send initial message
+            // Send time configuration prompt
             const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
-            game.cachedChannel = channel; // Cache the channel for future use
 
-            const setupEmbed = new EmbedBuilder()
+            const configEmbed = new EmbedBuilder()
                 .setColor('#FFD700')
-                .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}🐝`)
-                .setDescription(`A game has been created with **${players.length} players**!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}\n\nRoles are being assigned... Check your DMs!`)
+                .setTitle('⏱️ Game Time Configuration')
+                .setDescription(`<@${message.author.id}>, please configure the game time limits.\n\n**Default Times:**\n• Setup: 30 seconds\n• Night Phase: 60 seconds (1 minute)\n• Day Phase: 180 seconds (3 minutes)\n• Voting Phase: 120 seconds (2 minutes)\n\nChoose an option below:`)
                 .addFields({
                     name: 'Players',
                     value: players.map(p => `• ${p.displayName}`).join('\n'),
@@ -1593,30 +1674,29 @@ module.exports = (client) => {
                 })
                 .setTimestamp();
 
-            const gameMessage = await channel.send({ embeds: [setupEmbed] });
-            game.messageId = gameMessage.id;
+            const configRow = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`mafia_quickstart_${message.author.id}`)
+                        .setLabel('⚡ Quick Start (Default Times)')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`mafia_customize_${message.author.id}`)
+                        .setLabel('⚙️ Configure Custom Times')
+                        .setStyle(ButtonStyle.Primary)
+                );
 
-            // Send role DMs
-            const dmFailures = await sendRoleDMs(game, client);
+            await channel.send({ embeds: [configEmbed], components: [configRow] });
 
-            // Notify organizer if any DMs failed
-            if (dmFailures.length > 0) {
-                try {
-                    const organizer = await client.users.fetch(game.organizerId);
-                    await organizer.send(`⚠️ **Warning:** Could not send role DMs to the following players: ${dmFailures.join(', ')}. They may have DMs disabled. Consider restarting the game or asking them to enable DMs.`);
-                } catch (error) {
-                    console.error('Could not notify organizer about DM failures:', error);
-                    await channel.send(`⚠️ <@${game.organizerId}> Some players could not receive their role DMs: ${dmFailures.join(', ')}. They may have DMs disabled.`);
+            // Set timeout to auto-start with defaults after 2 minutes
+            setTimeout(() => {
+                if (pendingGameConfigs.has(message.author.id)) {
+                    const config = pendingGameConfigs.get(message.author.id);
+                    pendingGameConfigs.delete(message.author.id);
+                    channel.send(`⏱️ Time configuration timed out. Starting game with default times...`);
+                    startMafiaGame(client, config);
                 }
-            }
-
-            // Wait then start night phase
-            const setupDelay = getPhaseDuration(game, 'setup');
-            await channel.send(`The night phase will begin in ${setupDelay / 1000} seconds...`);
-
-            setTimeout(async () => {
-                await startNightPhase(game, client);
-            }, setupDelay);
+            }, 120000); // 2 minutes
         }
 
         // Handle !createmafiadebug command
@@ -1626,8 +1706,23 @@ module.exports = (client) => {
                 return message.reply('You are already in an active game!');
             }
 
-            // Check for random mode
-            const randomMode = args[1] && args[1].toLowerCase() === 'random';
+            // Parse arguments for role and random mode
+            let randomMode = false;
+            let specifiedRole = null;
+
+            // Check each argument
+            for (let i = 1; i < args.length; i++) {
+                const argUpper = args[i].toUpperCase();
+                if (argUpper === 'RANDOM') {
+                    randomMode = true;
+                } else if (ROLES[argUpper]) {
+                    specifiedRole = argUpper;
+                } else {
+                    // Invalid role name
+                    const validRoles = Object.keys(ROLES).sort().join(', ');
+                    return message.reply(`❌ Invalid role: **${args[i]}**\n\n**Valid roles:**\n${validRoles}\n\n**Usage:** \`!createmafiadebug [role] [random]\`\n**Examples:**\n• \`!createmafiadebug SCOUT_BEE\` - Play as Scout Bee\n• \`!createmafiadebug WASP_QUEEN random\` - Play as Wasp Queen with random mode\n• \`!createmafiadebug random\` - Random role with random mode`);
+                }
+            }
 
             // Create debug game with fake players
             const gameId = `mafia_debug_${Date.now()}`;
@@ -1651,11 +1746,25 @@ module.exports = (client) => {
             const players = [realPlayer, ...fakePlayers];
 
             // Assign roles
-            const roleDistribution = getRoleDistribution(players.length, randomMode);
-            const shuffledRoles = shuffleArray(roleDistribution);
+            if (specifiedRole) {
+                // Assign specified role to real player
+                initializePlayerRole(realPlayer, specifiedRole);
 
-            for (let i = 0; i < players.length; i++) {
-                initializePlayerRole(players[i], shuffledRoles[i]);
+                // Assign random roles to bots from distribution
+                const roleDistribution = getRoleDistribution(players.length, randomMode);
+                const shuffledRoles = shuffleArray(roleDistribution);
+
+                for (let i = 0; i < fakePlayers.length; i++) {
+                    initializePlayerRole(fakePlayers[i], shuffledRoles[i]);
+                }
+            } else {
+                // All players get random roles (original behavior)
+                const roleDistribution = getRoleDistribution(players.length, randomMode);
+                const shuffledRoles = shuffleArray(roleDistribution);
+
+                for (let i = 0; i < players.length; i++) {
+                    initializePlayerRole(players[i], shuffledRoles[i]);
+                }
             }
 
             // Assign Executioner targets
@@ -1678,8 +1787,8 @@ module.exports = (client) => {
 
             const setupEmbed = new EmbedBuilder()
                 .setColor('#FFA500')
-                .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}🐝 [DEBUG MODE]`)
-                .setDescription(`**Debug game** created with **${players.length} players** (1 real, 5 bots)!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}\n\nRoles are being assigned... Check your DMs!\n\n**Debug Commands:**\n\`!mafiadebugskip\` - Skip to next phase\n\`!mafiadebugend\` - End the game`)
+                .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}${specifiedRole ? '🎯' : ''}🐝 [DEBUG MODE]`)
+                .setDescription(`**Debug game** created with **${players.length} players** (1 real, 5 bots)!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}${specifiedRole ? `\n\n🎯 **You are playing as:** ${ROLES[specifiedRole].name} ${ROLES[specifiedRole].emoji}` : ''}\n\nRoles are being assigned... Check your DMs!\n\n**Debug Commands:**\n\`!mafiadebugskip\` - Skip to next phase\n\`!mafiadebugend\` - End the game`)
                 .addFields({
                     name: 'Players',
                     value: players.map(p => `• ${p.displayName}`).join('\n'),
@@ -2004,6 +2113,166 @@ module.exports = (client) => {
 
     // Handle button interactions
     client.on('interactionCreate', async (interaction) => {
+        // Handle modal submissions for time configuration
+        if (interaction.isModalSubmit() && interaction.customId.startsWith('mafia_time_modal_')) {
+            const userId = interaction.customId.replace('mafia_time_modal_', '');
+
+            if (!pendingGameConfigs.has(userId)) {
+                return interaction.reply({
+                    content: '❌ Game configuration expired or not found.',
+                    ephemeral: true
+                });
+            }
+
+            // Parse and validate time inputs
+            try {
+                const setupTime = parseInt(interaction.fields.getTextInputValue('setup_time'));
+                const nightTime = parseInt(interaction.fields.getTextInputValue('night_time'));
+                const dayTime = parseInt(interaction.fields.getTextInputValue('day_time'));
+                const votingTime = parseInt(interaction.fields.getTextInputValue('voting_time'));
+
+                // Validate times (must be positive numbers between 5 and 600 seconds)
+                if ([setupTime, nightTime, dayTime, votingTime].some(t => isNaN(t) || t < 5 || t > 600)) {
+                    return interaction.reply({
+                        content: '❌ Invalid time values! All times must be between 5 and 600 seconds.',
+                        ephemeral: true
+                    });
+                }
+
+                // Get pending config and add custom durations
+                const config = pendingGameConfigs.get(userId);
+                config.customDurations = {
+                    setup: setupTime,
+                    night: nightTime,
+                    day: dayTime,
+                    voting: votingTime
+                };
+
+                // Remove from pending
+                pendingGameConfigs.delete(userId);
+
+                // Start the game
+                await interaction.reply({
+                    content: `✅ Custom times configured! Starting game...`,
+                    ephemeral: true
+                });
+
+                await startMafiaGame(client, config);
+
+            } catch (error) {
+                console.error('Error processing time configuration:', error);
+                return interaction.reply({
+                    content: '❌ Error processing your configuration. Please try again.',
+                    ephemeral: true
+                });
+            }
+            return;
+        }
+
+        // Handle time configuration buttons
+        if (interaction.isButton() && interaction.customId.startsWith('mafia_quickstart_')) {
+            const userId = interaction.customId.replace('mafia_quickstart_', '');
+
+            if (interaction.user.id !== userId) {
+                return interaction.reply({
+                    content: '❌ Only the game organizer can configure the game!',
+                    ephemeral: true
+                });
+            }
+
+            if (!pendingGameConfigs.has(userId)) {
+                return interaction.reply({
+                    content: '❌ Game configuration expired or not found.',
+                    ephemeral: true
+                });
+            }
+
+            const config = pendingGameConfigs.get(userId);
+            pendingGameConfigs.delete(userId);
+
+            await interaction.reply({
+                content: `✅ Starting game with default times!`,
+                ephemeral: true
+            });
+
+            await interaction.message.edit({ components: [] }); // Disable buttons
+            await startMafiaGame(client, config);
+            return;
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('mafia_customize_')) {
+            const userId = interaction.customId.replace('mafia_customize_', '');
+
+            if (interaction.user.id !== userId) {
+                return interaction.reply({
+                    content: '❌ Only the game organizer can configure the game!',
+                    ephemeral: true
+                });
+            }
+
+            if (!pendingGameConfigs.has(userId)) {
+                return interaction.reply({
+                    content: '❌ Game configuration expired or not found.',
+                    ephemeral: true
+                });
+            }
+
+            // Show modal for time configuration
+            const modal = new ModalBuilder()
+                .setCustomId(`mafia_time_modal_${userId}`)
+                .setTitle('Configure Game Time Limits');
+
+            const setupInput = new TextInputBuilder()
+                .setCustomId('setup_time')
+                .setLabel('Setup Phase Duration (seconds)')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Default: 30')
+                .setValue('30')
+                .setMinLength(1)
+                .setMaxLength(3)
+                .setRequired(true);
+
+            const nightInput = new TextInputBuilder()
+                .setCustomId('night_time')
+                .setLabel('Night Phase Duration (seconds)')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Default: 60')
+                .setValue('60')
+                .setMinLength(1)
+                .setMaxLength(3)
+                .setRequired(true);
+
+            const dayInput = new TextInputBuilder()
+                .setCustomId('day_time')
+                .setLabel('Day Phase Duration (seconds)')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Default: 180')
+                .setValue('180')
+                .setMinLength(1)
+                .setMaxLength(3)
+                .setRequired(true);
+
+            const votingInput = new TextInputBuilder()
+                .setCustomId('voting_time')
+                .setLabel('Voting Phase Duration (seconds)')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Default: 120')
+                .setValue('120')
+                .setMinLength(1)
+                .setMaxLength(3)
+                .setRequired(true);
+
+            const row1 = new ActionRowBuilder().addComponents(setupInput);
+            const row2 = new ActionRowBuilder().addComponents(nightInput);
+            const row3 = new ActionRowBuilder().addComponents(dayInput);
+            const row4 = new ActionRowBuilder().addComponents(votingInput);
+
+            modal.addComponents(row1, row2, row3, row4);
+
+            await interaction.showModal(modal);
+            return;
+        }
+
         if (!interaction.isButton()) return;
 
         const [action, gameId, targetId] = interaction.customId.split('_');

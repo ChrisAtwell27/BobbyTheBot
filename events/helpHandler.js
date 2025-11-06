@@ -100,12 +100,13 @@ const HELP_CATEGORIES = {
         emoji: '🐝',
         description: 'Town of Salem style social deduction game with bees!',
         commands: [
-            { name: '!createmafia', description: 'Start new Bee Mafia game (6+ players in voice)', usage: '!createmafia [random]' },
+            { name: '!createmafia', description: 'Start new Bee Mafia game with time configuration (6+ players in voice)', usage: '!createmafia [random]' },
             { name: '!createmafia random', description: 'Start game with fully randomized roles (chaos mode)', usage: '!createmafia random' },
+            { name: 'Time Configuration', description: 'After !createmafia, configure phase durations via interactive buttons', usage: 'Quick Start or Custom Times' },
             { name: '!mafiaroles', description: 'View all available roles and abilities', usage: '!mafiaroles [bee|wasp|neutral|all]' },
             { name: '!roles', description: 'Alternative command for mafiaroles', usage: '!roles [faction]' },
             { name: '!reveal', description: '**[Queen Bee Only]** Reveal yourself for 3 extra votes', usage: '!reveal (during day phase)' },
-            { name: '!createmafiadebug', description: '**[Debug]** Create test game with 5 bots', usage: '!createmafiadebug [random]' }
+            { name: '!createmafiadebug', description: '**[Debug]** Create test game with 5 bots', usage: '!createmafiadebug [role] [random]' }
         ]
     },
     teams: {

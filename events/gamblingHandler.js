@@ -62,6 +62,13 @@ module.exports = (client) => {
 
         // Handle DM messages for game moves
         if (!message.guild) {
+            // Check if user is in an active mafia game - if so, don't respond
+            const { getGameByPlayer } = require('../mafia/game/mafiaGameState');
+            const mafiaGame = getGameByPlayer(userId);
+            if (mafiaGame) {
+                return; // Let mafia handler deal with this DM
+            }
+
             if (command === '!play' && args.length >= 3) {
                 const gameId = args[1];
                 const move = args.slice(2).join(' ').toLowerCase();

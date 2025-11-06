@@ -246,7 +246,14 @@ opponent's Hives
 - !createmafia random - Start with fully randomized roles (chaos mode!)
 - !mafiaroles or !roles - View all available roles with descriptions
 - !mafiaroles [bee|wasp|neutral] - View specific faction roles
-- !createmafiadebug [random] - Create debug game with 5 bots for testing
+- !createmafiadebug [role] [random] - Create debug game with 5 bots (specify role to test specific abilities)
+
+**Time Configuration:**
+- After using !createmafia, the organizer can configure phase time limits
+- Two options: Quick Start (default times) or Configure Custom Times
+- Default times: Setup 30s, Night 60s, Day 180s, Voting 120s
+- Custom times: Use interactive modal to set 5-600 seconds per phase
+- Time configuration auto-expires after 2 minutes (uses defaults)
 
 **Game Overview:**
 - Town of Salem style social deduction game with bee/wasp theme
@@ -254,6 +261,7 @@ opponent's Hives
 - 19 unique roles with special abilities
 - Night/Day phases with investigations, kills, protections, and voting
 - Auto voice/text channel management during phases
+- Customizable phase durations for flexible gameplay
 
 **Bee Roles (Town):** Scout Bee, Nurse Bee, Queen's Guard, Guard Bee, Lookout Bee, Soldier Bee, Queen Bee, Worker Bee, Jailer Bee, Escort Bee, Medium Bee, Veteran Bee
 
