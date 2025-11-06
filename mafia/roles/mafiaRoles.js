@@ -55,10 +55,10 @@ const ROLES = {
         selfHealsLeft: 1
     },
     GUARD_BEE: {
-        name: 'Guard Bee',
+        name: 'Bodyguard Bee',
         emoji: '🛡️',
         team: 'bee',
-        description: 'You are a **Guard Bee**! You can protect one player each night. If they are attacked, you will die instead fighting the attacker.',
+        description: 'You are a **Bodyguard Bee**! You can protect one player each night. If they are attacked, you will die instead fighting the attacker.',
         abilities: ['Protect one player each night', 'Die in their place if attacked', 'Kill one attacker'],
         winCondition: 'Eliminate all Wasps and harmful Neutrals',
         nightAction: true,

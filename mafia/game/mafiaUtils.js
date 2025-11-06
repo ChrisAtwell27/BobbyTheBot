@@ -18,14 +18,31 @@ function getRoleDistribution(playerCount, randomMode = false) {
         return null;
     }
 
-    // Calculate faction sizes (roughly 30% Wasps, 15% Neutral, 55% Bees)
-    const waspCount = Math.max(2, Math.floor(playerCount * 0.3));
+    // Calculate faction sizes based on player count
+    let waspCount;
+    if (playerCount === 6) {
+        waspCount = 1;
+    } else if (playerCount >= 7 && playerCount <= 9) {
+        waspCount = 2;
+    } else if (playerCount >= 10 && playerCount <= 13) {
+        waspCount = 3;
+    } else if (playerCount >= 14 && playerCount <= 16) {
+        waspCount = 4;
+    } else {
+        // For 17+ players, use formula (roughly 30% wasps)
+        waspCount = Math.floor(playerCount * 0.3);
+    }
+
     const neutralCount = playerCount >= 8 ? Math.floor(playerCount * 0.15) : 0;
     const beeCount = playerCount - waspCount - neutralCount;
 
     // === WASP ROLES ===
     if (waspCount >= 1) distribution.push('WASP_QUEEN'); // Always have Queen
-    if (waspCount >= 2) distribution.push('KILLER_WASP'); // Always have Killer
+
+    // Killer Wasp only appears with 7+ players
+    if (waspCount >= 2 && playerCount >= 7) {
+        distribution.push('KILLER_WASP');
+    }
 
     // All remaining wasp slots are random
     const allWaspRoles = ['DECEIVER_WASP', 'SPY_WASP', 'CONSORT_WASP', 'JANITOR_WASP', 'DISGUISER_WASP', 'KILLER_WASP'];
@@ -55,12 +72,16 @@ function getRoleDistribution(playerCount, randomMode = false) {
         }
     } else {
         // STANDARD MODE: Guaranteed core roles
-        if (beeCount >= 1) beeRoles.push('SCOUT_BEE'); // Always have investigator
+        if (beeCount >= 1) beeRoles.push('GUARD_BEE'); // Always have protector
         if (beeCount >= 2) beeRoles.push('NURSE_BEE'); // Always have healer
-        if (beeCount >= 3) beeRoles.push('QUEENS_GUARD'); // Always have sheriff
 
-        // Optional power roles
-        const optionalBeeRoles = ['GUARD_BEE', 'LOOKOUT_BEE', 'SOLDIER_BEE', 'QUEEN_BEE', 'JAILER_BEE', 'ESCORT_BEE', 'MEDIUM_BEE', 'VETERAN_BEE'];
+        // Scout Bee only appears with 10+ players
+        if (beeCount >= 3 && playerCount >= 10) {
+            beeRoles.push('SCOUT_BEE');
+        }
+
+        // Optional power roles (including Queens Guard for all games)
+        const optionalBeeRoles = ['QUEENS_GUARD', 'LOOKOUT_BEE', 'SOLDIER_BEE', 'QUEEN_BEE', 'JAILER_BEE', 'ESCORT_BEE', 'MEDIUM_BEE', 'VETERAN_BEE'];
 
         // Add random power roles
         while (beeRoles.length < Math.min(beeCount, Math.floor(beeCount * 0.6))) {
