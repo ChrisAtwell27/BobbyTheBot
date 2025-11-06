@@ -22,10 +22,10 @@ const GAME_INACTIVITY_TIMEOUT = 3600000; // 1 hour - games inactive longer than 
 const pendingGameConfigs = new Map();
 
 // Debug mode constants (shorter timers for testing)
-const DEBUG_SETUP_DELAY = 5000; // 5 seconds
-const DEBUG_NIGHT_DURATION = 20000; // 20 seconds
-const DEBUG_DAY_DISCUSSION_DURATION = 30000; // 30 seconds
-const DEBUG_VOTING_DURATION = 20000; // 20 seconds
+const DEBUG_SETUP_DELAY = 10000; // 10 seconds
+const DEBUG_NIGHT_DURATION = 45000; // 45 seconds
+const DEBUG_DAY_DISCUSSION_DURATION = 90000; // 90 seconds (1.5 minutes)
+const DEBUG_VOTING_DURATION = 60000; // 60 seconds (1 minute)
 
 // Helper to get phase durations based on debug mode and custom settings
 function getPhaseDuration(game, phaseType) {
@@ -368,6 +368,32 @@ async function sendDeathNotification(game, client, death) {
     }
 }
 
+// Send an embed to all alive players via DM
+async function sendToAllPlayers(game, client, embed, components = []) {
+    const alivePlayers = game.players.filter(p => p.alive);
+
+    for (const player of alivePlayers) {
+        try {
+            const user = await client.users.fetch(player.id);
+            await user.send({ embeds: [embed], components });
+        } catch (error) {
+            console.error(`Could not send message to ${player.displayName}:`, error);
+        }
+    }
+}
+
+// Send an embed to ALL players (including dead) via DM
+async function sendToEveryoneInGame(game, client, embed, components = []) {
+    for (const player of game.players) {
+        try {
+            const user = await client.users.fetch(player.id);
+            await user.send({ embeds: [embed], components });
+        } catch (error) {
+            console.error(`Could not send message to ${player.displayName}:`, error);
+        }
+    }
+}
+
 // Update game display
 async function updateGameDisplay(game, client) {
     try {
@@ -390,22 +416,14 @@ async function updateGameDisplay(game, client) {
     }
 }
 
-// Mute voice channel and lock/unlock text channel
+// Mute/unmute voice channel (text channel no longer used during gameplay)
 async function muteVoiceAndLockText(game, client, shouldMute) {
     try {
         // Get the voice channel
         const voiceChannel = await client.channels.fetch(MAFIA_VC_ID);
 
-        // Get the text channel
-        if (!game.cachedChannel) {
-            game.cachedChannel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
-        }
-        const textChannel = game.cachedChannel;
-
         if (shouldMute) {
-            // NIGHT: Mute all members in voice channel and lock text channel
-
-            // Mute all members currently in the voice channel
+            // NIGHT: Mute all members in voice channel
             if (voiceChannel && voiceChannel.members) {
                 for (const [memberId, member] of voiceChannel.members) {
                     try {
@@ -415,16 +433,8 @@ async function muteVoiceAndLockText(game, client, shouldMute) {
                     }
                 }
             }
-
-            // Lock text channel (deny SEND_MESSAGES for @everyone)
-            await textChannel.permissionOverwrites.edit(textChannel.guild.roles.everyone, {
-                SendMessages: false
-            });
-
         } else {
-            // DAY: Unmute all members and unlock text channel
-
-            // Unmute all members in voice channel
+            // DAY: Unmute all members in voice channel
             if (voiceChannel && voiceChannel.members) {
                 for (const [memberId, member] of voiceChannel.members) {
                     try {
@@ -434,14 +444,9 @@ async function muteVoiceAndLockText(game, client, shouldMute) {
                     }
                 }
             }
-
-            // Unlock text channel (allow SEND_MESSAGES for @everyone)
-            await textChannel.permissionOverwrites.edit(textChannel.guild.roles.everyone, {
-                SendMessages: true
-            });
         }
     } catch (error) {
-        console.error('Error toggling voice/text mute:', error);
+        console.error('Error toggling voice mute:', error);
     }
 }
 
@@ -460,16 +465,17 @@ async function startNightPhase(game, client) {
     }
     const channel = game.cachedChannel;
 
-    // Mute voice channel and lock text channel
+    // Mute voice channel (no longer need to lock text channel since we're not using it)
     await muteVoiceAndLockText(game, client, true);
 
     const nightEmbed = new EmbedBuilder()
         .setColor('#000080')
         .setTitle('🌙 Night Falls Over the Hive')
-        .setDescription('The bees settle in for the night. Those with special abilities should check their DMs!\n\n🔇 Voice chat is now muted and text chat is locked.')
+        .setDescription('The bees settle in for the night. Those with special abilities will receive prompts!\n\n🔇 Voice chat is now muted.')
         .setTimestamp();
 
-    await channel.send({ embeds: [nightEmbed] });
+    // Send night announcement to all players via DM
+    await sendToEveryoneInGame(game, client, nightEmbed);
 
     // Send night action prompts
     await sendNightActionPrompts(game, client);
@@ -1342,7 +1348,7 @@ async function endNightPhase(game, client) {
         await sendDeathNotification(game, client, death);
     }
 
-    // Announce results
+    // Announce results to all players via DM
     const dawnEmbed = new EmbedBuilder()
         .setColor('#FFA500')
         .setTitle('☀️ Dawn Breaks Over the Hive')
@@ -1359,7 +1365,8 @@ async function endNightPhase(game, client) {
         dawnEmbed.setDescription('The bees wake to find everyone safe! The night was quiet... 🌙');
     }
 
-    await channel.send({ embeds: [dawnEmbed] });
+    // Send dawn announcement to all players via DM
+    await sendToEveryoneInGame(game, client, dawnEmbed);
 
     // Clear night data after processing
     clearNightData(game);
@@ -1374,16 +1381,17 @@ async function endNightPhase(game, client) {
     const dayDuration = getPhaseDuration(game, 'day');
     game.phaseEndTime = Date.now() + dayDuration;
 
-    // Unmute voice channel and unlock text channel
+    // Unmute voice channel
     await muteVoiceAndLockText(game, client, false);
 
     const dayEmbed = new EmbedBuilder()
         .setColor('#FFD700')
         .setTitle('☀️ Day Discussion Phase')
-        .setDescription(`Discuss amongst yourselves and try to figure out who the Wasps are!\n\n🔊 Voice and text chat are now open!\n\nVoting will begin in ${dayDuration / 1000} seconds.`)
+        .setDescription(`Discuss amongst yourselves and try to figure out who the Wasps are!\n\n🔊 Voice chat is now open! You can also send messages here and I'll relay them to everyone.\n\nVoting will begin in ${dayDuration / 1000} seconds.`)
         .setTimestamp();
 
-    await channel.send({ embeds: [dayEmbed] });
+    // Send day announcement to all players via DM
+    await sendToEveryoneInGame(game, client, dayEmbed);
 
     await updateGameDisplay(game, client);
 
@@ -1411,20 +1419,27 @@ async function startVotingPhase(game, client) {
 
     const alivePlayers = game.players.filter(p => p.alive);
 
-    const votingEmbed = new EmbedBuilder()
-        .setColor('#FF0000')
-        .setTitle('🗳️ Voting Phase')
-        .setDescription(`Vote for who you think is a Wasp! The player with the most votes will be eliminated.\n\n**Alive Players:** ${alivePlayers.length}\n**Time Remaining:** ${votingDuration / 1000} seconds`)
-        .setTimestamp();
-
     // Create voting buttons
     const votingButtons = createVotingButtons(game.id, alivePlayers);
 
-    // Send new voting message with buttons
-    await channel.send({
-        embeds: [votingEmbed],
-        components: votingButtons
-    });
+    // Send voting message with buttons to each alive player's DM
+    for (const player of alivePlayers) {
+        try {
+            const user = await client.users.fetch(player.id);
+            const votingEmbed = new EmbedBuilder()
+                .setColor('#FF0000')
+                .setTitle('🗳️ Voting Phase')
+                .setDescription(`Vote for who you think is a Wasp! The player with the most votes will be eliminated.\n\n**Alive Players:** ${alivePlayers.length}\n**Time Remaining:** ${votingDuration / 1000} seconds`)
+                .setTimestamp();
+
+            await user.send({
+                embeds: [votingEmbed],
+                components: votingButtons
+            });
+        } catch (error) {
+            console.error(`Could not send voting buttons to ${player.displayName}:`, error);
+        }
+    }
 
     // In debug mode, make bots automatically vote after a short delay
     if (game.debugMode) {
@@ -1492,7 +1507,7 @@ async function endVotingPhase(game, client) {
         }
     }
 
-    // Announce results
+    // Announce results to all players via DM
     const resultsEmbed = new EmbedBuilder()
         .setColor('#FF4500')
         .setTitle('🗳️ Voting Results')
@@ -1520,7 +1535,8 @@ async function endVotingPhase(game, client) {
         });
     }
 
-    await channel.send({ embeds: [resultsEmbed] });
+    // Send results to all players via DM
+    await sendToEveryoneInGame(game, client, resultsEmbed);
 
     // Handle Clown Beetle (Jester) haunt if they were lynched
     if (eliminatedPlayer && eliminatedPlayer.role === 'CLOWN_BEETLE') {
@@ -1560,7 +1576,13 @@ async function endVotingPhase(game, client) {
                         const randomTarget = guiltyVoters[Math.floor(Math.random() * guiltyVoters.length)];
                         randomTarget.alive = false;
 
-                        await channel.send(`👻 **${eliminatedPlayer.displayName}** haunted **${randomTarget.displayName}** from beyond the grave! 💀`);
+                        // Announce haunt to all players via DM
+                        const hauntResultEmbed = new EmbedBuilder()
+                            .setColor('#FF1493')
+                            .setTitle('👻 Haunted!')
+                            .setDescription(`**${eliminatedPlayer.displayName}** haunted **${randomTarget.displayName}** from beyond the grave! 💀`)
+                            .setTimestamp();
+                        await sendToEveryoneInGame(game, client, hauntResultEmbed);
 
                         game.pendingHaunt = null;
 
@@ -1571,21 +1593,36 @@ async function endVotingPhase(game, client) {
                     }
                 }, 30000);
 
-                // Announce Jester win
-                await channel.send(`🤡 **${eliminatedPlayer.displayName}** was the Clown Beetle (Jester)! They win and will haunt one of their voters!`);
+                // Announce Jester win to all players via DM
+                const jesterWinEmbed = new EmbedBuilder()
+                    .setColor('#FF1493')
+                    .setTitle('🤡 Clown Beetle Wins!')
+                    .setDescription(`**${eliminatedPlayer.displayName}** was the Clown Beetle (Jester)! They win and will haunt one of their voters!`)
+                    .setTimestamp();
+                await sendToEveryoneInGame(game, client, jesterWinEmbed);
 
                 // End game for Jester (they've won)
                 endGame(game, client, 'jester', eliminatedPlayer);
                 return;
             } catch (error) {
                 console.error('Could not send haunt DM:', error);
-                await channel.send(`🤡 **${eliminatedPlayer.displayName}** was the Clown Beetle (Jester)! They win, but could not be contacted to choose a haunt target.`);
+                const jesterWinEmbed2 = new EmbedBuilder()
+                    .setColor('#FF1493')
+                    .setTitle('🤡 Clown Beetle Wins!')
+                    .setDescription(`**${eliminatedPlayer.displayName}** was the Clown Beetle (Jester)! They win, but could not be contacted to choose a haunt target.`)
+                    .setTimestamp();
+                await sendToEveryoneInGame(game, client, jesterWinEmbed2);
                 endGame(game, client, 'jester', eliminatedPlayer);
                 return;
             }
         } else {
             // No guilty voters (shouldn't happen in normal gameplay)
-            await channel.send(`🤡 **${eliminatedPlayer.displayName}** was the Clown Beetle (Jester)! They win!`);
+            const jesterWinEmbed3 = new EmbedBuilder()
+                .setColor('#FF1493')
+                .setTitle('🤡 Clown Beetle Wins!')
+                .setDescription(`**${eliminatedPlayer.displayName}** was the Clown Beetle (Jester)! They win!`)
+                .setTimestamp();
+            await sendToEveryoneInGame(game, client, jesterWinEmbed3);
             endGame(game, client, 'jester', eliminatedPlayer);
             return;
         }
@@ -1748,7 +1785,8 @@ async function endGame(game, client, winnerType, specificWinner = null) {
         inline: false
     });
 
-    await channel.send({ embeds: [resultsEmbed] });
+    // Send game results to all players via DM
+    await sendToEveryoneInGame(game, client, resultsEmbed);
 
     // Unmute voice and unlock text channel before ending game
     await muteVoiceAndLockText(game, client, false);
@@ -2111,8 +2149,13 @@ module.exports = (client) => {
                 clearTimeout(game.warningTimer);
             }
 
-            const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
-            await channel.send('⏭️ **Debug:** Skipping to next phase...');
+            // Notify all players via DM
+            const skipEmbed = new EmbedBuilder()
+                .setColor('#FFA500')
+                .setTitle('⏭️ Debug: Skipping Phase')
+                .setDescription('The organizer has skipped to the next phase.')
+                .setTimestamp();
+            await sendToEveryoneInGame(game, client, skipEmbed);
 
             // Trigger phase transition
             if (game.phase === 'night') {
@@ -2137,8 +2180,13 @@ module.exports = (client) => {
                 return message.reply('Only the game organizer can end the game!');
             }
 
-            const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
-            await channel.send('🛑 **Debug game ended by organizer.**');
+            // Notify all players via DM
+            const endEmbed = new EmbedBuilder()
+                .setColor('#FF0000')
+                .setTitle('🛑 Game Ended')
+                .setDescription('The debug game was ended by the organizer.')
+                .setTimestamp();
+            await sendToEveryoneInGame(game, client, endEmbed);
 
             // Unmute and unlock
             await muteVoiceAndLockText(game, client, false);
@@ -2291,15 +2339,14 @@ module.exports = (client) => {
             // Mark as revealed
             player.hasRevealed = true;
 
-            // Announce in channel
-            const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+            // Announce to all players via DM
             const revealEmbed = new EmbedBuilder()
                 .setColor('#FFD700')
                 .setTitle('👑 ROYAL REVEAL! 👑')
                 .setDescription(`**${player.displayName}** has revealed themselves as the **Queen Bee**!\n\nThey now have **3 extra votes** during voting!`)
                 .setTimestamp();
 
-            await channel.send({ embeds: [revealEmbed] });
+            await sendToEveryoneInGame(game, client, revealEmbed);
             await message.reply('You have revealed yourself as the Queen Bee! You now have 3 extra votes.');
         }
 
@@ -2328,8 +2375,13 @@ module.exports = (client) => {
 
                     await message.reply(`You haunted **${target.displayName}**! 👻`);
 
-                    const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
-                    await channel.send(`👻 **${game.players.find(p => p.id === message.author.id).displayName}** haunted **${target.displayName}** from beyond the grave! 💀`);
+                    // Announce haunt to all players via DM
+                    const hauntResultEmbed = new EmbedBuilder()
+                        .setColor('#FF1493')
+                        .setTitle('👻 Haunted!')
+                        .setDescription(`**${game.players.find(p => p.id === message.author.id).displayName}** haunted **${target.displayName}** from beyond the grave! 💀`)
+                        .setTimestamp();
+                    await sendToEveryoneInGame(game, client, hauntResultEmbed);
 
                     game.pendingHaunt = null;
 
@@ -2366,6 +2418,29 @@ module.exports = (client) => {
                     }
                     return;
                 }
+            }
+
+            // Handle day discussion relay
+            if (game.phase === 'day') {
+                const player = game.players.find(p => p.id === message.author.id);
+                if (!player || !player.alive) {
+                    await message.reply('❌ Only alive players can send messages during the day phase!');
+                    return;
+                }
+
+                // Relay message to all alive players
+                const alivePlayers = game.players.filter(p => p.alive && p.id !== message.author.id);
+                for (const alivePlayer of alivePlayers) {
+                    try {
+                        const user = await client.users.fetch(alivePlayer.id);
+                        await user.send(`💬 **${player.displayName}:** ${message.content}`);
+                    } catch (error) {
+                        console.error(`Could not relay day message to ${alivePlayer.displayName}:`, error);
+                    }
+                }
+
+                await message.reply('✅ Message sent to all players!');
+                return;
             }
 
             // Regular night actions
@@ -2614,9 +2689,13 @@ module.exports = (client) => {
                 // Everyone voted, end phase early
                 clearTimeout(game.phaseTimer);
 
-                // Announce early completion
-                const channel = game.cachedChannel || await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
-                await channel.send('🗳️ Everyone has voted! Proceeding to results...');
+                // Announce early completion to all players via DM
+                const earlyEndEmbed = new EmbedBuilder()
+                    .setColor('#00FF00')
+                    .setTitle('🗳️ All Votes Received!')
+                    .setDescription('Everyone has voted! Proceeding to results...')
+                    .setTimestamp();
+                await sendToEveryoneInGame(game, client, earlyEndEmbed);
 
                 await endVotingPhase(game, client);
             }
