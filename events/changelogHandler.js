@@ -73,6 +73,24 @@ module.exports = (client, changelogChannelId) => {
   }
 
   /**
+   * Fetches detailed commit information including file changes
+   * @param {string} sha - Commit SHA to fetch
+   * @returns {Promise<Object|null>} Detailed commit object with files and stats
+   */
+  async function fetchCommitDetails(sha) {
+    try {
+      const response = await axios.get(`${githubApiUrl}/${sha}`, {
+        headers
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error(`[Changelog Handler] Error fetching commit details for ${sha}:`, error.message);
+      return null;
+    }
+  }
+
+  /**
    * Creates a formatted embed for a commit
    * @param {Object} commit - GitHub commit object
    * @returns {EmbedBuilder} Formatted Discord embed
@@ -139,7 +157,14 @@ module.exports = (client, changelogChannelId) => {
         return;
       }
 
-      const embed = createCommitEmbed(commit);
+      // Fetch detailed commit info to get file changes and stats
+      const detailedCommit = await fetchCommitDetails(commit.sha);
+      if (!detailedCommit) {
+        console.error(`[Changelog Handler] Could not fetch details for commit ${commit.sha.substring(0, 7)}`);
+        return;
+      }
+
+      const embed = createCommitEmbed(detailedCommit);
       await channel.send({ embeds: [embed] });
 
       // Mark as posted
