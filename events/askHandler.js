@@ -241,6 +241,42 @@ opponent's Hives
 - !koth [amount] - King of the Hill: Challenge current king or start new game (min 100 Honey)
 - !kothstatus - View current King of the Hill status and pot
 
+🐝 **BEE MAFIA (Town of Salem Style):**
+- !createmafia - Start a new Bee-themed Mafia game (min 6 players in voice channel)
+- !createmafia random - Start with fully randomized roles (chaos mode!)
+- !mafiaroles or !roles - View all available roles with descriptions
+- !mafiaroles [bee|wasp|neutral] - View specific faction roles
+- !createmafiadebug [random] - Create debug game with 5 bots for testing
+
+**Game Overview:**
+- Town of Salem style social deduction game with bee/wasp theme
+- 3 Factions: Bees (Town), Wasps (Mafia), Neutrals (third party)
+- 19 unique roles with special abilities
+- Night/Day phases with investigations, kills, protections, and voting
+- Auto voice/text channel management during phases
+
+**Bee Roles (Town):** Scout Bee, Nurse Bee, Queen's Guard, Guard Bee, Lookout Bee, Soldier Bee, Queen Bee, Worker Bee, Jailer Bee, Escort Bee, Medium Bee, Veteran Bee
+
+**Wasp Roles (Mafia):** Wasp Queen, Killer Wasp, Deceiver Wasp, Spy Wasp, Consort Wasp, Janitor Wasp, Disguiser Wasp
+
+**Neutral Roles:** Murder Hornet, Fire Ant, Clown Beetle (Jester), Bounty Hunter (Executioner), Butterfly (Survivor), Spider (Witch), Amnesiac Beetle
+
+**Special Mechanics:**
+- Queen Bee can use !reveal during day to get 3 extra votes (one-time)
+- Clown Beetle haunts a voter if lynched (wins by being voted out)
+- Medium Bee can talk to dead players during night phase
+- Wasps coordinate kills via DM chat during night
+- Complex attack/defense system with investigations, protections, roleblocks
+
+**How to Play:**
+- Join Mafia voice channel (all players must be in voice)
+- Organizer uses !createmafia to start game
+- Receive your role via DM
+- Night Phase: Use abilities by DMing the bot (send number to select target)
+- Day Phase: Discuss and figure out who the Wasps are
+- Voting Phase: Vote to eliminate suspicious players using buttons
+- Win by eliminating the opposing faction!
+
 👥 **TEAM BUILDING - VALORANT (30+ Features):**
 **Creating Teams:**
 - @Valorant or !valorantteam - Create 5-player Valorant team (lasts 2 hours, auto voice channel)

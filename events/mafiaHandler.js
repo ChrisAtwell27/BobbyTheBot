@@ -2,7 +2,10 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const User = require('../database/models/User');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
-const { LimitedMap } = require('../utils/memoryUtils');
+const { ROLES } = require('../mafia/roles/mafiaRoles');
+const { createGame, getGame, getGameByPlayer, deleteGame, getAllGames, addVisit, getVisitors, clearNightData, clearVotes, updateActivity } = require('../mafia/game/mafiaGameState');
+const { processNightActions } = require('../mafia/game/mafiaActions');
+const { getRoleDistribution, shuffleArray, getTeamCounts, countVotes, determineWinners, checkWinConditions, initializePlayerRole } = require('../mafia/game/mafiaUtils');
 
 // Constants
 const MAFIA_VC_ID = '1434633691455426600';
@@ -13,102 +16,45 @@ const NIGHT_DURATION = 60000; // 1 minute
 const DAY_DISCUSSION_DURATION = 180000; // 3 minutes
 const VOTING_DURATION = 120000; // 2 minutes for voting
 const WINNER_REWARD = 500; // BobbyBucks
+const GAME_INACTIVITY_TIMEOUT = 3600000; // 1 hour - games inactive longer than this will be cleaned up
 
-// Role Configuration - Easy to modify for new roles
-const ROLES = {
-    WASP: {
-        name: 'Wasp',
-        emoji: '🐝',
-        team: 'bad',
-        description: 'You are a **Wasp**! Work with your fellow Wasps to eliminate the bees. Each night, you can vote with your team to sting one player.',
-        abilities: ['Can communicate with other Wasps at night', 'Vote to eliminate one player each night'],
-        winCondition: 'Eliminate all bees or equal their numbers'
-    },
-    BEEKEEPER: {
-        name: 'Beekeeper',
-        emoji: '🧑‍🌾',
-        team: 'good',
-        description: 'You are the **Beekeeper**! You can protect one player from being eliminated each night.',
-        abilities: ['Protect one player each night from elimination'],
-        winCondition: 'Eliminate all Wasps'
-    },
-    SCOUT_BEE: {
-        name: 'Scout Bee',
-        emoji: '🔍',
-        team: 'good',
-        description: 'You are a **Scout Bee**! You can investigate one player each night to discover if they are a Wasp or not.',
-        abilities: ['Investigate one player each night to learn their alignment'],
-        winCondition: 'Eliminate all Wasps'
-    },
-    WORKER_BEE: {
-        name: 'Worker Bee',
-        emoji: '🐝',
-        team: 'good',
-        description: 'You are a **Worker Bee**! You have no special abilities, but you can help identify the Wasps through discussion and voting.',
-        abilities: ['Vote during the day phase'],
-        winCondition: 'Eliminate all Wasps'
+// Debug mode constants (shorter timers for testing)
+const DEBUG_SETUP_DELAY = 5000; // 5 seconds
+const DEBUG_NIGHT_DURATION = 20000; // 20 seconds
+const DEBUG_DAY_DISCUSSION_DURATION = 30000; // 30 seconds
+const DEBUG_VOTING_DURATION = 20000; // 20 seconds
+
+// Helper to get phase durations based on debug mode
+function getPhaseDuration(game, phaseType) {
+    if (!game.debugMode) {
+        switch (phaseType) {
+            case 'setup': return SETUP_DELAY;
+            case 'night': return NIGHT_DURATION;
+            case 'day': return DAY_DISCUSSION_DURATION;
+            case 'voting': return VOTING_DURATION;
+        }
+    } else {
+        switch (phaseType) {
+            case 'setup': return DEBUG_SETUP_DELAY;
+            case 'night': return DEBUG_NIGHT_DURATION;
+            case 'day': return DEBUG_DAY_DISCUSSION_DURATION;
+            case 'voting': return DEBUG_VOTING_DURATION;
+        }
     }
-};
-
-// Game state storage (limit to 5 concurrent mafia games)
-const activeGames = new LimitedMap(5);
-const playerGameMap = new LimitedMap(100); // Track which game each player is in (max 100 players)
-
-// Role distribution based on player count
-function getRoleDistribution(playerCount) {
-    const distribution = [];
-
-    if (playerCount < MIN_PLAYERS) {
-        return null;
-    }
-
-    // Calculate number of Wasps (roughly 1/3 of players, minimum 2)
-    let waspCount;
-    if (playerCount <= 8) waspCount = 2;
-    else if (playerCount <= 11) waspCount = 3;
-    else if (playerCount <= 14) waspCount = 4;
-    else waspCount = Math.floor(playerCount / 3);
-
-    // Add Wasps
-    for (let i = 0; i < waspCount; i++) {
-        distribution.push('WASP');
-    }
-
-    // Add special roles
-    distribution.push('BEEKEEPER');
-    distribution.push('SCOUT_BEE');
-
-    // Fill remaining with Worker Bees
-    const remainingSlots = playerCount - distribution.length;
-    for (let i = 0; i < remainingSlots; i++) {
-        distribution.push('WORKER_BEE');
-    }
-
-    return distribution;
-}
-
-// Shuffle array
-function shuffleArray(array) {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
 }
 
 // Create game embed
 function createGameEmbed(game) {
     const embed = new EmbedBuilder()
         .setColor('#FFD700')
-        .setTitle('🐝 Bee Mafia Game 🐝')
+        .setTitle(`🐝 Bee Mafia Game 🐝${game.debugMode ? ' [DEBUG MODE]' : ''}`)
         .setTimestamp();
 
     const alivePlayers = game.players.filter(p => p.alive);
     const deadPlayers = game.players.filter(p => !p.alive);
 
     if (game.phase === 'setup') {
-        embed.setDescription(`**Game Status:** Setting up\n**Players:** ${game.players.length}`);
+        embed.setDescription(`**Game Status:** Setting up\n**Players:** ${game.players.length}${game.debugMode ? '\n**Mode:** Debug' : ''}`);
         embed.addFields({
             name: 'Players in Game',
             value: game.players.map(p => `• ${p.displayName}`).join('\n') || 'No players yet',
@@ -150,10 +96,7 @@ function createGameEmbed(game) {
             inline: false
         });
 
-        const voteCounts = {};
-        Object.values(game.votes || {}).forEach(targetId => {
-            voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
-        });
+        const voteCounts = countVotes(game.votes || {});
 
         if (Object.keys(voteCounts).length > 0) {
             const voteStatus = alivePlayers.map(p => {
@@ -208,13 +151,21 @@ function createVotingButtons(gameId, alivePlayers) {
 
 // Send role DMs
 async function sendRoleDMs(game, client) {
+    const failures = [];
+
     for (const player of game.players) {
         try {
             const user = await client.users.fetch(player.id);
             const role = ROLES[player.role];
 
+            // Determine color based on team
+            let color;
+            if (role.team === 'bee') color = '#FFD700';
+            else if (role.team === 'wasp') color = '#8B0000';
+            else color = '#808080';
+
             const roleEmbed = new EmbedBuilder()
-                .setColor(role.team === 'bad' ? '#8B0000' : '#FFD700')
+                .setColor(color)
                 .setTitle(`${role.emoji} Your Role: ${role.name}`)
                 .setDescription(role.description)
                 .addFields(
@@ -224,37 +175,72 @@ async function sendRoleDMs(game, client) {
                 .setFooter({ text: '🤫 Keep this secret!' });
 
             // Add teammate info for Wasps
-            if (player.role === 'WASP') {
+            if (role.team === 'wasp') {
                 const teammates = game.players
-                    .filter(p => p.role === 'WASP' && p.id !== player.id)
-                    .map(p => p.displayName)
-                    .join(', ');
+                    .filter(p => ROLES[p.role].team === 'wasp' && p.id !== player.id)
+                    .map(p => `${p.displayName} (${ROLES[p.role].name})`)
+                    .join('\n');
 
                 if (teammates) {
                     roleEmbed.addFields({
-                        name: 'Your Fellow Wasps',
+                        name: '🐝 Your Fellow Wasps',
                         value: teammates,
                         inline: false
                     });
                 }
             }
 
+            // Add Executioner target
+            if (player.role === 'BOUNTY_HUNTER' && player.target) {
+                const targetPlayer = game.players.find(p => p.id === player.target);
+                if (targetPlayer) {
+                    roleEmbed.addFields({
+                        name: '🎯 Your Target',
+                        value: `You must get **${targetPlayer.displayName}** lynched during the day!`,
+                        inline: false
+                    });
+                }
+            }
+
+            // Add resource counts
+            if (player.bullets !== undefined) {
+                roleEmbed.addFields({
+                    name: '⚔️ Bullets Remaining',
+                    value: `${player.bullets} bullets`,
+                    inline: true
+                });
+            }
+            if (player.vests !== undefined) {
+                roleEmbed.addFields({
+                    name: '🛡️ Vests Remaining',
+                    value: `${player.vests} vests`,
+                    inline: true
+                });
+            }
+
             await user.send({ embeds: [roleEmbed] });
 
-            // Send night instructions if applicable
-            if (player.role === 'WASP') {
+            // Send night instructions for Wasps
+            if (role.team === 'wasp') {
                 await user.send('During night phase, you can send messages to coordinate with your team. Just send me a DM during the night!');
             }
         } catch (error) {
             console.error(`Could not send role DM to ${player.displayName}:`, error);
+            failures.push(player.displayName);
         }
     }
+
+    return failures;
 }
 
 // Update game display
 async function updateGameDisplay(game, client) {
     try {
-        const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+        // Use cached channel if available, otherwise fetch and cache it
+        if (!game.cachedChannel) {
+            game.cachedChannel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+        }
+        const channel = game.cachedChannel;
         const message = await channel.messages.fetch(game.messageId);
 
         const embed = createGameEmbed(game);
@@ -269,19 +255,83 @@ async function updateGameDisplay(game, client) {
     }
 }
 
+// Mute voice channel and lock/unlock text channel
+async function muteVoiceAndLockText(game, client, shouldMute) {
+    try {
+        // Get the voice channel
+        const voiceChannel = await client.channels.fetch(MAFIA_VC_ID);
+
+        // Get the text channel
+        if (!game.cachedChannel) {
+            game.cachedChannel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+        }
+        const textChannel = game.cachedChannel;
+
+        if (shouldMute) {
+            // NIGHT: Mute all members in voice channel and lock text channel
+
+            // Mute all members currently in the voice channel
+            if (voiceChannel && voiceChannel.members) {
+                for (const [memberId, member] of voiceChannel.members) {
+                    try {
+                        await member.voice.setMute(true, 'Night phase - discussion locked');
+                    } catch (error) {
+                        console.error(`Could not mute ${member.displayName}:`, error);
+                    }
+                }
+            }
+
+            // Lock text channel (deny SEND_MESSAGES for @everyone)
+            await textChannel.permissionOverwrites.edit(textChannel.guild.roles.everyone, {
+                SendMessages: false
+            });
+
+        } else {
+            // DAY: Unmute all members and unlock text channel
+
+            // Unmute all members in voice channel
+            if (voiceChannel && voiceChannel.members) {
+                for (const [memberId, member] of voiceChannel.members) {
+                    try {
+                        await member.voice.setMute(false, 'Day phase - discussion open');
+                    } catch (error) {
+                        console.error(`Could not unmute ${member.displayName}:`, error);
+                    }
+                }
+            }
+
+            // Unlock text channel (allow SEND_MESSAGES for @everyone)
+            await textChannel.permissionOverwrites.edit(textChannel.guild.roles.everyone, {
+                SendMessages: true
+            });
+        }
+    } catch (error) {
+        console.error('Error toggling voice/text mute:', error);
+    }
+}
+
 // Start night phase
 async function startNightPhase(game, client) {
     game.phase = 'night';
-    game.phaseEndTime = Date.now() + NIGHT_DURATION;
+    const nightDuration = getPhaseDuration(game, 'night');
+    game.phaseEndTime = Date.now() + nightDuration;
     game.nightActions = {};
     game.nightMessages = [];
+    game.lastActivityTime = Date.now();
 
-    const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+    // Use cached channel
+    if (!game.cachedChannel) {
+        game.cachedChannel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+    }
+    const channel = game.cachedChannel;
+
+    // Mute voice channel and lock text channel
+    await muteVoiceAndLockText(game, client, true);
 
     const nightEmbed = new EmbedBuilder()
         .setColor('#000080')
         .setTitle('🌙 Night Falls Over the Hive')
-        .setDescription('The bees settle in for the night. Those with special abilities should check their DMs!')
+        .setDescription('The bees settle in for the night. Those with special abilities should check their DMs!\n\n🔇 Voice chat is now muted and text chat is locked.')
         .setTimestamp();
 
     await channel.send({ embeds: [nightEmbed] });
@@ -292,10 +342,35 @@ async function startNightPhase(game, client) {
     // Update game display
     await updateGameDisplay(game, client);
 
+    // Set warning timer (only if phase is long enough)
+    const warningTime = game.debugMode ? 10000 : 30000; // 10s in debug, 30s in normal
+    if (nightDuration > warningTime) {
+        game.warningTimer = setTimeout(async () => {
+            const playersWithActions = game.players.filter(p => {
+                if (!p.alive) return false;
+                const role = ROLES[p.role];
+                return role.nightAction;
+            });
+
+            for (const player of playersWithActions) {
+                // Only warn if they haven't submitted an action yet
+                if (!game.nightActions[player.id]) {
+                    try {
+                        const user = await client.users.fetch(player.id);
+                        const timeLeft = game.debugMode ? '10 seconds' : '30 seconds';
+                        await user.send(`⏰ **${timeLeft} remaining** in the night phase! Submit your action now!`);
+                    } catch (error) {
+                        console.error(`Could not send warning to ${player.displayName}:`, error);
+                    }
+                }
+            }
+        }, nightDuration - warningTime);
+    }
+
     // Set timer for day phase
     game.phaseTimer = setTimeout(async () => {
         await endNightPhase(game, client);
-    }, NIGHT_DURATION);
+    }, nightDuration);
 }
 
 // Send night action prompts
@@ -305,45 +380,337 @@ async function sendNightActionPrompts(game, client) {
     for (const player of alivePlayers) {
         try {
             const user = await client.users.fetch(player.id);
+            const role = ROLES[player.role];
 
-            if (player.role === 'WASP') {
-                const waspTargets = alivePlayers
-                    .filter(p => p.role !== 'WASP')
-                    .map((p, i) => `${i + 1}. ${p.displayName}`)
-                    .join('\n');
+            // Skip if no night action
+            if (!role.nightAction) continue;
 
-                const waspEmbed = new EmbedBuilder()
-                    .setColor('#8B0000')
-                    .setTitle('🐝 Night Phase - Choose Your Target')
-                    .setDescription('Vote for who to eliminate tonight. Send me the **number** of your target.\n\n' + waspTargets)
-                    .setFooter({ text: 'You can also send messages to coordinate with your team!' });
+            let targets, embed;
+            const actionType = role.actionType;
 
-                await user.send({ embeds: [waspEmbed] });
-            } else if (player.role === 'BEEKEEPER') {
-                const targets = alivePlayers
-                    .map((p, i) => `${i + 1}. ${p.displayName}`)
-                    .join('\n');
+            // Determine color based on team
+            let color;
+            if (role.team === 'bee') color = '#FFD700';
+            else if (role.team === 'wasp') color = '#8B0000';
+            else color = '#808080';
 
-                const keeperEmbed = new EmbedBuilder()
-                    .setColor('#FFD700')
-                    .setTitle('🧑‍🌾 Night Phase - Protect Someone')
-                    .setDescription('Choose a player to protect tonight. Send me the **number** of your target.\n\n' + targets)
-                    .setFooter({ text: 'Choose wisely!' });
+            switch (actionType) {
+                case 'mafia_kill':
+                    // Wasps - can target anyone except other wasps
+                    targets = alivePlayers
+                        .filter(p => ROLES[p.role].team !== 'wasp')
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
 
-                await user.send({ embeds: [keeperEmbed] });
-            } else if (player.role === 'SCOUT_BEE') {
-                const targets = alivePlayers
-                    .filter(p => p.id !== player.id)
-                    .map((p, i) => `${i + 1}. ${p.displayName}`)
-                    .join('\n');
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Choose Kill Target`)
+                        .setDescription(`Vote for who to eliminate tonight. Send me the **number** of your target.\n\n${targets}`)
+                        .setFooter({ text: 'Coordinate with your team via DMs!' });
+                    break;
 
-                const scoutEmbed = new EmbedBuilder()
-                    .setColor('#FFD700')
-                    .setTitle('🔍 Night Phase - Investigate Someone')
-                    .setDescription('Choose a player to investigate tonight. Send me the **number** of your target.\n\n' + targets)
-                    .setFooter({ text: 'Discover the truth!' });
+                case 'heal':
+                    // Nurse Bee - can heal anyone
+                    targets = alivePlayers
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
 
-                await user.send({ embeds: [scoutEmbed] });
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Heal Someone`)
+                        .setDescription(`Choose a player to heal tonight. Send me the **number** of your target.\n\n${targets}`)
+                        .setFooter({ text: player.selfHealsLeft ? `Self-heals remaining: ${player.selfHealsLeft}` : 'Choose wisely!' });
+                    break;
+
+                case 'guard':
+                    // Guard Bee - protect anyone
+                    targets = alivePlayers
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Guard Someone`)
+                        .setDescription(`Choose a player to guard tonight. You will die in their place if attacked.\n\n${targets}`)
+                        .setFooter({ text: 'Be brave!' });
+                    break;
+
+                case 'investigate_suspicious':
+                    // Queen's Guard - investigate for suspicious
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Investigate`)
+                        .setDescription(`Choose a player to investigate for suspicious activity.\n\n${targets}`)
+                        .setFooter({ text: 'Find the Wasps!' });
+                    break;
+
+                case 'investigate_exact':
+                    // Scout Bee - investigate exact role
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Investigate`)
+                        .setDescription(`Choose a player to investigate. You will learn their exact role.\n\n${targets}`)
+                        .setFooter({ text: 'Discover the truth!' });
+                    break;
+
+                case 'consigliere':
+                    // Spy Wasp - investigate exact role
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id && ROLES[p.role].team !== 'wasp')
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Spy on Someone`)
+                        .setDescription(`Choose a player to investigate. You will learn their exact role.\n\n${targets}`)
+                        .setFooter({ text: 'Knowledge is power!' });
+                    break;
+
+                case 'lookout':
+                    // Lookout Bee - watch someone
+                    targets = alivePlayers
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Watch Someone`)
+                        .setDescription(`Choose a player to watch. You will see who visits them.\n\n${targets}`)
+                        .setFooter({ text: 'Keep your eyes open!' });
+                    break;
+
+                case 'shoot':
+                    // Soldier Bee - shoot someone
+                    if (player.bullets <= 0) {
+                        await user.send('You have no bullets remaining!');
+                        continue;
+                    }
+
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Shoot Someone`)
+                        .setDescription(`Choose a player to shoot. You have ${player.bullets} bullet${player.bullets !== 1 ? 's' : ''} remaining.\n\n${targets}`)
+                        .setFooter({ text: 'Warning: Shooting a Bee will kill you from guilt!' });
+                    break;
+
+                case 'serial_kill':
+                    // Murder Hornet - kill someone
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Kill Someone`)
+                        .setDescription(`Choose your target. You will also kill anyone who visits you!\n\n${targets}`)
+                        .setFooter({ text: 'Leave no witnesses!' });
+                    break;
+
+                case 'arsonist':
+                    // Fire Ant - douse or ignite
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    const dousedCount = game.dousedPlayers ? game.dousedPlayers.size : 0;
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Douse or Ignite`)
+                        .setDescription(`Send a **number** to douse that player, or send **"ignite"** to ignite all doused players.\n\nDoused players: ${dousedCount}\n\n${targets}`)
+                        .setFooter({ text: 'Burn them all!' });
+                    break;
+
+                case 'vest':
+                    // Butterfly - use vest
+                    if (player.vests <= 0) {
+                        await user.send('You have no vests remaining!');
+                        continue;
+                    }
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Use Vest`)
+                        .setDescription(`Send **"vest"** to use a vest tonight (${player.vests} vest${player.vests !== 1 ? 's' : ''} remaining), or **"skip"** to not use one.`)
+                        .setFooter({ text: 'Stay alive!' });
+                    break;
+
+                case 'witch':
+                    // Spider - control someone
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Control Someone`)
+                        .setDescription(`Send two numbers separated by a space: **first** is who to control, **second** is their new target.\n\n${targets}`)
+                        .setFooter({ text: 'Manipulate their actions!' });
+                    break;
+
+                case 'frame':
+                    // Deceiver Wasp - frame someone
+                    targets = alivePlayers
+                        .filter(p => ROLES[p.role].team !== 'wasp')
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Frame Someone`)
+                        .setDescription(`Choose a player to frame. They will appear suspicious to investigators.\n\n${targets}`)
+                        .setFooter({ text: 'Deceive the Bees!' });
+                    break;
+
+                case 'jail':
+                    // Jailer Bee - jail and optionally execute
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Jail Someone`)
+                        .setDescription(`Choose a player to jail. Send a **number** to jail, or **number exe** to jail and execute.\n\nExecutions remaining: ${player.executions}\n\n${targets}`)
+                        .setFooter({ text: 'Justice must be served!' });
+                    break;
+
+                case 'roleblock':
+                    // Escort/Consort - roleblock someone
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    const isWaspRoleblock = role.team === 'wasp';
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - ${isWaspRoleblock ? 'Distract' : 'Escort'} Someone`)
+                        .setDescription(`Choose a player to roleblock. They will not perform their action tonight.\n\n${targets}`)
+                        .setFooter({ text: isWaspRoleblock ? 'Sabotage the Bees!' : 'Protect the hive!' });
+                    break;
+
+                case 'seance':
+                    // Medium - speak with dead
+                    const deadPlayers = game.players.filter(p => !p.alive);
+                    if (deadPlayers.length === 0) {
+                        await user.send('There are no dead players to speak with yet.');
+                        continue;
+                    }
+
+                    targets = deadPlayers
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Speak with the Dead`)
+                        .setDescription(`Choose a dead player to speak with. You will learn their role.\n\n${targets}`)
+                        .setFooter({ text: 'Commune with the spirits...' });
+                    break;
+
+                case 'alert':
+                    // Veteran - go on alert
+                    if (player.alerts <= 0) {
+                        await user.send('You have no alerts remaining!');
+                        continue;
+                    }
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Go on Alert`)
+                        .setDescription(`Send **"alert"** to go on alert tonight (${player.alerts} alert${player.alerts !== 1 ? 's' : ''} remaining), or **"skip"** to stay home.\n\n⚠️ You will kill ALL visitors with a powerful attack!`)
+                        .setFooter({ text: 'Defend your position!' });
+                    break;
+
+                case 'clean':
+                    // Janitor - clean a body
+                    if (player.cleans <= 0) {
+                        await user.send('You have no cleans remaining!');
+                        continue;
+                    }
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Clean a Body`)
+                        .setDescription(`Choose a target. If they die tonight, their role will be hidden (${player.cleans} clean${player.cleans !== 1 ? 's' : ''} remaining).\n\n${alivePlayers.filter(p => ROLES[p.role].team !== 'wasp').map((p, i) => `${i + 1}. ${p.displayName}`).join('\n')}`)
+                        .setFooter({ text: 'Clean up the evidence!' });
+                    break;
+
+                case 'disguise':
+                    // Disguiser - disguise as dead
+                    if (player.disguises <= 0) {
+                        await user.send('You have no disguises remaining!');
+                        continue;
+                    }
+
+                    const deadForDisguise = game.players.filter(p => !p.alive);
+                    if (deadForDisguise.length === 0) {
+                        await user.send('There are no dead players to disguise as yet.');
+                        continue;
+                    }
+
+                    targets = deadForDisguise
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Disguise`)
+                        .setDescription(`Choose a dead player to disguise as (${player.disguises} disguise${player.disguises !== 1 ? 's' : ''} remaining).\n\n${targets}`)
+                        .setFooter({ text: 'Assume their identity!' });
+                    break;
+
+                case 'remember':
+                    // Amnesiac - remember a role
+                    if (player.hasRemembered) {
+                        continue; // Already remembered
+                    }
+
+                    const deadForRemember = game.players.filter(p => !p.alive);
+                    if (deadForRemember.length === 0) {
+                        await user.send('There are no dead players whose role you can remember yet.');
+                        continue;
+                    }
+
+                    targets = deadForRemember
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Remember Your Role`)
+                        .setDescription(`Choose a dead player. You will become their role and join their team!\n\n${targets}`)
+                        .setFooter({ text: 'Choose your destiny!' });
+                    break;
+
+                default:
+                    // Unknown action type
+                    continue;
+            }
+
+            if (embed) {
+                await user.send({ embeds: [embed] });
             }
         } catch (error) {
             console.error(`Could not send night action prompt to ${player.displayName}:`, error);
@@ -356,104 +723,353 @@ async function processNightAction(userId, message, game, client) {
     const player = game.players.find(p => p.id === userId);
     if (!player || !player.alive) return;
 
+    updateActivity(game);
+
+    const role = ROLES[player.role];
     const alivePlayers = game.players.filter(p => p.alive);
-    const choice = parseInt(message.content.trim());
+    const input = message.content.trim().toLowerCase();
+    const choice = parseInt(input);
 
-    if (player.role === 'WASP') {
-        // Handle Wasp coordination messages
-        if (isNaN(choice)) {
-            // This is a coordination message, relay to other Wasps
-            const wasps = game.players.filter(p => p.role === 'WASP' && p.alive && p.id !== userId);
+    // Handle Wasp coordination messages (text messages, not numbers)
+    if (role.team === 'wasp' && isNaN(choice)) {
+        const wasps = game.players.filter(p => ROLES[p.role].team === 'wasp' && p.alive && p.id !== userId);
 
-            for (const wasp of wasps) {
-                try {
-                    const user = await client.users.fetch(wasp.id);
-                    await user.send(`**${player.displayName}:** ${message.content}`);
-                } catch (error) {
-                    console.error(`Could not relay message to ${wasp.displayName}:`, error);
-                }
+        for (const wasp of wasps) {
+            try {
+                const user = await client.users.fetch(wasp.id);
+                await user.send(`**${player.displayName}:** ${message.content}`);
+            } catch (error) {
+                console.error(`Could not relay message to ${wasp.displayName}:`, error);
+            }
+        }
+
+        await message.reply('Message sent to your fellow Wasps! 🐝');
+        return;
+    }
+
+    const actionType = role.actionType;
+    let validTargets, target;
+
+    switch (actionType) {
+        case 'mafia_kill':
+            // Wasp kill vote
+            validTargets = alivePlayers.filter(p => ROLES[p.role].team !== 'wasp');
+            if (choice >= 1 && choice <= validTargets.length) {
+                target = validTargets[choice - 1];
+                game.nightActions[userId] = { actionType: 'mafia_kill', target: target.id };
+                await message.reply(`You voted to eliminate **${target.displayName}**. 🎯`);
+            } else {
+                await sendInvalidChoiceMessage(message, validTargets);
+            }
+            break;
+
+        case 'heal':
+            // Nurse Bee heal
+            if (choice >= 1 && choice <= alivePlayers.length) {
+                target = alivePlayers[choice - 1];
+                game.nightActions[userId] = { actionType: 'heal', target: target.id };
+                await message.reply(`You are healing **${target.displayName}** tonight. ⚕️`);
+            } else {
+                await sendInvalidChoiceMessage(message, alivePlayers);
+            }
+            break;
+
+        case 'guard':
+            // Guard Bee protect
+            if (choice >= 1 && choice <= alivePlayers.length) {
+                target = alivePlayers[choice - 1];
+                game.nightActions[userId] = { actionType: 'guard', target: target.id };
+                await message.reply(`You are guarding **${target.displayName}** tonight. 🛡️`);
+            } else {
+                await sendInvalidChoiceMessage(message, alivePlayers);
+            }
+            break;
+
+        case 'investigate_suspicious':
+        case 'investigate_exact':
+        case 'consigliere':
+            // Investigation (results handled in mafiaActions.js)
+            validTargets = alivePlayers.filter(p => p.id !== userId);
+            if (actionType === 'consigliere') {
+                validTargets = validTargets.filter(p => ROLES[p.role].team !== 'wasp');
             }
 
-            await message.reply('Message sent to your fellow Wasps! 🐝');
-            return;
-        }
+            if (choice >= 1 && choice <= validTargets.length) {
+                target = validTargets[choice - 1];
+                game.nightActions[userId] = { actionType: actionType, target: target.id };
+                await message.reply(`You are investigating **${target.displayName}** tonight. 🔍`);
+            } else {
+                await sendInvalidChoiceMessage(message, validTargets);
+            }
+            break;
 
-        // Handle Wasp vote
-        const validTargets = alivePlayers.filter(p => p.role !== 'WASP');
-        if (choice >= 1 && choice <= validTargets.length) {
-            const target = validTargets[choice - 1];
-            game.nightActions[userId] = { action: 'kill', target: target.id };
-            await message.reply(`You voted to eliminate **${target.displayName}**. 🎯`);
-        } else {
-            await message.reply('Invalid choice. Please send a valid number.');
-        }
-    } else if (player.role === 'BEEKEEPER') {
-        if (choice >= 1 && choice <= alivePlayers.length) {
-            const target = alivePlayers[choice - 1];
-            game.nightActions[userId] = { action: 'protect', target: target.id };
-            await message.reply(`You are protecting **${target.displayName}** tonight. 🛡️`);
-        } else {
-            await message.reply('Invalid choice. Please send a valid number.');
-        }
-    } else if (player.role === 'SCOUT_BEE') {
-        const validTargets = alivePlayers.filter(p => p.id !== userId);
-        if (choice >= 1 && choice <= validTargets.length) {
-            const target = validTargets[choice - 1];
-            game.nightActions[userId] = { action: 'investigate', target: target.id };
+        case 'lookout':
+            // Lookout watch
+            if (choice >= 1 && choice <= alivePlayers.length) {
+                target = alivePlayers[choice - 1];
+                game.nightActions[userId] = { actionType: 'lookout', target: target.id };
+                await message.reply(`You are watching **${target.displayName}** tonight. 👁️`);
+            } else {
+                await sendInvalidChoiceMessage(message, alivePlayers);
+            }
+            break;
 
-            const targetPlayer = game.players.find(p => p.id === target.id);
-            const isWasp = targetPlayer.role === 'WASP';
+        case 'shoot':
+            // Soldier Bee shoot
+            if (player.bullets <= 0) {
+                await message.reply('You have no bullets remaining!');
+                return;
+            }
 
-            const resultEmbed = new EmbedBuilder()
-                .setColor(isWasp ? '#8B0000' : '#00FF00')
-                .setTitle('🔍 Investigation Results')
-                .setDescription(`**${target.displayName}** is ${isWasp ? '**a WASP!** 🐝⚠️' : '**NOT a Wasp.** ✅'}`)
-                .setTimestamp();
+            validTargets = alivePlayers.filter(p => p.id !== userId);
+            if (choice >= 1 && choice <= validTargets.length) {
+                target = validTargets[choice - 1];
+                game.nightActions[userId] = { actionType: 'shoot', target: target.id };
+                await message.reply(`You are shooting **${target.displayName}** tonight. ⚔️`);
+            } else {
+                await sendInvalidChoiceMessage(message, validTargets);
+            }
+            break;
 
-            await message.reply({ embeds: [resultEmbed] });
-        } else {
-            await message.reply('Invalid choice. Please send a valid number.');
-        }
+        case 'serial_kill':
+            // Murder Hornet kill
+            validTargets = alivePlayers.filter(p => p.id !== userId);
+            if (choice >= 1 && choice <= validTargets.length) {
+                target = validTargets[choice - 1];
+                game.nightActions[userId] = { actionType: 'serial_kill', target: target.id };
+                await message.reply(`You are killing **${target.displayName}** tonight. 💀`);
+            } else {
+                await sendInvalidChoiceMessage(message, validTargets);
+            }
+            break;
+
+        case 'arsonist':
+            // Fire Ant - douse or ignite
+            if (input === 'ignite') {
+                game.nightActions[userId] = { actionType: 'arsonist', ignite: true };
+                await message.reply('You will ignite all doused players tonight! 🔥');
+            } else {
+                validTargets = alivePlayers.filter(p => p.id !== userId);
+                if (choice >= 1 && choice <= validTargets.length) {
+                    target = validTargets[choice - 1];
+                    game.nightActions[userId] = { actionType: 'arsonist', target: target.id };
+                    await message.reply(`You are dousing **${target.displayName}** tonight. 🔥`);
+                } else {
+                    await sendInvalidChoiceMessage(message, validTargets, 'Send a number to douse or "ignite" to ignite all doused players.');
+                }
+            }
+            break;
+
+        case 'vest':
+            // Butterfly vest
+            if (input === 'vest') {
+                if (player.vests > 0) {
+                    game.nightActions[userId] = { actionType: 'vest' };
+                    await message.reply(`You are using a vest tonight. You have ${player.vests - 1} vest${player.vests - 1 !== 1 ? 's' : ''} remaining. 🛡️`);
+                } else {
+                    await message.reply('You have no vests remaining!');
+                }
+            } else if (input === 'skip') {
+                await message.reply('You will not use a vest tonight.');
+            } else {
+                await message.reply('Send **"vest"** to use a vest or **"skip"** to not use one.');
+            }
+            break;
+
+        case 'witch':
+            // Spider control
+            const numbers = input.split(' ').map(n => parseInt(n)).filter(n => !isNaN(n));
+            if (numbers.length === 2) {
+                validTargets = alivePlayers.filter(p => p.id !== userId);
+                const controlTarget = numbers[0] - 1;
+                const newTarget = numbers[1] - 1;
+
+                if (controlTarget >= 0 && controlTarget < validTargets.length &&
+                    newTarget >= 0 && newTarget < alivePlayers.length) {
+                    const controlled = validTargets[controlTarget];
+                    const redirected = alivePlayers[newTarget];
+                    game.nightActions[userId] = {
+                        actionType: 'witch',
+                        target: controlled.id,
+                        newTarget: redirected.id
+                    };
+                    await message.reply(`You are controlling **${controlled.displayName}** to target **${redirected.displayName}** tonight. 🕷️`);
+                } else {
+                    await sendInvalidChoiceMessage(message, validTargets, 'Send two numbers: first is who to control, second is their new target.');
+                }
+            } else {
+                await sendInvalidChoiceMessage(message, alivePlayers.filter(p => p.id !== userId), 'Send two numbers separated by a space: first is who to control, second is their new target.');
+            }
+            break;
+
+        case 'frame':
+            // Deceiver Wasp frame
+            validTargets = alivePlayers.filter(p => ROLES[p.role].team !== 'wasp');
+            if (choice >= 1 && choice <= validTargets.length) {
+                target = validTargets[choice - 1];
+                game.nightActions[userId] = { actionType: 'frame', target: target.id };
+
+                // Add to framed players set
+                if (!game.framedPlayers) {
+                    game.framedPlayers = new Set();
+                }
+                game.framedPlayers.add(target.id);
+
+                await message.reply(`You are framing **${target.displayName}** tonight. 🎭`);
+            } else {
+                await sendInvalidChoiceMessage(message, validTargets);
+            }
+            break;
+
+        case 'jail':
+            // Jailer - jail and optionally execute
+            const parts = input.split(' ');
+            const jailChoice = parseInt(parts[0]);
+            const shouldExecute = parts.length > 1 && parts[1] === 'exe';
+
+            validTargets = alivePlayers.filter(p => p.id !== userId);
+            if (jailChoice >= 1 && jailChoice <= validTargets.length) {
+                target = validTargets[jailChoice - 1];
+                game.nightActions[userId] = {
+                    actionType: 'jail',
+                    target: target.id,
+                    execute: shouldExecute
+                };
+
+                if (shouldExecute) {
+                    await message.reply(`You are jailing and executing **${target.displayName}** tonight. ⛓️⚡`);
+                } else {
+                    await message.reply(`You are jailing **${target.displayName}** tonight. ⛓️`);
+                }
+            } else {
+                await sendInvalidChoiceMessage(message, validTargets, 'Send a number to jail, or "number exe" to jail and execute.');
+            }
+            break;
+
+        case 'roleblock':
+            // Escort/Consort - roleblock
+            validTargets = alivePlayers.filter(p => p.id !== userId);
+            if (choice >= 1 && choice <= validTargets.length) {
+                target = validTargets[choice - 1];
+                game.nightActions[userId] = { actionType: 'roleblock', target: target.id };
+                await message.reply(`You are roleblocking **${target.displayName}** tonight. 💃`);
+            } else {
+                await sendInvalidChoiceMessage(message, validTargets);
+            }
+            break;
+
+        case 'seance':
+            // Medium - speak with dead
+            const deadPlayers = game.players.filter(p => !p.alive);
+            if (choice >= 1 && choice <= deadPlayers.length) {
+                target = deadPlayers[choice - 1];
+                game.nightActions[userId] = { actionType: 'seance', target: target.id };
+                await message.reply(`You are speaking with **${target.displayName}** tonight. 👻`);
+            } else {
+                await sendInvalidChoiceMessage(message, deadPlayers);
+            }
+            break;
+
+        case 'alert':
+            // Veteran - go on alert
+            if (input === 'alert') {
+                if (player.alerts > 0) {
+                    game.nightActions[userId] = { actionType: 'alert' };
+                    await message.reply(`You are going on alert tonight. You will kill all visitors! 🎖️`);
+                } else {
+                    await message.reply('You have no alerts remaining!');
+                }
+            } else if (input === 'skip') {
+                await message.reply('You will stay home tonight.');
+            } else {
+                await message.reply('Send **"alert"** to go on alert or **"skip"** to stay home.');
+            }
+            break;
+
+        case 'clean':
+            // Janitor - clean a body
+            if (player.cleans <= 0) {
+                await message.reply('You have no cleans remaining!');
+                return;
+            }
+
+            validTargets = alivePlayers.filter(p => ROLES[p.role].team !== 'wasp');
+            if (choice >= 1 && choice <= validTargets.length) {
+                target = validTargets[choice - 1];
+                game.nightActions[userId] = { actionType: 'clean', target: target.id };
+                await message.reply(`You will clean **${target.displayName}** if they die tonight. 🧹`);
+            } else {
+                await sendInvalidChoiceMessage(message, validTargets);
+            }
+            break;
+
+        case 'disguise':
+            // Disguiser - disguise as dead
+            if (player.disguises <= 0) {
+                await message.reply('You have no disguises remaining!');
+                return;
+            }
+
+            const deadForDisguise = game.players.filter(p => !p.alive);
+            if (choice >= 1 && choice <= deadForDisguise.length) {
+                target = deadForDisguise[choice - 1];
+                game.nightActions[userId] = { actionType: 'disguise', target: target.id };
+                await message.reply(`You are disguising as **${target.displayName}** tonight. 🎪`);
+            } else {
+                await sendInvalidChoiceMessage(message, deadForDisguise);
+            }
+            break;
+
+        case 'remember':
+            // Amnesiac - remember a role
+            if (player.hasRemembered) {
+                await message.reply('You have already remembered your role!');
+                return;
+            }
+
+            const deadForRemember = game.players.filter(p => !p.alive);
+            if (choice >= 1 && choice <= deadForRemember.length) {
+                target = deadForRemember[choice - 1];
+                game.nightActions[userId] = { actionType: 'remember', target: target.id };
+                await message.reply(`You will remember **${target.displayName}'s** role tonight. 🪲`);
+            } else {
+                await sendInvalidChoiceMessage(message, deadForRemember);
+            }
+            break;
+
+        default:
+            // Unknown action type or no night action
+            break;
     }
+}
+
+// Helper function to send invalid choice messages
+async function sendInvalidChoiceMessage(message, validTargets, customMessage = null) {
+    const targets = validTargets
+        .map((p, i) => `${i + 1}. ${p.displayName}`)
+        .join('\n');
+
+    const errorMessage = customMessage || `Invalid choice. Please send a valid number (1-${validTargets.length}):`;
+    await message.reply(`${errorMessage}\n\n${targets}`);
 }
 
 // End night phase
 async function endNightPhase(game, client) {
     if (game.phase !== 'night') return;
 
-    const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
-
-    // Process night actions
-    const killVotes = {};
-    let protectedPlayer = null;
-
-    // Count Wasp votes
-    Object.entries(game.nightActions).forEach(([userId, action]) => {
-        if (action.action === 'kill') {
-            killVotes[action.target] = (killVotes[action.target] || 0) + 1;
-        } else if (action.action === 'protect') {
-            protectedPlayer = action.target;
-        }
-    });
-
-    // Determine who was killed
-    let killedPlayer = null;
-    if (Object.keys(killVotes).length > 0) {
-        // Find player with most votes
-        const maxVotes = Math.max(...Object.values(killVotes));
-        const topTargets = Object.keys(killVotes).filter(id => killVotes[id] === maxVotes);
-
-        // If tie, random selection
-        const targetId = topTargets[Math.floor(Math.random() * topTargets.length)];
-
-        // Check if protected
-        if (targetId !== protectedPlayer) {
-            killedPlayer = game.players.find(p => p.id === targetId);
-            if (killedPlayer) {
-                killedPlayer.alive = false;
-            }
-        }
+    // Clear warning timer if it exists
+    if (game.warningTimer) {
+        clearTimeout(game.warningTimer);
     }
+
+    // Use cached channel
+    if (!game.cachedChannel) {
+        game.cachedChannel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+    }
+    const channel = game.cachedChannel;
+
+    // Process all night actions using the new system
+    const deaths = await processNightActions(game, client);
 
     // Announce results
     const dawnEmbed = new EmbedBuilder()
@@ -461,13 +1077,21 @@ async function endNightPhase(game, client) {
         .setTitle('☀️ Dawn Breaks Over the Hive')
         .setTimestamp();
 
-    if (killedPlayer) {
-        dawnEmbed.setDescription(`The bees wake to find **${killedPlayer.displayName}** has been eliminated during the night! 💀\n\n*Their role will be revealed at the end of the game.*`);
+    if (deaths.length > 0) {
+        const deathMessages = deaths.map(death => {
+            const victim = game.players.find(p => p.id === death.victimId);
+            return `**${victim.displayName}**`;
+        });
+
+        dawnEmbed.setDescription(`The bees wake to find ${deathMessages.join(', ')} ${deaths.length === 1 ? 'has' : 'have'} been eliminated during the night! 💀\n\n*Their role${deaths.length === 1 ? '' : 's'} will be revealed at the end of the game.*`);
     } else {
-        dawnEmbed.setDescription('The bees wake to find everyone safe! The Beekeeper must have protected someone. 🛡️');
+        dawnEmbed.setDescription('The bees wake to find everyone safe! The night was quiet... 🌙');
     }
 
     await channel.send({ embeds: [dawnEmbed] });
+
+    // Clear night data after processing
+    clearNightData(game);
 
     // Check win condition
     if (checkWinCondition(game, client)) {
@@ -476,12 +1100,16 @@ async function endNightPhase(game, client) {
 
     // Start day phase
     game.phase = 'day';
-    game.phaseEndTime = Date.now() + DAY_DISCUSSION_DURATION;
+    const dayDuration = getPhaseDuration(game, 'day');
+    game.phaseEndTime = Date.now() + dayDuration;
+
+    // Unmute voice channel and unlock text channel
+    await muteVoiceAndLockText(game, client, false);
 
     const dayEmbed = new EmbedBuilder()
         .setColor('#FFD700')
         .setTitle('☀️ Day Discussion Phase')
-        .setDescription(`Discuss amongst yourselves and try to figure out who the Wasps are!\n\nVoting will begin in ${DAY_DISCUSSION_DURATION / 1000} seconds.`)
+        .setDescription(`Discuss amongst yourselves and try to figure out who the Wasps are!\n\n🔊 Voice and text chat are now open!\n\nVoting will begin in ${dayDuration / 1000} seconds.`)
         .setTimestamp();
 
     await channel.send({ embeds: [dayEmbed] });
@@ -491,7 +1119,7 @@ async function endNightPhase(game, client) {
     // Set timer for voting phase
     game.phaseTimer = setTimeout(async () => {
         await startVotingPhase(game, client);
-    }, DAY_DISCUSSION_DURATION);
+    }, dayDuration);
 }
 
 // Start voting phase
@@ -499,10 +1127,16 @@ async function startVotingPhase(game, client) {
     if (game.phase !== 'day') return;
 
     game.phase = 'voting';
-    game.phaseEndTime = Date.now() + VOTING_DURATION;
+    const votingDuration = getPhaseDuration(game, 'voting');
+    game.phaseEndTime = Date.now() + votingDuration;
     game.votes = {};
+    game.lastActivityTime = Date.now();
 
-    const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+    // Use cached channel
+    if (!game.cachedChannel) {
+        game.cachedChannel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+    }
+    const channel = game.cachedChannel;
 
     const votingEmbed = new EmbedBuilder()
         .setColor('#FF0000')
@@ -517,20 +1151,27 @@ async function startVotingPhase(game, client) {
     // Set timer for vote results
     game.phaseTimer = setTimeout(async () => {
         await endVotingPhase(game, client);
-    }, VOTING_DURATION);
+    }, votingDuration);
 }
 
 // End voting phase
 async function endVotingPhase(game, client) {
     if (game.phase !== 'voting') return;
 
-    const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+    // Use cached channel
+    if (!game.cachedChannel) {
+        game.cachedChannel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+    }
+    const channel = game.cachedChannel;
 
-    // Tally votes
+    // Tally votes with Queen Bee bonus
     const voteCounts = {};
-    Object.values(game.votes).forEach(targetId => {
+    Object.entries(game.votes).forEach(([voterId, targetId]) => {
         if (targetId !== 'skip') {
-            voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+            const voter = game.players.find(p => p.id === voterId);
+            // Check if voter is a revealed Queen Bee (gets 3 bonus votes for total of 4)
+            const voteWeight = (voter && voter.role === 'QUEEN_BEE' && voter.hasRevealed) ? 4 : 1;
+            voteCounts[targetId] = (voteCounts[targetId] || 0) + voteWeight;
         }
     });
 
@@ -580,6 +1221,78 @@ async function endVotingPhase(game, client) {
 
     await channel.send({ embeds: [resultsEmbed] });
 
+    // Handle Clown Beetle (Jester) haunt if they were lynched
+    if (eliminatedPlayer && eliminatedPlayer.role === 'CLOWN_BEETLE') {
+        // Get all players who voted for the Clown Beetle
+        const guiltyVoters = Object.entries(game.votes)
+            .filter(([voterId, targetId]) => targetId === eliminatedPlayer.id)
+            .map(([voterId]) => game.players.find(p => p.id === voterId))
+            .filter(p => p && p.alive);
+
+        if (guiltyVoters.length > 0) {
+            // Send haunt selection DM
+            try {
+                const user = await client.users.fetch(eliminatedPlayer.id);
+                const targets = guiltyVoters
+                    .map((p, i) => `${i + 1}. ${p.displayName}`)
+                    .join('\n');
+
+                const hauntEmbed = new EmbedBuilder()
+                    .setColor('#FF1493')
+                    .setTitle('🤡 Clown Beetle Haunt! 🤡')
+                    .setDescription(`You were successfully lynched! Now choose one guilty voter to haunt!\n\n${targets}\n\nSend me the **number** of who you want to haunt. They will die with an unstoppable attack!`)
+                    .setFooter({ text: 'You have 30 seconds to choose!' });
+
+                await user.send({ embeds: [hauntEmbed] });
+
+                // Store haunt data in game
+                game.pendingHaunt = {
+                    jesterId: eliminatedPlayer.id,
+                    validTargets: guiltyVoters.map(p => p.id),
+                    timestamp: Date.now()
+                };
+
+                // Set 30 second timeout for haunt selection
+                setTimeout(async () => {
+                    if (game.pendingHaunt && game.pendingHaunt.jesterId === eliminatedPlayer.id) {
+                        // No haunt selected, pick random
+                        const randomTarget = guiltyVoters[Math.floor(Math.random() * guiltyVoters.length)];
+                        randomTarget.alive = false;
+
+                        await channel.send(`👻 **${eliminatedPlayer.displayName}** haunted **${randomTarget.displayName}** from beyond the grave! 💀`);
+
+                        game.pendingHaunt = null;
+
+                        // Check win condition after haunt
+                        if (!checkWinCondition(game, client)) {
+                            await startNightPhase(game, client);
+                        }
+                    }
+                }, 30000);
+
+                // Announce Jester win
+                await channel.send(`🤡 **${eliminatedPlayer.displayName}** was the Clown Beetle (Jester)! They win and will haunt one of their voters!`);
+
+                // End game for Jester (they've won)
+                endGame(game, client, 'jester', eliminatedPlayer);
+                return;
+            } catch (error) {
+                console.error('Could not send haunt DM:', error);
+                await channel.send(`🤡 **${eliminatedPlayer.displayName}** was the Clown Beetle (Jester)! They win, but could not be contacted to choose a haunt target.`);
+                endGame(game, client, 'jester', eliminatedPlayer);
+                return;
+            }
+        } else {
+            // No guilty voters (shouldn't happen in normal gameplay)
+            await channel.send(`🤡 **${eliminatedPlayer.displayName}** was the Clown Beetle (Jester)! They win!`);
+            endGame(game, client, 'jester', eliminatedPlayer);
+            return;
+        }
+    }
+
+    // Clear votes after processing to prevent stale data
+    clearVotes(game);
+
     // Check win condition
     if (checkWinCondition(game, client)) {
         return;
@@ -589,18 +1302,12 @@ async function endVotingPhase(game, client) {
     await startNightPhase(game, client);
 }
 
-// Check win condition
+// Check win condition wrapper (uses imported checkWinConditions)
 function checkWinCondition(game, client) {
-    const aliveWasps = game.players.filter(p => p.alive && p.role === 'WASP').length;
-    const aliveBees = game.players.filter(p => p.alive && p.role !== 'WASP').length;
+    const winInfo = checkWinConditions(game);
 
-    if (aliveWasps === 0) {
-        endGame(game, client, 'bees');
-        return true;
-    }
-
-    if (aliveWasps >= aliveBees) {
-        endGame(game, client, 'wasps');
+    if (winInfo) {
+        endGame(game, client, winInfo.type, winInfo.winner);
         return true;
     }
 
@@ -608,43 +1315,93 @@ function checkWinCondition(game, client) {
 }
 
 // End game
-async function endGame(game, client, winner) {
+async function endGame(game, client, winnerType, specificWinner = null) {
     // Clear timers
     if (game.phaseTimer) {
         clearTimeout(game.phaseTimer);
     }
+    if (game.warningTimer) {
+        clearTimeout(game.warningTimer);
+    }
 
-    const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+    // Use cached channel
+    if (!game.cachedChannel) {
+        game.cachedChannel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+    }
+    const channel = game.cachedChannel;
+
+    // Determine win message
+    let title, description, color;
+    if (winnerType === 'bees') {
+        title = '🐝 Bees Win! 🐝';
+        description = 'The Bees have successfully eliminated all threats! The hive is safe!';
+        color = '#FFD700';
+    } else if (winnerType === 'wasps') {
+        title = '🐝 Wasps Win! 🐝';
+        description = 'The Wasps have taken over! The hive has fallen!';
+        color = '#8B0000';
+    } else if (winnerType === 'neutral_killer') {
+        title = `💀 ${specificWinner ? ROLES[specificWinner.role].name : 'Neutral'} Wins! 💀`;
+        description = 'All opposition has been eliminated! Victory through chaos!';
+        color = '#800080';
+    } else if (winnerType === 'jester') {
+        title = '🤡 Jester Wins! 🤡';
+        description = `${specificWinner.displayName} the Clown Beetle fooled you all!`;
+        color = '#FF1493';
+    } else if (winnerType === 'executioner') {
+        title = '🎯 Executioner Wins! 🎯';
+        description = `${specificWinner.displayName} successfully eliminated their target!`;
+        color = '#A9A9A9';
+    }
 
     // Create results embed
     const resultsEmbed = new EmbedBuilder()
-        .setColor(winner === 'bees' ? '#FFD700' : '#8B0000')
-        .setTitle(`🎮 Game Over - ${winner === 'bees' ? 'Bees Win!' : 'Wasps Win!'} 🎮`)
-        .setDescription(winner === 'bees' ?
-            '🐝 The bees have successfully eliminated all the Wasps! The hive is safe!' :
-            '🐝 The Wasps have taken over the hive! The bees have been defeated!')
+        .setColor(color)
+        .setTitle(`🎮 Game Over - ${title} 🎮`)
+        .setDescription(description)
         .setTimestamp();
 
-    // Show all roles
-    const roleReveal = game.players.map(p => {
+    // Show all roles grouped by team
+    const beeRoles = [];
+    const waspRoles = [];
+    const neutralRoles = [];
+
+    game.players.forEach(p => {
         const role = ROLES[p.role];
-        return `${role.emoji} ${p.displayName} - **${role.name}** ${p.alive ? '✅' : '💀'}`;
-    }).join('\n');
-
-    resultsEmbed.addFields({
-        name: 'Role Reveals',
-        value: roleReveal,
-        inline: false
-    });
-
-    // Award BobbyBucks to winners
-    const winners = game.players.filter(p => {
-        if (winner === 'bees') {
-            return p.role !== 'WASP';
+        const roleText = `${role.emoji} ${p.displayName} - **${role.name}** ${p.alive ? '✅' : '💀'}`;
+        if (role.team === 'bee') {
+            beeRoles.push(roleText);
+        } else if (role.team === 'wasp') {
+            waspRoles.push(roleText);
         } else {
-            return p.role === 'WASP';
+            neutralRoles.push(roleText);
         }
     });
+
+    if (beeRoles.length > 0) {
+        resultsEmbed.addFields({
+            name: '🐝 Bee Team',
+            value: beeRoles.join('\n'),
+            inline: false
+        });
+    }
+    if (waspRoles.length > 0) {
+        resultsEmbed.addFields({
+            name: '🐝 Wasp Team',
+            value: waspRoles.join('\n'),
+            inline: false
+        });
+    }
+    if (neutralRoles.length > 0) {
+        resultsEmbed.addFields({
+            name: '🦋 Neutral Roles',
+            value: neutralRoles.join('\n'),
+            inline: false
+        });
+    }
+
+    // Award BobbyBucks to winners
+    const winners = determineWinners(game, winnerType, specificWinner);
 
     for (const player of winners) {
         try {
@@ -692,13 +1449,63 @@ async function endGame(game, client, winner) {
 
     await channel.send({ embeds: [resultsEmbed] });
 
-    // Clean up
-    game.players.forEach(p => playerGameMap.delete(p.id));
-    activeGames.delete(game.id);
+    // Unmute voice and unlock text channel before ending game
+    await muteVoiceAndLockText(game, client, false);
+
+    // Clean up game
+    deleteGame(game.id);
+}
+
+// Clean up inactive games
+async function cleanupInactiveGames(client) {
+    const now = Date.now();
+    const gamesToDelete = [];
+    const activeGames = getAllGames();
+
+    for (const [gameId, game] of activeGames.entries()) {
+        if (now - game.lastActivityTime > GAME_INACTIVITY_TIMEOUT) {
+            gamesToDelete.push(gameId);
+        }
+    }
+
+    for (const gameId of gamesToDelete) {
+        const game = getGame(gameId);
+        if (game) {
+            console.log(`Cleaning up inactive game ${gameId} (inactive for ${Math.floor((now - game.lastActivityTime) / 60000)} minutes)`);
+
+            // Clear timers
+            if (game.phaseTimer) {
+                clearTimeout(game.phaseTimer);
+            }
+            if (game.warningTimer) {
+                clearTimeout(game.warningTimer);
+            }
+
+            // Unmute voice and unlock text channel before cleanup
+            try {
+                await muteVoiceAndLockText(game, client, false);
+            } catch (error) {
+                console.error('Error unmuting/unlocking during cleanup:', error);
+            }
+
+            // Delete game (also cleans up player mappings)
+            deleteGame(gameId);
+        }
+    }
+
+    return gamesToDelete.length;
 }
 
 module.exports = (client) => {
     console.log('🐝 Mafia Handler loaded!');
+
+    // Set up periodic cleanup of inactive games (every 10 minutes)
+    setInterval(async () => {
+        const cleaned = await cleanupInactiveGames(client);
+        if (cleaned > 0) {
+            console.log(`🧹 Cleaned up ${cleaned} inactive mafia game(s)`);
+        }
+    }, 600000); // 10 minutes
 
     // Handle !createmafia command
     client.on('messageCreate', async (message) => {
@@ -712,7 +1519,7 @@ module.exports = (client) => {
 
         if (command === '!createmafia') {
             // Check if already in a game
-            if (playerGameMap.has(message.author.id)) {
+            if (getGameByPlayer(message.author.id)) {
                 return message.reply('You are already in an active game!');
             }
 
@@ -732,12 +1539,15 @@ module.exports = (client) => {
             }
 
             // Check if any players are already in a game
-            const playersInGame = humanMembers.filter(m => playerGameMap.has(m.user.id));
+            const playersInGame = humanMembers.filter(m => getGameByPlayer(m.user.id));
             if (playersInGame.length > 0) {
                 return message.reply(`Some players are already in an active game: ${playersInGame.map(m => m.displayName).join(', ')}`);
             }
 
-            // Create game
+            // Check for random mode
+            const randomMode = args[1] && args[1].toLowerCase() === 'random';
+
+            // Create game ID and players
             const gameId = `mafia_${Date.now()}`;
             const players = humanMembers.map(m => ({
                 id: m.user.id,
@@ -747,35 +1557,35 @@ module.exports = (client) => {
                 role: null
             }));
 
-            const game = {
-                id: gameId,
-                channelId: MAFIA_TEXT_CHANNEL_ID,
-                messageId: null,
-                players: players,
-                phase: 'setup',
-                phaseEndTime: null,
-                nightActions: {},
-                votes: {},
-                phaseTimer: null
-            };
-
             // Assign roles
-            const roleDistribution = getRoleDistribution(players.length);
+            const roleDistribution = getRoleDistribution(players.length, randomMode);
             const shuffledRoles = shuffleArray(roleDistribution);
 
             for (let i = 0; i < players.length; i++) {
-                players[i].role = shuffledRoles[i];
+                initializePlayerRole(players[i], shuffledRoles[i]);
             }
 
-            activeGames.set(gameId, game);
-            players.forEach(p => playerGameMap.set(p.id, gameId));
+            // Assign Executioner targets
+            players.filter(p => p.role === 'BOUNTY_HUNTER').forEach(exe => {
+                const validTargets = players.filter(p =>
+                    p.id !== exe.id && ROLES[p.role].team === 'bee' // Target must be a bee
+                );
+                if (validTargets.length > 0) {
+                    exe.target = validTargets[Math.floor(Math.random() * validTargets.length)].id;
+                }
+            });
+
+            // Create game using game state module
+            const game = createGame(gameId, players, message.author.id, MAFIA_TEXT_CHANNEL_ID);
 
             // Send initial message
             const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+            game.cachedChannel = channel; // Cache the channel for future use
+
             const setupEmbed = new EmbedBuilder()
                 .setColor('#FFD700')
-                .setTitle('🐝 Bee Mafia Game Starting! 🐝')
-                .setDescription(`A game has been created with **${players.length} players**!\n\nRoles are being assigned... Check your DMs!`)
+                .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}🐝`)
+                .setDescription(`A game has been created with **${players.length} players**!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}\n\nRoles are being assigned... Check your DMs!`)
                 .addFields({
                     name: 'Players',
                     value: players.map(p => `• ${p.displayName}`).join('\n'),
@@ -787,24 +1597,407 @@ module.exports = (client) => {
             game.messageId = gameMessage.id;
 
             // Send role DMs
-            await sendRoleDMs(game, client);
+            const dmFailures = await sendRoleDMs(game, client);
 
-            // Wait 30 seconds then start night phase
-            await channel.send(`The night phase will begin in ${SETUP_DELAY / 1000} seconds...`);
+            // Notify organizer if any DMs failed
+            if (dmFailures.length > 0) {
+                try {
+                    const organizer = await client.users.fetch(game.organizerId);
+                    await organizer.send(`⚠️ **Warning:** Could not send role DMs to the following players: ${dmFailures.join(', ')}. They may have DMs disabled. Consider restarting the game or asking them to enable DMs.`);
+                } catch (error) {
+                    console.error('Could not notify organizer about DM failures:', error);
+                    await channel.send(`⚠️ <@${game.organizerId}> Some players could not receive their role DMs: ${dmFailures.join(', ')}. They may have DMs disabled.`);
+                }
+            }
+
+            // Wait then start night phase
+            const setupDelay = getPhaseDuration(game, 'setup');
+            await channel.send(`The night phase will begin in ${setupDelay / 1000} seconds...`);
 
             setTimeout(async () => {
                 await startNightPhase(game, client);
-            }, SETUP_DELAY);
+            }, setupDelay);
         }
 
-        // Handle DMs for night actions
+        // Handle !createmafiadebug command
+        if (command === '!createmafiadebug') {
+            // Check if already in a game
+            if (getGameByPlayer(message.author.id)) {
+                return message.reply('You are already in an active game!');
+            }
+
+            // Check for random mode
+            const randomMode = args[1] && args[1].toLowerCase() === 'random';
+
+            // Create debug game with fake players
+            const gameId = `mafia_debug_${Date.now()}`;
+            const realPlayer = {
+                id: message.author.id,
+                username: message.author.username,
+                displayName: message.member?.displayName || message.author.username,
+                alive: true,
+                role: null
+            };
+
+            // Create 5 fake bot players
+            const fakePlayers = [
+                { id: 'bot1', username: 'TestBot1', displayName: 'Test Bot 1', alive: true, role: null },
+                { id: 'bot2', username: 'TestBot2', displayName: 'Test Bot 2', alive: true, role: null },
+                { id: 'bot3', username: 'TestBot3', displayName: 'Test Bot 3', alive: true, role: null },
+                { id: 'bot4', username: 'TestBot4', displayName: 'Test Bot 4', alive: true, role: null },
+                { id: 'bot5', username: 'TestBot5', displayName: 'Test Bot 5', alive: true, role: null }
+            ];
+
+            const players = [realPlayer, ...fakePlayers];
+
+            // Assign roles
+            const roleDistribution = getRoleDistribution(players.length, randomMode);
+            const shuffledRoles = shuffleArray(roleDistribution);
+
+            for (let i = 0; i < players.length; i++) {
+                initializePlayerRole(players[i], shuffledRoles[i]);
+            }
+
+            // Assign Executioner targets
+            players.filter(p => p.role === 'BOUNTY_HUNTER').forEach(exe => {
+                const validTargets = players.filter(p =>
+                    p.id !== exe.id && ROLES[p.role].team === 'bee'
+                );
+                if (validTargets.length > 0) {
+                    exe.target = validTargets[Math.floor(Math.random() * validTargets.length)].id;
+                }
+            });
+
+            // Create game using game state module
+            const game = createGame(gameId, players, message.author.id, MAFIA_TEXT_CHANNEL_ID);
+            game.debugMode = true; // Set debug flag
+
+            // Send initial message
+            const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+            game.cachedChannel = channel;
+
+            const setupEmbed = new EmbedBuilder()
+                .setColor('#FFA500')
+                .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}🐝 [DEBUG MODE]`)
+                .setDescription(`**Debug game** created with **${players.length} players** (1 real, 5 bots)!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}\n\nRoles are being assigned... Check your DMs!\n\n**Debug Commands:**\n\`!mafiadebugskip\` - Skip to next phase\n\`!mafiadebugend\` - End the game`)
+                .addFields({
+                    name: 'Players',
+                    value: players.map(p => `• ${p.displayName}`).join('\n'),
+                    inline: false
+                })
+                .setTimestamp();
+
+            const gameMessage = await channel.send({ embeds: [setupEmbed] });
+            game.messageId = gameMessage.id;
+
+            // Send role DM (only to real player)
+            try {
+                const user = await client.users.fetch(realPlayer.id);
+                const role = ROLES[realPlayer.role];
+
+                const roleEmbed = new EmbedBuilder()
+                    .setColor(role.team === 'bee' ? '#FFD700' : role.team === 'wasp' ? '#8B0000' : '#808080')
+                    .setTitle(`${role.emoji} Your Role: ${role.name}`)
+                    .setDescription(role.description)
+                    .addFields(
+                        { name: 'Abilities', value: role.abilities.join('\n'), inline: false },
+                        { name: 'Win Condition', value: role.winCondition, inline: false }
+                    )
+                    .setFooter({ text: 'The game will begin shortly!' })
+                    .setTimestamp();
+
+                await user.send({ embeds: [roleEmbed] });
+            } catch (error) {
+                console.error('Could not send debug role DM:', error);
+                await channel.send(`⚠️ <@${realPlayer.id}> Could not send you a DM! Please enable DMs from server members.`);
+            }
+
+            // Show all bot roles in the channel for debugging
+            const botRoles = fakePlayers.map(p => `• ${p.displayName}: ${ROLES[p.role].name} ${ROLES[p.role].emoji}`).join('\n');
+            await channel.send(`**Bot Roles (for debugging):**\n${botRoles}`);
+
+            // Wait then start night phase
+            const setupDelay = getPhaseDuration(game, 'setup');
+            await channel.send(`The night phase will begin in ${setupDelay / 1000} seconds...`);
+
+            setTimeout(async () => {
+                await startNightPhase(game, client);
+            }, setupDelay);
+        }
+
+        // Handle !mafiadebugskip command
+        if (command === '!mafiadebugskip') {
+            const game = getGameByPlayer(message.author.id);
+            if (!game) {
+                return message.reply('You are not in an active game!');
+            }
+            if (!game.debugMode) {
+                return message.reply('This command only works in debug mode!');
+            }
+            if (game.organizerId !== message.author.id) {
+                return message.reply('Only the game organizer can skip phases!');
+            }
+
+            // Clear existing timers
+            if (game.phaseTimer) {
+                clearTimeout(game.phaseTimer);
+            }
+            if (game.warningTimer) {
+                clearTimeout(game.warningTimer);
+            }
+
+            const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+            await channel.send('⏭️ **Debug:** Skipping to next phase...');
+
+            // Trigger phase transition
+            if (game.phase === 'night') {
+                await endNightPhase(game, client);
+            } else if (game.phase === 'day') {
+                await startVotingPhase(game, client);
+            } else if (game.phase === 'voting') {
+                await endVotingPhase(game, client);
+            }
+        }
+
+        // Handle !mafiadebugend command
+        if (command === '!mafiadebugend') {
+            const game = getGameByPlayer(message.author.id);
+            if (!game) {
+                return message.reply('You are not in an active game!');
+            }
+            if (!game.debugMode) {
+                return message.reply('This command only works in debug mode!');
+            }
+            if (game.organizerId !== message.author.id) {
+                return message.reply('Only the game organizer can end the game!');
+            }
+
+            const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+            await channel.send('🛑 **Debug game ended by organizer.**');
+
+            // Unmute and unlock
+            await muteVoiceAndLockText(game, client, false);
+
+            // Clean up
+            deleteGame(game.id);
+        }
+
+        // Handle !mafiaroles command
+        if (command === '!mafiaroles' || command === '!roles') {
+            const filter = args[1]?.toLowerCase();
+
+            // Validate filter
+            if (filter && !['bee', 'wasp', 'neutral', 'all'].includes(filter)) {
+                return message.reply('Invalid filter! Use: `!mafiaroles [bee|wasp|neutral|all]`');
+            }
+
+            const showBee = !filter || filter === 'bee' || filter === 'all';
+            const showWasp = !filter || filter === 'wasp' || filter === 'all';
+            const showNeutral = !filter || filter === 'neutral' || filter === 'all';
+
+            // BEE ROLES EMBED
+            if (showBee) {
+                const beeRoles = Object.entries(ROLES).filter(([key, role]) => role.team === 'bee');
+                const beeEmbed = new EmbedBuilder()
+                    .setColor('#FFD700')
+                    .setTitle('🐝 BEE ROLES (Town)')
+                    .setDescription('Eliminate all Wasps and harmful Neutrals to win!')
+                    .setTimestamp();
+
+                beeRoles.forEach(([key, role]) => {
+                    const nightActionText = role.nightAction ? ' 🌙' : '';
+                    const abilities = role.abilities.slice(0, 2).join('\n• '); // First 2 abilities
+                    beeEmbed.addFields({
+                        name: `${role.emoji} ${role.name}${nightActionText}`,
+                        value: `• ${abilities}`,
+                        inline: false
+                    });
+                });
+
+                await message.reply({ embeds: [beeEmbed] });
+            }
+
+            // WASP ROLES EMBED
+            if (showWasp) {
+                const waspRoles = Object.entries(ROLES).filter(([key, role]) => role.team === 'wasp');
+                const waspEmbed = new EmbedBuilder()
+                    .setColor('#8B0000')
+                    .setTitle('🐝 WASP ROLES (Mafia)')
+                    .setDescription('Equal or outnumber all other players to win!')
+                    .setTimestamp();
+
+                waspRoles.forEach(([key, role]) => {
+                    const nightActionText = role.nightAction ? ' 🌙' : '';
+                    const abilities = role.abilities.slice(0, 2).join('\n• '); // First 2 abilities
+                    waspEmbed.addFields({
+                        name: `${role.emoji} ${role.name}${nightActionText}`,
+                        value: `• ${abilities}`,
+                        inline: false
+                    });
+                });
+
+                await message.reply({ embeds: [waspEmbed] });
+            }
+
+            // NEUTRAL ROLES EMBED
+            if (showNeutral) {
+                const neutralRoles = Object.entries(ROLES).filter(([key, role]) => role.team === 'neutral');
+
+                // Group by subteam
+                const killingRoles = neutralRoles.filter(([key, role]) => role.subteam === 'killing');
+                const evilRoles = neutralRoles.filter(([key, role]) => role.subteam === 'evil');
+                const benignRoles = neutralRoles.filter(([key, role]) => role.subteam === 'benign');
+
+                const neutralEmbed = new EmbedBuilder()
+                    .setColor('#808080')
+                    .setTitle('🦋 NEUTRAL ROLES')
+                    .setDescription('Each neutral role has unique win conditions!')
+                    .setTimestamp();
+
+                // Neutral Killing
+                if (killingRoles.length > 0) {
+                    neutralEmbed.addFields({
+                        name: '💀 Neutral Killing',
+                        value: killingRoles.map(([key, role]) => {
+                            const nightActionText = role.nightAction ? ' 🌙' : '';
+                            return `${role.emoji} **${role.name}${nightActionText}**\n• ${role.abilities[0]}`;
+                        }).join('\n\n'),
+                        inline: false
+                    });
+                }
+
+                // Neutral Evil
+                if (evilRoles.length > 0) {
+                    neutralEmbed.addFields({
+                        name: '😈 Neutral Evil',
+                        value: evilRoles.map(([key, role]) => {
+                            const nightActionText = role.nightAction ? ' 🌙' : '';
+                            return `${role.emoji} **${role.name}${nightActionText}**\n• ${role.abilities[0]}`;
+                        }).join('\n\n'),
+                        inline: false
+                    });
+                }
+
+                // Neutral Benign
+                if (benignRoles.length > 0) {
+                    neutralEmbed.addFields({
+                        name: '🕊️ Neutral Benign',
+                        value: benignRoles.map(([key, role]) => {
+                            const nightActionText = role.nightAction ? ' 🌙' : '';
+                            return `${role.emoji} **${role.name}${nightActionText}**\n• ${role.abilities[0]}`;
+                        }).join('\n\n'),
+                        inline: false
+                    });
+                }
+
+                await message.reply({ embeds: [neutralEmbed] });
+            }
+
+            // Footer message
+            if (!filter || filter === 'all') {
+                await message.channel.send('💡 **Tip:** Use `!mafiaroles [bee|wasp|neutral]` to view specific factions\n🌙 = Has night action');
+            }
+        }
+
+        // Handle !reveal command (Queen Bee during day phase)
+        if (command === '!reveal') {
+            const game = getGameByPlayer(message.author.id);
+            if (!game) {
+                return message.reply('You are not in an active game!');
+            }
+
+            const player = game.players.find(p => p.id === message.author.id);
+            if (!player || !player.alive) {
+                return message.reply('You must be alive to use this command!');
+            }
+
+            if (player.role !== 'QUEEN_BEE') {
+                return message.reply('Only the Queen Bee can reveal!');
+            }
+
+            if (game.phase !== 'day' && game.phase !== 'voting') {
+                return message.reply('You can only reveal during the day or voting phase!');
+            }
+
+            if (player.hasRevealed) {
+                return message.reply('You have already revealed yourself!');
+            }
+
+            // Mark as revealed
+            player.hasRevealed = true;
+
+            // Announce in channel
+            const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+            const revealEmbed = new EmbedBuilder()
+                .setColor('#FFD700')
+                .setTitle('👑 ROYAL REVEAL! 👑')
+                .setDescription(`**${player.displayName}** has revealed themselves as the **Queen Bee**!\n\nThey now have **3 extra votes** during voting!`)
+                .setTimestamp();
+
+            await channel.send({ embeds: [revealEmbed] });
+            await message.reply('You have revealed yourself as the Queen Bee! You now have 3 extra votes.');
+        }
+
+        // Handle DMs for night actions and haunt selection
         if (message.channel.type === 1) { // DM channel
-            const gameId = playerGameMap.get(message.author.id);
-            if (!gameId) return;
+            const game = getGameByPlayer(message.author.id);
+            if (!game) return;
 
-            const game = activeGames.get(gameId);
-            if (!game || game.phase !== 'night') return;
+            // Check if this is a haunt selection
+            if (game.pendingHaunt && game.pendingHaunt.jesterId === message.author.id) {
+                const choice = parseInt(message.content.trim());
+                const validTargets = game.pendingHaunt.validTargets
+                    .map(id => game.players.find(p => p.id === id))
+                    .filter(p => p);
 
+                if (choice >= 1 && choice <= validTargets.length) {
+                    const target = validTargets[choice - 1];
+                    target.alive = false;
+
+                    await message.reply(`You haunted **${target.displayName}**! 👻`);
+
+                    const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+                    await channel.send(`👻 **${game.players.find(p => p.id === message.author.id).displayName}** haunted **${target.displayName}** from beyond the grave! 💀`);
+
+                    game.pendingHaunt = null;
+
+                    // Check win condition after haunt
+                    if (!checkWinCondition(game, client)) {
+                        await startNightPhase(game, client);
+                    }
+                } else {
+                    await message.reply(`Invalid choice! Please send a number between 1 and ${validTargets.length}.`);
+                }
+                return;
+            }
+
+            // Check for active seance communication (during night phase)
+            if (game.phase === 'night' && game.activeSeances && game.activeSeances.length > 0) {
+                const seance = game.activeSeances.find(s =>
+                    s.mediumId === message.author.id || s.deadId === message.author.id
+                );
+
+                // If in an active seance and message is not a number, treat as seance message
+                if (seance && isNaN(message.content.trim())) {
+                    const isMedium = seance.mediumId === message.author.id;
+                    const targetId = isMedium ? seance.deadId : seance.mediumId;
+                    const senderName = isMedium ? seance.mediumName : seance.deadName;
+
+                    try {
+                        const targetUser = await client.users.fetch(targetId);
+                        const prefix = isMedium ? '👻 **From Medium:**' : '💀 **From the Dead:**';
+                        await targetUser.send(`${prefix} ${message.content}`);
+                        await message.reply('📨 Message sent!');
+                    } catch (error) {
+                        console.error('Could not relay seance message:', error);
+                        await message.reply('❌ Failed to send message.');
+                    }
+                    return;
+                }
+            }
+
+            // Regular night actions
+            if (game.phase !== 'night') return;
             await processNightAction(message.author.id, message, game, client);
         }
     });
@@ -816,7 +2009,7 @@ module.exports = (client) => {
         const [action, gameId, targetId] = interaction.customId.split('_');
 
         if (action === 'mafiavote') {
-            const game = activeGames.get(gameId);
+            const game = getGame(gameId);
 
             if (!game) {
                 return interaction.reply({
@@ -847,18 +2040,23 @@ module.exports = (client) => {
                 });
             }
 
+            // Check if player is changing their vote
+            const previousVote = game.votes[interaction.user.id];
+            const isChangingVote = previousVote !== undefined;
+
             // Record vote
             game.votes[interaction.user.id] = targetId;
+            game.lastActivityTime = Date.now();
 
             if (targetId === 'skip') {
                 await interaction.reply({
-                    content: 'You voted to skip elimination.',
+                    content: isChangingVote ? 'You changed your vote to skip elimination.' : 'You voted to skip elimination.',
                     ephemeral: true
                 });
             } else {
                 const target = game.players.find(p => p.id === targetId);
                 await interaction.reply({
-                    content: `You voted for **${target.displayName}**.`,
+                    content: isChangingVote ? `You changed your vote to **${target.displayName}**.` : `You voted for **${target.displayName}**.`,
                     ephemeral: true
                 });
             }
@@ -873,6 +2071,11 @@ module.exports = (client) => {
             if (votedPlayers === alivePlayers.length) {
                 // Everyone voted, end phase early
                 clearTimeout(game.phaseTimer);
+
+                // Announce early completion
+                const channel = game.cachedChannel || await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+                await channel.send('🗳️ Everyone has voted! Proceeding to results...');
+
                 await endVotingPhase(game, client);
             }
         }

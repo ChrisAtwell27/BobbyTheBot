@@ -95,6 +95,19 @@ const HELP_CATEGORIES = {
             { name: '!rr', description: 'Short command for Russian Roulette', usage: '!rr' }
         ]
     },
+    mafia: {
+        name: '🐝 Bee Mafia',
+        emoji: '🐝',
+        description: 'Town of Salem style social deduction game with bees!',
+        commands: [
+            { name: '!createmafia', description: 'Start new Bee Mafia game (6+ players in voice)', usage: '!createmafia [random]' },
+            { name: '!createmafia random', description: 'Start game with fully randomized roles (chaos mode)', usage: '!createmafia random' },
+            { name: '!mafiaroles', description: 'View all available roles and abilities', usage: '!mafiaroles [bee|wasp|neutral|all]' },
+            { name: '!roles', description: 'Alternative command for mafiaroles', usage: '!roles [faction]' },
+            { name: '!reveal', description: '**[Queen Bee Only]** Reveal yourself for 3 extra votes', usage: '!reveal (during day phase)' },
+            { name: '!createmafiadebug', description: '**[Debug]** Create test game with 5 bots', usage: '!createmafiadebug [random]' }
+        ]
+    },
     teams: {
         name: '👥 Team Building',
         emoji: '👥',
@@ -488,6 +501,7 @@ module.exports = (client) => {
                     { name: '🎰 Casino Games', value: 'Dice, roulette, blackjack, and more!', inline: true },
                     { name: '⚔️ PvP Battles', value: 'Challenge friends to epic duels', inline: true },
                     { name: '🃏 Poker Tables', value: 'Texas Hold\'em with friends', inline: true },
+                    { name: '🐝 Bee Mafia', value: 'Town of Salem style social deduction', inline: true },
                     { name: '👥 Team Building', value: 'Form teams for games', inline: true },
                     { name: '🐕 Virtual Pets', value: 'Adopt and care for digital companions', inline: true },
                     { name: '📊 Activity Tracking', value: 'Daily competitions with prizes', inline: true },
@@ -496,7 +510,7 @@ module.exports = (client) => {
                 )
                 .addFields({
                     name: '🚀 Quick Start',
-                    value: '• Use `!balance` to check your Honey\n• Try `!gamble` to see casino games\n• Say "Hey Bobby" to start chatting!\n• Use the dropdown below for detailed help\n• Type `!cmdlist` for a quick command reference',
+                    value: '• Use `!balance` to check your Honey\n• Try `!gamble` to see casino games\n• Start a social deduction game with `!createmafia`\n• Say "Hey Bobby" to start chatting!\n• Use the dropdown below for detailed help\n• Type `!cmdlist` for a quick command reference',
                     inline: false
                 })
                 .setFooter({ text: 'Select a category above for detailed command information!' })
@@ -568,6 +582,7 @@ module.exports = (client) => {
                 { name: '🎰 Casino Games', value: 'Dice, roulette, blackjack, and more!', inline: true },
                 { name: '⚔️ PvP Battles', value: 'Challenge friends to epic duels', inline: true },
                 { name: '🃏 Poker Tables', value: 'Texas Hold\'em with friends', inline: true },
+                { name: '🐝 Bee Mafia', value: 'Town of Salem style social deduction', inline: true },
                 { name: '👥 Team Building', value: 'Form teams for games', inline: true },
                 { name: '🐕 Virtual Pets', value: 'Adopt and care for digital companions', inline: true },
                 { name: '📊 Activity Tracking', value: 'Daily competitions with prizes', inline: true },
@@ -576,7 +591,7 @@ module.exports = (client) => {
             )
             .addFields({
                 name: '🚀 Quick Start',
-                value: '• Use `!balance` to check your Honey\n• Try `!gamble` to see casino games\n• Say "Hey Bobby" to start chatting!\n• Use the dropdown below for detailed help',
+                value: '• Use `!balance` to check your Honey\n• Try `!gamble` to see casino games\n• Start a social deduction game with `!createmafia`\n• Say "Hey Bobby" to start chatting!\n• Use the dropdown below for detailed help',
                 inline: false
             })
             .setFooter({ text: 'Select a category above for detailed command information!' })
