@@ -49,6 +49,10 @@ const HELP_CATEGORIES = {
             { name: '!beg', description: 'Beg for Honey with interactive tip jar', usage: '!beg' },
             { name: '!economy', description: 'View server economy statistics', usage: '!economy' },
             { name: '!spend', description: 'Spend your Honey', usage: '!spend [amount]' },
+            { name: '!postbounty', description: 'Post a challenge bounty for others to complete', usage: '!postbounty [amount] [challenge description]' },
+            { name: '!bounties', description: 'View all active bounties', usage: '!bounties' },
+            { name: '!bounty', description: 'View specific bounty details', usage: '!bounty [id]' },
+            { name: '!cancelbounty', description: 'Cancel your own bounty (refund)', usage: '!cancelbounty [id]' },
             { name: '!award', description: '**[ADMIN]** Award Honey to user', usage: '!award @user [amount]' },
             { name: '!awardall', description: '**[ADMIN]** Award all users Honey', usage: '!awardall [amount]' }
         ]

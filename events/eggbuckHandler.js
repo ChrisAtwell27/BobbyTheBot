@@ -386,7 +386,7 @@ module.exports = (client) => {
             return message.channel.send({ embeds: [embed], files: [attachment] });
         }
 
-        // Command to reset everyone's honey to 5000 (Top Egg only)
+        // Command to reset everyone's honey to 5000 (Top Egg only) - WITH CONFIRMATION
         if (args[0].toLowerCase() === '!clearhoney') {
             console.log('!clearhoney command detected');
             console.log('User roles:', [...userRoles.keys()]);
@@ -397,36 +397,130 @@ module.exports = (client) => {
                 return message.reply("You don't have permission to use this command. (Top Egg only)");
             }
 
-            try {
-                console.log('Starting honey reset...');
-                // Import User model
-                const User = require('../database/models/User');
+            // Get count of users that will be affected
+            const User = require('../database/models/User');
+            const userCount = await User.countDocuments({});
 
-                // Reset all balances to 5000
-                const result = await User.updateMany(
-                    {},
-                    { $set: { balance: 5000 } }
-                );
+            // Create confirmation embed
+            const confirmEmbed = new EmbedBuilder()
+                .setTitle('⚠️ WARNING: DESTRUCTIVE ACTION')
+                .setColor('#ff0000')
+                .setDescription('**You are about to reset ALL user balances to 5000 honey!**\n\nThis action is **IRREVERSIBLE** and will affect all users in the database.')
+                .addFields(
+                    { name: '👥 Users Affected', value: `${userCount} users`, inline: true },
+                    { name: '💰 New Balance', value: '🍯5,000', inline: true },
+                    { name: '👤 Requested By', value: message.author.username, inline: true }
+                )
+                .setFooter({ text: 'Click "Confirm Reset" to proceed or "Cancel" to abort' })
+                .setTimestamp();
 
-                console.log('Honey reset complete. Modified:', result.modifiedCount);
+            // Create confirmation buttons
+            const confirmButton = new ButtonBuilder()
+                .setCustomId(`confirm_reset_${message.author.id}`)
+                .setLabel('Confirm Reset')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('⚠️');
 
-                const embed = new EmbedBuilder()
-                    .setTitle('💰 Economy Reset - Honey Wiped')
-                    .setColor('#FF6B00')
-                    .setDescription('**All user balances have been reset to 5000 honey!**')
-                    .addFields(
-                        { name: '👥 Users Affected', value: `${result.modifiedCount}`, inline: true },
-                        { name: '💰 New Balance', value: '**🍯5,000**', inline: true },
-                        { name: '👤 Reset By', value: `${message.author.username}`, inline: true }
-                    )
-                    .setFooter({ text: 'The great honey redistribution of 2025' })
-                    .setTimestamp();
+            const cancelButton = new ButtonBuilder()
+                .setCustomId(`cancel_reset_${message.author.id}`)
+                .setLabel('Cancel')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('❌');
 
-                message.channel.send({ embeds: [embed] });
-            } catch (error) {
-                console.error('Error resetting honey balances:', error);
-                message.channel.send('An error occurred while resetting honey balances. Check console for details.');
-            }
+            const row = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
+
+            // Send confirmation message
+            const confirmMessage = await message.channel.send({
+                embeds: [confirmEmbed],
+                components: [row]
+            });
+
+            // Create collector for button interactions
+            const collector = confirmMessage.createMessageComponentCollector({
+                filter: (i) => i.user.id === message.author.id,
+                time: 30000, // 30 seconds to respond
+                max: 1
+            });
+
+            collector.on('collect', async (interaction) => {
+                if (interaction.customId === `confirm_reset_${message.author.id}`) {
+                    // User confirmed - execute reset
+                    await interaction.update({
+                        embeds: [
+                            new EmbedBuilder()
+                                .setTitle('⏳ Processing Reset...')
+                                .setColor('#ffa500')
+                                .setDescription('Please wait while all balances are being reset...')
+                        ],
+                        components: []
+                    });
+
+                    try {
+                        console.log('Starting honey reset...');
+
+                        // Reset all balances to 5000
+                        const result = await User.updateMany(
+                            {},
+                            { $set: { balance: 5000 } }
+                        );
+
+                        console.log('Honey reset complete. Modified:', result.modifiedCount);
+
+                        const successEmbed = new EmbedBuilder()
+                            .setTitle('✅ Economy Reset - Honey Wiped')
+                            .setColor('#00ff00')
+                            .setDescription('**All user balances have been reset to 5000 honey!**')
+                            .addFields(
+                                { name: '👥 Users Affected', value: `${result.modifiedCount}`, inline: true },
+                                { name: '💰 New Balance', value: '**🍯5,000**', inline: true },
+                                { name: '👤 Reset By', value: `${message.author.username}`, inline: true }
+                            )
+                            .setFooter({ text: 'The great honey redistribution of 2025' })
+                            .setTimestamp();
+
+                        await interaction.editReply({ embeds: [successEmbed], components: [] });
+                    } catch (error) {
+                        console.error('Error resetting honey balances:', error);
+                        await interaction.editReply({
+                            embeds: [
+                                new EmbedBuilder()
+                                    .setTitle('❌ Error During Reset')
+                                    .setColor('#ff0000')
+                                    .setDescription('An error occurred while resetting honey balances. Please try again later or check the console for details.')
+                            ],
+                            components: []
+                        });
+                    }
+                } else if (interaction.customId === `cancel_reset_${message.author.id}`) {
+                    // User cancelled
+                    await interaction.update({
+                        embeds: [
+                            new EmbedBuilder()
+                                .setTitle('❌ Reset Cancelled')
+                                .setColor('#95a5a6')
+                                .setDescription('The honey balance reset has been cancelled. No changes were made.')
+                                .setFooter({ text: 'All user balances remain unchanged' })
+                        ],
+                        components: []
+                    });
+                }
+            });
+
+            collector.on('end', (collected) => {
+                if (collected.size === 0) {
+                    // Timeout - no response
+                    confirmMessage.edit({
+                        embeds: [
+                            new EmbedBuilder()
+                                .setTitle('⏱️ Confirmation Timeout')
+                                .setColor('#95a5a6')
+                                .setDescription('The confirmation request has expired. No changes were made.')
+                                .setFooter({ text: 'Run !clearhoney again if you still want to reset balances' })
+                        ],
+                        components: []
+                    });
+                }
+            });
         }
     });
 
@@ -526,8 +620,32 @@ module.exports = (client) => {
     // Award 500 Honey to new members on join (silent)
     client.on('guildMemberAdd', async (member) => {
         if (member.user.bot) return; // Don't award bots
+
+        // Award welcome bonus
         await updateBobbyBucks(member.id, 500);
-        // Silent bonus - no notification sent
+
+        // Send welcome message to the member
+        try {
+            const welcomeEmbed = new EmbedBuilder()
+                .setTitle('🎉 Welcome to the Server!')
+                .setColor('#00ff00')
+                .setDescription(`Hey ${member.user.username}! Welcome to the community!`)
+                .addFields(
+                    { name: '🎁 Welcome Bonus', value: 'You\'ve received **🍯500 Honey** to get started!', inline: false },
+                    { name: '💰 Check Your Balance', value: 'Use `!balance` to see your Honey', inline: true },
+                    { name: '📚 Learn Commands', value: 'Use `!help` to explore all features', inline: true },
+                    { name: '🎮 Start Playing', value: 'Try `!gamble`, `!blackjack`, or `!rps` to have fun and earn more!', inline: false },
+                    { name: '💡 Daily Earnings', value: 'Use `!beg` daily for free Honey', inline: false }
+                )
+                .setFooter({ text: 'Have fun and good luck!' })
+                .setTimestamp();
+
+            await member.send({ embeds: [welcomeEmbed] });
+            console.log(`[ECONOMY] Sent welcome message to ${member.user.username} with 500 honey bonus`);
+        } catch (error) {
+            // User has DMs disabled - that's okay, they still get the bonus
+            console.log(`[ECONOMY] Could not send welcome DM to ${member.user.username} (DMs disabled), but they received their 500 honey bonus`);
+        }
     });
 
     // Create balance card visualization

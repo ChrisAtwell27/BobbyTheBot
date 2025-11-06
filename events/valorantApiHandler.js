@@ -167,9 +167,23 @@ async function handleRegistrationSubmission(interaction) {
 
     } catch (error) {
         console.error('Registration error:', error);
-        await safeInteractionResponse(interaction, 'reply', {
-            content: '❌ There was an error validating your account. Please try again later or contact an administrator.\n\nError: ' + error.message
-        });
+
+        const errorEmbed = new EmbedBuilder()
+            .setTitle('❌ Account Validation Failed')
+            .setColor('#ff0000')
+            .setDescription('Unable to verify your Valorant account. **Most common causes:** Typo in Name#Tag, no ranked games played, or API rate limit.')
+            .addFields({
+                name: '🔧 Quick Fixes',
+                value: '1. Verify spelling: **"PlayerName#1234"** (case-sensitive)\n' +
+                       '2. Play 1+ Ranked match if new account\n' +
+                       '3. Wait 1 minute and retry\n' +
+                       '4. Contact admin if issue persists',
+                inline: false
+            })
+            .setFooter({ text: `Error: ${error.message.substring(0, 100)}...` })
+            .setTimestamp();
+
+        await safeInteractionResponse(interaction, 'reply', { embeds: [errorEmbed] });
     }
 }
 
@@ -186,11 +200,31 @@ async function showUserStats(message, registration) {
     try {
         console.log(`Fetching enhanced stats for: ${registration.name}#${registration.tag} in ${registration.region}`);
 
-        const [accountData, mmrData, matchData] = await Promise.all([
-            getAccountData(registration.name, registration.tag),
-            getMMRData(registration.region, registration.name, registration.tag),
-            getMatches(registration.region, registration.name, registration.tag)
-        ]);
+        // Single consolidated progress message
+        const updateProgress = async (step) => {
+            const steps = [
+                `${step >= 1 ? '✓' : step === 1 ? '⏳' : '⏸️'} Account data`,
+                `${step >= 2 ? '✓' : step === 2 ? '⏳' : '⏸️'} Rank info`,
+                `${step >= 3 ? '✓' : step === 3 ? '⏳' : '⏸️'} Match history`
+            ];
+
+            await loadingMessage.edit({
+                embeds: [new EmbedBuilder()
+                    .setTitle('🔄 Loading Valorant Stats...')
+                    .setColor('#ff4654')
+                    .setDescription(`**${registration.name}#${registration.tag}** • ${registration.region.toUpperCase()}\n\n${steps.join(' • ')}`)
+                    .setTimestamp()]
+            });
+        };
+
+        await updateProgress(1);
+        const accountData = await getAccountData(registration.name, registration.tag);
+
+        await updateProgress(2);
+        const mmrData = await getMMRData(registration.region, registration.name, registration.tag);
+
+        await updateProgress(3);
+        const matchData = await getMatches(registration.region, registration.name, registration.tag);
 
         if (accountData.status !== 200) {
             throw new Error(`Could not fetch account data: ${accountData.error || 'Unknown error'}`);
@@ -517,7 +551,36 @@ async function handleCreateTeams(client, message, messageId, channelId = null) {
 
         if (players.length < 2) {
             const unregisteredCount = reactors.length - players.length;
-            throw new Error(`Need at least 2 registered players to create teams. Found ${players.length} registered player(s) out of ${reactors.length} total reactors.\n\n${unregisteredCount > 0 ? `${unregisteredCount} player(s) need to register using \`!valstats\`.` : ''}`);
+
+            const errorEmbed = new EmbedBuilder()
+                .setTitle('❌ Not Enough Registered Players')
+                .setColor('#ff0000')
+                .setDescription(`Need at least **2 registered players** to create teams.\n\n**Found:** ${players.length}/${reactors.length} reactors registered`)
+                .addFields(
+                    {
+                        name: '🔧 Unregistered Players - How to Fix',
+                        value: '1. Each unregistered player: Use `!valstats` in chat\n' +
+                               '2. Click the **"Register Now"** button\n' +
+                               '3. Fill in: **Valorant Name#Tag** and **region**\n' +
+                               '4. Wait 30 seconds for API verification\n' +
+                               '5. Try `!createteams` again',
+                        inline: false
+                    },
+                    {
+                        name: '🌍 Supported Regions',
+                        value: '`NA`, `EU`, `AP`, `KR`, `LATAM`, `BR`',
+                        inline: false
+                    },
+                    {
+                        name: '💡 Already Registered?',
+                        value: 'Make sure you reacted to the message with an emoji!',
+                        inline: false
+                    }
+                )
+                .setFooter({ text: `${unregisteredCount} player(s) need to register` });
+
+            await loadingMessage.edit({ embeds: [errorEmbed] });
+            return; // Exit gracefully instead of throwing
         }
 
         // Update loading with calculation phase

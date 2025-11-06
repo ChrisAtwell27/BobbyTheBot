@@ -7,7 +7,7 @@ const http = require('http');
 require('dotenv').config();
 
 // Load configuration values
-const { loggingChannelId, alertChannelId, alertKeywords } = require('./data/config');
+const { loggingChannelId, alertChannelId, alertKeywords, changelogChannelId } = require('./data/config');
 
 // Initialize database connection
 const { connectToDatabase } = require('./database/connection');
@@ -61,6 +61,8 @@ require('./events/socialMediaPostHandler')(client);
 require('./events/valorantInhouseHandler')(client);
 require('./events/mafiaHandler')(client);
 require('./events/triviaHandler')(client);
+require('./events/bountyHandler')(client);
+require('./events/changelogHandler')(client, changelogChannelId);
 // Initialize Valorant API handler separately to prevent conflicts
 const valorantApiHandler = require('./events/valorantApiHandler');
 valorantApiHandler.init(client);

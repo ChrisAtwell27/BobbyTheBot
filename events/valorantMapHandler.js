@@ -496,7 +496,8 @@ async function startMapVeto(interaction) {
         bannedMaps: [],
         phase: 'ban', // 'ban' or 'pick'
         currentStep: 1,
-        maxSteps: 7 // Ban 6, pick 1
+        maxSteps: 7, // Ban 6, pick 1
+        startTime: Date.now() // Track start time for duration calculation
     };
     
     activeVetos.set(vetoId, vetoSession);
@@ -838,13 +839,25 @@ module.exports = (client) => {
 
                     try {
                         const finalMapDisplay = await createMapEmbed(finalMap, true);
+
+                        // Calculate veto duration
+                        const vetoDuration = Date.now() - vetoSession.startTime;
+                        const durationMinutes = Math.floor(vetoDuration / 60000);
+                        const durationSeconds = Math.floor((vetoDuration % 60000) / 1000);
+                        const durationText = durationMinutes > 0
+                            ? `${durationMinutes}m ${durationSeconds}s`
+                            : `${durationSeconds}s`;
+
                         const finalEmbed = new EmbedBuilder()
                             .setTitle('⚖️ Map Veto Complete!')
                             .setColor('#00ff00')
-                            .setDescription(`**Final Map Selected:** ${finalMap}`)
-                            .addFields(
-                                { name: '🚫 Banned Maps', value: vetoSession.bannedMaps.join(', '), inline: false }
-                            )
+                            .setDescription(`**🗺️ Final Map: ${finalMap}**\n\n🎮 Open Valorant → Queue Custom/Unrated → Select **${finalMap}** → Play!`)
+                            .addFields({
+                                name: '📊 Summary',
+                                value: `**Banned:** ${vetoSession.bannedMaps.join(', ')} • **Duration:** ${durationText}`,
+                                inline: false
+                            })
+                            .setFooter({ text: 'Good luck and have fun!' })
                             .setTimestamp();
 
                         await safeInteractionResponse(interaction, 'update', {

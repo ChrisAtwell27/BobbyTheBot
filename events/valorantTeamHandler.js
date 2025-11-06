@@ -549,6 +549,19 @@ module.exports = (client) => {
                     // Set up the update timer to refresh the message periodically
                     team.resendTimer = setTimeout(() => updateTeamMessage(teamId), RESEND_INTERVAL);
 
+                    // Set up 25-minute warning for auto-disband (before 30-minute auto-disband)
+                    team.warningTimer = setTimeout(async () => {
+                        const currentTeam = activeTeams.get(teamId);
+                        if (currentTeam && getTotalMembers(currentTeam) < 5) {
+                            try {
+                                const channel = await client.channels.fetch(currentTeam.channelId);
+                                await channel.send(`⏰ **Auto-Disband Warning** - This team will disband in **5 minutes** if not filled! **${getTotalMembers(currentTeam)}/5 players**`);
+                            } catch (error) {
+                                console.error('[VALORANT TEAM] Error sending disband warning:', error.message);
+                            }
+                        }
+                    }, 25 * 60 * 1000); // 25 minutes
+
                     // Note: Removed auto-delete timer to prevent kicking players out
                     // Teams now persist until manually disbanded or completed
 
@@ -722,20 +735,91 @@ module.exports = (client) => {
                         }
                         
                         let teamRankInfo = '';
+                        // Build team roster display
+                        let rosterDisplay = '';
+                        let totalMMR = 0;
+                        let registeredCount = 0;
+
+                        for (let i = 0; i < team.members.length; i++) {
+                            const memberId = team.members[i];
+                            const isLeader = memberId === team.leader.id;
+
+                            try {
+                                const member = await client.users.fetch(memberId);
+                                const rankInfo = await getUserRankInfo(memberId);
+                                const leaderBadge = isLeader ? ' 👑' : '';
+
+                                // Get online status
+                                let statusEmoji = '⚫'; // Default offline
+                                try {
+                                    const guildMember = await client.guilds.cache.get(message.guild.id)?.members.fetch(memberId);
+                                    if (guildMember?.presence?.status) {
+                                        const statusMap = {
+                                            'online': '🟢',
+                                            'idle': '🟡',
+                                            'dnd': '🔴',
+                                            'offline': '⚫'
+                                        };
+                                        statusEmoji = statusMap[guildMember.presence.status] || '⚫';
+                                    }
+                                } catch (presenceError) {
+                                    // Presence not available, keep default
+                                }
+
+                                if (rankInfo) {
+                                    const mmr = (rankInfo.tier * 100) + (rankInfo.rr || 0);
+                                    totalMMR += mmr;
+                                    registeredCount++;
+                                    rosterDisplay += `${statusEmoji} **${member.username}**${leaderBadge} - ${rankInfo.name} (${rankInfo.rr} RR)\n`;
+                                } else {
+                                    rosterDisplay += `${statusEmoji} **${member.username}**${leaderBadge} - Not Registered\n`;
+                                }
+                            } catch (error) {
+                                rosterDisplay += `• Player ${i + 1} - Unknown\n`;
+                            }
+                        }
+
+                        // Calculate average rank and check for rank mismatch
+                        let rankWarning = null;
                         if (teamRanks.length > 0) {
                             const avgTier = Math.round(teamRanks.reduce((sum, rank) => sum + rank.tier, 0) / teamRanks.length);
                             const avgRank = apiHandler.RANK_MAPPING[avgTier] || apiHandler.RANK_MAPPING[0];
                             teamRankInfo = `\n🏆 **Team Average Rank:** ${avgRank.name} (${teamRanks.length}/5 registered)`;
+
+                            // Check for large rank spread (> 5 tiers)
+                            if (teamRanks.length >= 2) {
+                                const minTier = Math.min(...teamRanks.map(r => r.tier));
+                                const maxTier = Math.max(...teamRanks.map(r => r.tier));
+                                const tierDiff = maxTier - minTier;
+
+                                if (tierDiff > 5) {
+                                    const minRank = apiHandler.RANK_MAPPING[minTier] || apiHandler.RANK_MAPPING[0];
+                                    const maxRank = apiHandler.RANK_MAPPING[maxTier] || apiHandler.RANK_MAPPING[0];
+                                    rankWarning = `⚠️ Large rank difference detected: **${minRank.name}** to **${maxRank.name}** (${tierDiff} tiers apart).\n\nCompetitive matches may be challenging due to skill gap!`;
+                                }
+                            }
                         }
-                        
+
+                        // Build compact roster display with stats inline
+                        let compactRoster = rosterDisplay || 'No players found';
+                        compactRoster += `\n\n📊 **Total MMR:** ${totalMMR.toLocaleString()} • **Registered:** ${registeredCount}/5`;
+
+                        // Build compact footer
+                        let footerText = 'Team auto-disbands in 5 min';
+                        if (rankWarning) {
+                            footerText = rankWarning.substring(0, 150) + '...'; // Truncate if too long
+                        }
+
                         const celebrationEmbed = new EmbedBuilder()
                             .setColor('#00ff00')
                             .setTitle('🎉 TEAM COMPLETE!')
-                            .setDescription(`Your Valorant team is ready to play! Good luck and have fun!${teamRankInfo}`)
-                            .addFields(
-                                { name: '🎮 Ready to Queue!', value: 'Your 5-stack is complete and ready for competitive play!', inline: false },
-                                { name: '📊 Rank Registration', value: 'Unregistered players can use `!valstats` to show their rank in future teams!', inline: false }
-                            )
+                            .setDescription(`Your Valorant 5-stack is ready! Queue up and dominate! 🎮${teamRankInfo}`)
+                            .addFields({
+                                name: '👥 Team Roster',
+                                value: compactRoster,
+                                inline: false
+                            })
+                            .setFooter({ text: footerText })
                             .setTimestamp();
 
                         // Send celebration as a new message in the channel (not as a reply to interaction)
@@ -744,6 +828,14 @@ module.exports = (client) => {
                             await channel.send({ embeds: [celebrationEmbed] });
                         } catch (error) {
                             console.error('[VALORANT TEAM] Error sending celebration message:', error.message);
+                        }
+
+                        // Clear timers since team is now full
+                        if (team.resendTimer) {
+                            clearTimeout(team.resendTimer);
+                        }
+                        if (team.warningTimer) {
+                            clearTimeout(team.warningTimer);
                         }
 
                         // Auto-delete team after 5 minutes when full
@@ -796,6 +888,23 @@ module.exports = (client) => {
                         files: updatedEmbed.files,
                         components: updatedComponents
                     });
+
+                    // Send warning if team is now critically low on members (DM to leader only)
+                    const totalMembers = getTotalMembers(team);
+                    if (totalMembers < 3) {
+                        try {
+                            const leader = await client.users.fetch(team.leader.id);
+                            await leader.send(`⚠️ **Team Status Critical**\n\nA player left your team! Only **${totalMembers}/5 players** remaining.\n\n**Need ${5 - totalMembers} more** to complete the team. Share the team message with potential players.\n\n_Team will auto-disband in 30 minutes if not filled._`);
+                        } catch (dmError) {
+                            // If DM fails, send brief message in channel
+                            try {
+                                const channel = await client.channels.fetch(team.channelId);
+                                await channel.send(`⚠️ **${totalMembers}/5 players** - Need ${5 - totalMembers} more!`);
+                            } catch (channelError) {
+                                console.error('[VALORANT TEAM] Error sending low member warning:', channelError.message);
+                            }
+                        }
+                    }
 
                     // Restart the update timer if team is no longer full
                     if (!isFull && !team.resendTimer) {
@@ -852,9 +961,12 @@ module.exports = (client) => {
                     });
                 }
 
-                // Clear the resend timer before disbanding
+                // Clear all timers before disbanding
                 if (team.resendTimer) {
                     clearTimeout(team.resendTimer);
+                }
+                if (team.warningTimer) {
+                    clearTimeout(team.warningTimer);
                 }
 
                 // Remove team and delete message

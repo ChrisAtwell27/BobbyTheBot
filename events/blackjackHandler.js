@@ -5,6 +5,7 @@ const path = require('path');
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { insufficientFundsMessage, invalidUsageMessage, processingMessage } = require('../utils/errorMessages');
 
 const blackjackStreaksFilePath = path.join(__dirname, '../data/blackjack_streaks.txt');
 
@@ -55,7 +56,7 @@ module.exports = (client) => {
         // Blackjack game
         if (args[0] === '!blackjack') {
             if (args.length !== 2 || isNaN(parseInt(args[1], 10)) || parseInt(args[1], 10) <= 0) {
-                return message.channel.send("Incorrect usage! Correct syntax: !blackjack [positive amount]");
+                return message.channel.send(invalidUsageMessage('blackjack', '!blackjack [amount]', '!blackjack 100'));
             }
 
             const betAmount = parseInt(args[1], 10);
@@ -63,7 +64,7 @@ module.exports = (client) => {
             const balance = await getBobbyBucks(userId);
 
             if (balance < betAmount) {
-                return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
+                return message.channel.send(insufficientFundsMessage(message.author.username, balance, betAmount));
             }
 
             await startBlackjackGame(message, userId, betAmount);
@@ -272,6 +273,9 @@ module.exports = (client) => {
     }
 
     async function startBlackjackGame(message, userId, betAmount) {
+        // Show processing message
+        const processingMsg = await message.channel.send(processingMessage('we deal the cards'));
+
         // CRITICAL FIX: Deduct the initial bet from player's balance when game starts
         await updateBobbyBucks(userId, -betAmount);
 
@@ -281,6 +285,9 @@ module.exports = (client) => {
 
         const playerHand = [drawCard(gameShoe), drawCard(gameShoe)];
         const dealerHand = [drawCard(gameShoe), drawCard(gameShoe)];
+
+        // Delete processing message before showing the game
+        await processingMsg.delete().catch(() => {});
 
         let playerScore = calculateHandValue(playerHand);
         let dealerScore = calculateHandValue(dealerHand);

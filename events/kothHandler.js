@@ -7,6 +7,7 @@ const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economy
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
 const { LimitedMap } = require('../utils/memoryUtils');
+const { insufficientFundsMessage, invalidUsageMessage } = require('../utils/errorMessages');
 
 // Game constants
 const GAME_DURATION = 300000; // 5 minutes in milliseconds
@@ -52,14 +53,14 @@ module.exports = (client) => {
         // King of the Hill command
         if (command === '!koth') {
             if (args.length !== 2 || isNaN(parseInt(args[1], 10)) || parseInt(args[1], 10) < MIN_BET) {
-                return message.channel.send(`Incorrect usage! Correct syntax: !koth [amount] (minimum: ${MIN_BET})`);
+                return message.channel.send(invalidUsageMessage('koth', `!koth [amount]`, `!koth ${MIN_BET}`) + `\n**Minimum Bet:** 🍯${MIN_BET}`);
             }
 
             const challengeAmount = parseInt(args[1], 10);
             const balance = await getBobbyBucks(userId);
 
             if (balance < challengeAmount) {
-                return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯{balance}.`);
+                return message.channel.send(insufficientFundsMessage(message.author.username, balance, challengeAmount));
             }
 
             // Check if there's an active game in this channel

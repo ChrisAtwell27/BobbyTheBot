@@ -5,6 +5,7 @@ const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelp
 const Challenge = require('../database/models/Challenge');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
 const { CleanupMap, LimitedMap } = require('../utils/memoryUtils');
+const { insufficientFundsMessage, invalidUsageMessage, processingMessage } = require('../utils/errorMessages');
 
 // Auto-cleanup cooldowns after 5 minutes (way longer than needed)
 const cooldowns = new CleanupMap(5 * 60 * 1000, 1 * 60 * 1000);
@@ -335,7 +336,7 @@ module.exports = (client) => {
     // Create Rock Paper Scissors challenge
     async function createRPSChallenge(message, args) {
         if (args.length !== 2 || isNaN(parseInt(args[1], 10)) || parseInt(args[1], 10) <= 0) {
-            return message.channel.send("Incorrect usage! Correct syntax: !rps [positive amount]");
+            return message.channel.send(invalidUsageMessage('rps', '!rps [amount]', '!rps 100'));
         }
 
         const betAmount = parseInt(args[1], 10);
@@ -343,8 +344,11 @@ module.exports = (client) => {
         const balance = await getBobbyBucks(userId);
 
         if (balance < betAmount) {
-            return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
+            return message.channel.send(insufficientFundsMessage(message.author.username, balance, betAmount));
         }
+
+        // Show processing message
+        const processingMsg = await message.channel.send(processingMessage('we create your challenge'));
 
         const challengeId = `rps_${Date.now()}_${userId}`;
         const challenge = {
@@ -372,6 +376,9 @@ module.exports = (client) => {
         } catch (dbError) {
             console.error('[GAMBLING] Error saving challenge to database:', dbError);
         }
+
+        // Delete processing message
+        await processingMsg.delete().catch(() => {});
 
         const embed = new EmbedBuilder()
             .setTitle('⚔️ Rock Paper Scissors Challenge!')
