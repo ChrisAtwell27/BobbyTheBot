@@ -32,19 +32,40 @@ module.exports = (client) => {
                     
                     // Only update if the name is different to avoid unnecessary API calls
                     if (memberCountChannel.name !== newChannelName) {
-                        await memberCountChannel.setName(newChannelName);
-                        console.log(`Updated member count for ${guild.name}: ${memberCount} members`);
+                        // Retry logic for rate limits
+                        let retries = 0;
+                        const maxRetries = 3;
+                        let success = false;
+
+                        while (!success && retries < maxRetries) {
+                            try {
+                                await memberCountChannel.setName(newChannelName);
+                                console.log(`Updated member count for ${guild.name}: ${memberCount} members`);
+                                success = true;
+                            } catch (setNameError) {
+                                if (setNameError.code === 50013) {
+                                    console.error(`Missing permissions to update member count channel in ${guild.name}`);
+                                    break; // Don't retry on permission errors
+                                } else if (setNameError.code === 50035 || setNameError.message?.includes('rate limit')) {
+                                    retries++;
+                                    if (retries < maxRetries) {
+                                        const delay = Math.pow(2, retries) * 1000; // Exponential backoff: 2s, 4s, 8s
+                                        console.warn(`Rate limited while updating member count in ${guild.name}, retrying in ${delay}ms (attempt ${retries}/${maxRetries})`);
+                                        await new Promise(resolve => setTimeout(resolve, delay));
+                                    } else {
+                                        console.error(`Rate limited while updating member count in ${guild.name}, max retries reached`);
+                                    }
+                                } else {
+                                    console.error(`Error updating member count for ${guild.name}:`, setNameError.message);
+                                    break; // Don't retry on unknown errors
+                                }
+                            }
+                        }
                     }
-                    
+
                 } catch (error) {
-                    // Handle individual guild errors without stopping the entire process
-                    if (error.code === 50013) {
-                        console.error(`Missing permissions to update member count channel in ${guild.name}`);
-                    } else if (error.code === 50035) {
-                        console.error(`Rate limited while updating member count in ${guild.name}`);
-                    } else {
-                        console.error(`Error updating member count for ${guild.name}:`, error.message);
-                    }
+                    // Handle errors in finding the channel or other operations
+                    console.error(`Error in member count update for ${guild.name}:`, error.message);
                 }
             }
         } catch (error) {

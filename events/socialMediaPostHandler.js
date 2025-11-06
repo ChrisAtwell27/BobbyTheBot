@@ -36,19 +36,28 @@ module.exports = (client) => {
         if (attachment.contentType && attachment.contentType.startsWith('image/')) {
           const caption = message.content || ''; // Use message content as caption
 
-          await postToInstagram(attachment.url, caption);
+          try {
+            await postToInstagram(attachment.url, caption);
 
-          // React to confirm post was successful
-          await message.react('✅');
+            // React to confirm post was successful
+            await message.react('✅');
+            console.log(`[SOCIAL MEDIA] Successfully posted to Instagram from message ${message.id}`);
+          } catch (instagramError) {
+            console.error('[SOCIAL MEDIA] Instagram API error:', instagramError.message);
+            await message.react('❌').catch(() => {});
+
+            // Send user-friendly error message
+            await message.reply('Failed to post to Instagram. Please check the image format and try again.').catch(() => {});
+          }
         }
       }
       // Handle text-only posts (if you want to support them)
       else if (message.content && message.content.trim().length > 0) {
-        console.log(`Text-only message detected in monitored channel. Instagram requires media for posts.`);
-        await message.react('⚠️');
+        console.log(`[SOCIAL MEDIA] Text-only message detected in monitored channel. Instagram requires media for posts.`);
+        await message.react('⚠️').catch(() => {});
       }
     } catch (error) {
-      console.error('Error in social media post handler:', error);
+      console.error('[SOCIAL MEDIA] Error in social media post handler:', error);
       await message.react('❌').catch(() => {});
     }
   });

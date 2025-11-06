@@ -17,7 +17,8 @@
       "Bash(find:*)",
       "Bash(findstr:*)",
       "Bash(test:*)",
-      "Bash(del test-monthly-bounds.js)"
+      "Bash(del test-monthly-bounds.js)",
+      "Bash(nul)"
     ],
     "deny": [],
     "ask": []

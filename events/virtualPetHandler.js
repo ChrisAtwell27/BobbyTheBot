@@ -5,9 +5,10 @@ const { getPet: getPetFromDB, savePet: savePetToDB, deletePet: deletePetFromDB, 
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const User = require('../database/models/User');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { LimitedMap } = require('../utils/memoryUtils');
 
-// Active games tracker
-const activeGames = new Map();
+// Active games tracker - use LimitedMap to prevent memory leaks
+const activeGames = new LimitedMap(100); // Maximum 100 concurrent games
 
 // Pet types with different characteristics
 const PET_TYPES = {

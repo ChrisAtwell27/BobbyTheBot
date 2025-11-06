@@ -1,5 +1,6 @@
 const { Collection, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { LimitedMap } = require('../utils/memoryUtils');
 
 module.exports = (client) => {
     // Configuration options
@@ -12,13 +13,14 @@ module.exports = (client) => {
         logChannelId: null, // Set this to your log channel ID if you want logging
         exemptRoles: ['Admin', 'Moderator', 'Top Egg'], // Roles exempt from moderation
         messageRateLimit: 10, // Max messages per timeWindow
-        duplicateMessageThreshold: 3 // How many duplicate messages trigger action
+        duplicateMessageThreshold: 3, // How many duplicate messages trigger action
+        maxTrackedUsers: 500 // Maximum users to track to prevent memory leaks
     };
 
-    // Track user messages for spam detection
-    const userMessages = new Collection();
-    const userWarnings = new Collection();
-    const userMessageCount = new Collection(); // Track message rate limiting
+    // Track user messages for spam detection using LimitedMap to prevent unbounded growth
+    const userMessages = new LimitedMap(config.maxTrackedUsers);
+    const userWarnings = new LimitedMap(config.maxTrackedUsers);
+    const userMessageCount = new LimitedMap(config.maxTrackedUsers);
 
     console.log('🛡️ Moderation Handler initialized with enhanced spam detection');
     
@@ -369,6 +371,20 @@ module.exports = (client) => {
                 userMessageCount.delete(userId);
             } else {
                 userMessageCount.set(userId, recentTimestamps);
+            }
+        }
+
+        // Clean up user warnings - reset warnings older than 1 hour
+        const warningExpiryTime = 60 * 60 * 1000; // 1 hour
+        for (const [userId, warningData] of userWarnings) {
+            // If warnings data includes timestamp, check expiry
+            if (warningData && typeof warningData === 'object' && warningData.timestamp) {
+                if (currentTime - warningData.timestamp > warningExpiryTime) {
+                    userWarnings.delete(userId);
+                }
+            } else if (typeof warningData === 'number' && warningData === 0) {
+                // Clean up users with zero warnings
+                userWarnings.delete(userId);
             }
         }
 

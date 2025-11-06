@@ -21,6 +21,13 @@ const HONEY_REWARDS = {
 // skipHoney: if true, don't award honey (for backfill operations)
 async function addScore(userId, score, timestamp = null, skipHoney = false) {
     try {
+        // Check MongoDB connection before proceeding
+        const mongoose = require('mongoose');
+        if (mongoose.connection.readyState !== 1) {
+            console.error('[WORDLE] MongoDB not connected, cannot add score');
+            return { success: false, error: 'Database not connected' };
+        }
+
         const honeyAwarded = skipHoney ? 0 : (HONEY_REWARDS[score] || 0);
 
         // Find or create user's Wordle document
@@ -369,6 +376,13 @@ async function checkAndAnnounceMonthlyWinner(channel) {
 // timeFilter: optional object with { start: Date, end: Date } to filter by time range
 async function calculateStats(timeFilter = null) {
     try {
+        // Check MongoDB connection before proceeding
+        const mongoose = require('mongoose');
+        if (mongoose.connection.readyState !== 1) {
+            console.error('[WORDLE] MongoDB not connected, cannot calculate stats');
+            return {};
+        }
+
         // Get all user Wordle documents
         const allUserWordles = await WordleScore.find({}).lean();
         const result = {};
@@ -548,7 +562,7 @@ module.exports = (client) => {
                     .setFooter({ text: `Monthly competition resets on the 1st! Use !wordletop for all-time stats.` })
                     .setTimestamp();
 
-                message.channel.send({ embeds: [embed] });
+                await message.channel.send({ embeds: [embed] });
             }
         }
 
@@ -557,7 +571,7 @@ module.exports = (client) => {
             const stats = await calculateStats();
 
             if (Object.keys(stats).length === 0) {
-                return message.channel.send('No Wordle scores recorded yet!');
+                return await message.channel.send('No Wordle scores recorded yet!');
             }
 
             // Sort users by weighted score (lower is better)
@@ -603,7 +617,7 @@ module.exports = (client) => {
                 .setFooter({ text: 'Rankings favor consistency and volume. Play more to climb! 🟩' })
                 .setTimestamp();
 
-            message.channel.send({ embeds: [embed] });
+            await message.channel.send({ embeds: [embed] });
         }
 
         // Handle !wordleweekly command
@@ -614,7 +628,7 @@ module.exports = (client) => {
             const stats = await calculateStats(timeFilter);
 
             if (Object.keys(stats).length === 0) {
-                return message.channel.send('No Wordle scores recorded in the past week!');
+                return await message.channel.send('No Wordle scores recorded in the past week!');
             }
 
             // Sort users by weighted score (lower is better)
@@ -660,7 +674,7 @@ module.exports = (client) => {
                 .setFooter({ text: 'Rankings favor consistency and volume. Play more to climb! 🟩' })
                 .setTimestamp();
 
-            message.channel.send({ embeds: [embed] });
+            await message.channel.send({ embeds: [embed] });
         }
 
         // Handle !wordlemonthly command
@@ -671,7 +685,7 @@ module.exports = (client) => {
             const stats = await calculateStats(timeFilter);
 
             if (Object.keys(stats).length === 0) {
-                return message.channel.send('No Wordle scores recorded in the past month!');
+                return await message.channel.send('No Wordle scores recorded in the past month!');
             }
 
             // Sort users by weighted score (lower is better)
@@ -717,12 +731,12 @@ module.exports = (client) => {
                 .setFooter({ text: 'Rankings favor consistency and volume. Play more to climb! 🟩' })
                 .setTimestamp();
 
-            message.channel.send({ embeds: [embed] });
+            await message.channel.send({ embeds: [embed] });
         }
 
         // Handle !wordlebackfill command
         if (message.content.toLowerCase() === '!wordlebackfill') {
-              message.channel.send('Starting backfill of historical Wordle scores...');
+              await message.channel.send('Starting backfill of historical Wordle scores...');
 
             try {
                 let totalMessages = 0;
@@ -787,10 +801,10 @@ module.exports = (client) => {
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 }
 
-                message.channel.send(`Backfill complete! Processed ${totalMessages} Wordle result messages and added ${totalScores} new scores. (No honey awarded for backfilled scores)`);
+                await message.channel.send(`Backfill complete! Processed ${totalMessages} Wordle result messages and added ${totalScores} new scores. (No honey awarded for backfilled scores)`);
             } catch (error) {
                 console.error('Error during backfill:', error);
-                message.channel.send('L An error occurred during backfill. Check console for details.');
+                await message.channel.send('An error occurred during backfill. Check console for details.');
             }
         }
 
@@ -804,7 +818,7 @@ module.exports = (client) => {
                     const winners = await WordleMonthlyWinner.find({}).sort({ month: -1 }).limit(12);
 
                     if (winners.length === 0) {
-                        return message.channel.send('No monthly winners recorded yet! Winners are crowned on the 1st of each month.');
+                        return await message.channel.send('No monthly winners recorded yet! Winners are crowned on the 1st of each month.');
                     }
 
                     const { EmbedBuilder } = require('discord.js');
@@ -824,7 +838,7 @@ module.exports = (client) => {
                         .setFooter({ text: 'Monthly competitions reset on the 1st of each month!' })
                         .setTimestamp();
 
-                    message.channel.send({ embeds: [embed] });
+                    await message.channel.send({ embeds: [embed] });
                 } else {
                     // Show specific month's winner (format: YYYY-MM or MM/YYYY)
                     let monthStr = args[0];
@@ -838,7 +852,7 @@ module.exports = (client) => {
                     const winner = await WordleMonthlyWinner.findOne({ month: monthStr });
 
                     if (!winner) {
-                        return message.channel.send(`No winner found for ${monthStr}. Use format: !wordlewinner or !wordlewinner 2024-03`);
+                        return await message.channel.send(`No winner found for ${monthStr}. Use format: !wordlewinner or !wordlewinner 2024-03`);
                     }
 
                     const { EmbedBuilder } = require('discord.js');
@@ -862,11 +876,11 @@ module.exports = (client) => {
                         .setFooter({ text: `Winner announced on ${winner.announcedAt ? new Date(winner.announcedAt).toLocaleDateString() : 'Not announced yet'}` })
                         .setTimestamp();
 
-                    message.channel.send({ embeds: [embed] });
+                    await message.channel.send({ embeds: [embed] });
                 }
             } catch (error) {
                 console.error('Error fetching winners:', error);
-                message.channel.send('An error occurred while fetching monthly winners.');
+                await message.channel.send('An error occurred while fetching monthly winners.');
             }
         }
 
@@ -879,7 +893,7 @@ module.exports = (client) => {
 
             const announced = await checkAndAnnounceMonthlyWinner(message.channel);
             if (!announced) {
-                message.channel.send('No monthly winner to announce (either already announced or no games played last month).');
+                await message.channel.send('No monthly winner to announce (either already announced or no games played last month).');
             }
         }
 
@@ -892,7 +906,7 @@ module.exports = (client) => {
 
             const result = await forceEndCurrentMonth(message.channel);
             if (!result.success) {
-                message.channel.send(`Cannot force end the current month: ${result.message}`);
+                await message.channel.send(`Cannot force end the current month: ${result.message}`);
             }
             // Success message is handled by the forceEndCurrentMonth function itself
         }
@@ -905,6 +919,12 @@ module.exports = (client) => {
             }
 
             try {
+                // Check MongoDB connection before proceeding
+                const mongoose = require('mongoose');
+                if (mongoose.connection.readyState !== 1) {
+                    return await message.channel.send('Database not connected, cannot clear Wordle data.');
+                }
+
                 const result = await WordleScore.deleteMany({});
 
                 const { EmbedBuilder } = require('discord.js');
@@ -919,10 +939,10 @@ module.exports = (client) => {
                     .setFooter({ text: 'All Wordle history has been wiped.' })
                     .setTimestamp();
 
-                message.channel.send({ embeds: [embed] });
+                await message.channel.send({ embeds: [embed] });
             } catch (error) {
                 console.error('Error clearing Wordle data:', error);
-                message.channel.send('An error occurred while clearing Wordle data. Check console for details.');
+                await message.channel.send('An error occurred while clearing Wordle data. Check console for details.');
             }
         }
     });

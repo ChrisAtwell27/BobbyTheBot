@@ -102,7 +102,9 @@ async function resetSessionToken(token) {
 }
 
 // Fetch a trivia question
-async function fetchTriviaQuestion() {
+async function fetchTriviaQuestion(retryCount = 0) {
+    const MAX_RETRIES = 3;
+
     try {
         const token = await getSessionToken();
         if (!token) {
@@ -131,14 +133,22 @@ async function fetchTriviaQuestion() {
                 return null;
 
             case 3: // Token not found
+                if (retryCount >= MAX_RETRIES) {
+                    console.error('[TRIVIA] Max retries reached for token not found');
+                    return null;
+                }
                 console.error('[TRIVIA] Token not found, getting new token...');
                 await getSessionToken();
-                return fetchTriviaQuestion(); // Retry with new token
+                return fetchTriviaQuestion(retryCount + 1); // Retry with new token
 
             case 4: // Token empty (all questions used)
+                if (retryCount >= MAX_RETRIES) {
+                    console.error('[TRIVIA] Max retries reached for token exhaustion');
+                    return null;
+                }
                 console.log('[TRIVIA] Token exhausted, resetting...');
                 await resetSessionToken(token);
-                return fetchTriviaQuestion(); // Retry after reset
+                return fetchTriviaQuestion(retryCount + 1); // Retry after reset
 
             case 5: // Rate limit
                 console.error('[TRIVIA] Rate limited, please wait');

@@ -121,6 +121,13 @@ module.exports = (client, announcementsChannelId) => {
         console.log('[BIRTHDAY] Running daily birthday check...');
 
         try {
+            // Check MongoDB connection before proceeding
+            const mongoose = require('mongoose');
+            if (mongoose.connection.readyState !== 1) {
+                console.error('[BIRTHDAY] MongoDB not connected, skipping birthday check');
+                return;
+            }
+
             const today = new Date();
             const currentMonth = today.getMonth() + 1; // JavaScript months are 0-indexed
             const currentDay = today.getDate();
