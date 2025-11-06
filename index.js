@@ -1,10 +1,19 @@
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
-const path = require('path');
-const fs = require('fs');
 const http = require('http');
 
 // Load environment variables
 require('dotenv').config();
+
+// Global error handlers
+process.on('unhandledRejection', (error) => {
+  console.error('Unhandled promise rejection:', error);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+  // Give time to log then exit
+  setTimeout(() => process.exit(1), 1000);
+});
 
 // Load configuration values
 const { loggingChannelId, alertChannelId, alertKeywords, changelogChannelId } = require('./data/config');
@@ -13,6 +22,8 @@ const { loggingChannelId, alertChannelId, alertKeywords, changelogChannelId } = 
 const { connectToDatabase } = require('./database/connection');
 connectToDatabase().catch(err => {
   console.error('Failed to initialize database:', err);
+  console.error('Bot will exit due to database connection failure');
+  process.exit(1);
 });
 
 // Create the client
@@ -31,8 +42,9 @@ const client = new Client({
 });
 
 // Increase max listeners to prevent warnings
-client.setMaxListeners(50); // or higher if needed
-//
+client.setMaxListeners(process.env.MAX_EVENT_LISTENERS || 50);
+
+
 // Import and initialize event handlers
 require('./events/messageReactionHandler')(client);
 require('./events/loggingHandler')(client, loggingChannelId);
@@ -87,6 +99,14 @@ server.listen(PORT, () => {
   console.log(`Health check server listening on port ${PORT}`);
 });
 
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use`);
+  } else {
+    console.error('HTTP server error:', error);
+  }
+});
+
 // Start the bot
 const { setupVerificationChannel, handleMemberJoin, handleReactionAdd } = require('./verification');
 
@@ -102,16 +122,31 @@ client.once('ready', async () => {
 
     // Setup verification channels for all guilds
     for (const guild of client.guilds.cache.values()) {
-        await setupVerificationChannel(guild);
+        try {
+            await setupVerificationChannel(guild);
+        } catch (error) {
+            console.error(`Failed to setup verification for guild ${guild.name}:`, error);
+        }
     }
 });
 
 client.on('guildMemberAdd', async (member) => {
-    await handleMemberJoin(member);
+    try {
+        await handleMemberJoin(member);
+    } catch (error) {
+        console.error('Error handling member join:', error);
+    }
 });
 
 client.on('messageReactionAdd', async (reaction, user) => {
-    await handleReactionAdd(reaction, user);
+    try {
+        await handleReactionAdd(reaction, user);
+    } catch (error) {
+        console.error('Error handling reaction add:', error);
+    }
 });
 
-client.login(process.env.DISCORD_BOT_TOKEN);
+client.login(process.env.DISCORD_BOT_TOKEN).catch(error => {
+    console.error('Failed to login to Discord:', error);
+    process.exit(1);
+});
