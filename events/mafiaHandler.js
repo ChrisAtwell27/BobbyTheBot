@@ -303,6 +303,71 @@ async function sendRoleDMs(game, client) {
     return failures;
 }
 
+// Get cause of death message based on attack type
+function getCauseOfDeath(game, death) {
+    const killer = game.players.find(p => p.id === death.killerId);
+    const killerName = killer ? killer.displayName : 'Unknown';
+    const killerRole = killer && ROLES[killer.role] ? ROLES[killer.role].name : 'Unknown';
+
+    switch (death.attackType) {
+        case 'mafia':
+            return `You were killed by the Wasps (${killerName} - ${killerRole})`;
+        case 'vigilante':
+            return `You were shot by a Vigilante Bee (${killerName})`;
+        case 'serial_killer':
+            return `You were killed by the Hornet (${killerName})`;
+        case 'arson':
+            return `You were ignited by the Fire Ant (${killerName})`;
+        case 'bodyguard_sacrifice':
+            return `You died protecting your target as a Guard Bee`;
+        case 'bodyguard_counter':
+            return `You were killed by a Guard Bee's counterattack (${killerName})`;
+        case 'serial_killer_counter':
+            return `You were killed by the Hornet's counterattack (${killerName})`;
+        case 'veteran_counter':
+            return `You were killed by a Soldier Bee's alert (${killerName})`;
+        case 'jail_execute':
+            return `You were executed by the Queen Bee (${killerName})`;
+        case 'voted':
+            return `You were voted out by the hive`;
+        case 'jester_haunt':
+            return `You were haunted to death by the Clown Beetle`;
+        default:
+            return `You were eliminated`;
+    }
+}
+
+// Send death notification DM to killed player
+async function sendDeathNotification(game, client, death) {
+    try {
+        const victim = game.players.find(p => p.id === death.victimId);
+        if (!victim) return;
+
+        const user = await client.users.fetch(victim.id);
+        const role = ROLES[victim.role];
+
+        const deathEmbed = new EmbedBuilder()
+            .setColor('#000000')
+            .setTitle('💀 You Have Been Eliminated')
+            .setDescription(`You have been killed and are now out of the game.\n\n**Your Role:** ${role.emoji} ${role.name}`)
+            .setTimestamp();
+
+        // Add cause of death if in debug mode
+        if (game.debugMode) {
+            const causeOfDeath = getCauseOfDeath(game, death);
+            deathEmbed.addFields({
+                name: '🔍 Debug Info: Cause of Death',
+                value: causeOfDeath,
+                inline: false
+            });
+        }
+
+        await user.send({ embeds: [deathEmbed] });
+    } catch (error) {
+        console.error(`Could not send death notification to ${death.victimId}:`, error);
+    }
+}
+
 // Update game display
 async function updateGameDisplay(game, client) {
     try {
@@ -1272,6 +1337,11 @@ async function endNightPhase(game, client) {
     // Process all night actions using the new system
     const deaths = await processNightActions(game, client);
 
+    // Send death notifications to killed players
+    for (const death of deaths) {
+        await sendDeathNotification(game, client, death);
+    }
+
     // Announce results
     const dawnEmbed = new EmbedBuilder()
         .setColor('#FFA500')
@@ -1413,6 +1483,11 @@ async function endVotingPhase(game, client) {
             eliminatedPlayer = game.players.find(p => p.id === targetId);
             if (eliminatedPlayer) {
                 eliminatedPlayer.alive = false;
+                // Send death notification
+                await sendDeathNotification(game, client, {
+                    victimId: eliminatedPlayer.id,
+                    attackType: 'voted'
+                });
             }
         }
     }
@@ -1855,6 +1930,12 @@ module.exports = (client) => {
                 return message.reply('You are already in an active game!');
             }
 
+            // Check if user is in voice channel
+            const member = message.member;
+            if (!member.voice.channel || member.voice.channel.id !== MAFIA_VC_ID) {
+                return message.reply(`You must be in the Mafia voice channel (<#${MAFIA_VC_ID}>) to create a debug game!`);
+            }
+
             // Parse arguments for role and random mode
             let randomMode = false;
             let specifiedRole = null;
@@ -1873,15 +1954,28 @@ module.exports = (client) => {
                 }
             }
 
-            // Create debug game with fake players
+            // Get all members in voice channel
+            const voiceChannel = member.voice.channel;
+            const members = Array.from(voiceChannel.members.values());
+            const humanMembers = members.filter(m => !m.user.bot);
+
+            // Check if any players are already in a game
+            const playersInGame = humanMembers.filter(m => getGameByPlayer(m.user.id));
+            if (playersInGame.length > 0) {
+                return message.reply(`Some players are already in an active game: ${playersInGame.map(m => m.displayName).join(', ')}`);
+            }
+
+            // Create debug game with all VC members + bots
             const gameId = `mafia_debug_${Date.now()}`;
-            const realPlayer = {
-                id: message.author.id,
-                username: message.author.username,
-                displayName: message.member?.displayName || message.author.username,
+
+            // Get all real players from voice channel
+            const realPlayers = humanMembers.map(m => ({
+                id: m.user.id,
+                username: m.user.username,
+                displayName: m.displayName || m.user.username,
                 alive: true,
                 role: null
-            };
+            }));
 
             // Create 5 fake bot players
             const fakePlayers = [
@@ -1892,19 +1986,24 @@ module.exports = (client) => {
                 { id: 'bot5', username: 'TestBot5', displayName: 'Test Bot 5', alive: true, role: null }
             ];
 
-            const players = [realPlayer, ...fakePlayers];
+            const players = [...realPlayers, ...fakePlayers];
 
             // Assign roles
             if (specifiedRole) {
-                // Assign specified role to real player
-                initializePlayerRole(realPlayer, specifiedRole);
+                // Assign specified role to the game creator (message author)
+                const creator = realPlayers.find(p => p.id === message.author.id);
+                if (creator) {
+                    initializePlayerRole(creator, specifiedRole);
+                }
 
-                // Assign random roles to bots from distribution
+                // Assign random roles to other players (both real and bots) from distribution
                 const roleDistribution = getRoleDistribution(players.length, randomMode);
                 const shuffledRoles = shuffleArray(roleDistribution);
 
-                for (let i = 0; i < fakePlayers.length; i++) {
-                    initializePlayerRole(fakePlayers[i], shuffledRoles[i]);
+                // Skip the first role for the creator, assign the rest to other players
+                const otherPlayers = players.filter(p => p.id !== message.author.id);
+                for (let i = 0; i < otherPlayers.length; i++) {
+                    initializePlayerRole(otherPlayers[i], shuffledRoles[i]);
                 }
             } else {
                 // All players get random roles (original behavior)
@@ -1937,7 +2036,7 @@ module.exports = (client) => {
             const setupEmbed = new EmbedBuilder()
                 .setColor('#FFA500')
                 .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}${specifiedRole ? '🎯' : ''}🐝 [DEBUG MODE]`)
-                .setDescription(`**Debug game** created with **${players.length} players** (1 real, 5 bots)!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}${specifiedRole ? `\n\n🎯 **You are playing as:** ${ROLES[specifiedRole].name} ${ROLES[specifiedRole].emoji}` : ''}\n\nRoles are being assigned... Check your DMs!\n\n**Debug Commands:**\n\`!mafiadebugskip\` - Skip to next phase\n\`!mafiadebugend\` - End the game`)
+                .setDescription(`**Debug game** created with **${players.length} players** (${realPlayers.length} real, ${fakePlayers.length} bots)!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}${specifiedRole ? `\n\n🎯 **<@${message.author.id}> is playing as:** ${ROLES[specifiedRole].name} ${ROLES[specifiedRole].emoji}` : ''}\n\nRoles are being assigned... Check your DMs!\n\n**Debug Commands:**\n\`!mafiadebugskip\` - Skip to next phase\n\`!mafiadebugend\` - End the game`)
                 .addFields({
                     name: 'Players',
                     value: players.map(p => `• ${p.displayName}`).join('\n'),
@@ -1948,26 +2047,34 @@ module.exports = (client) => {
             const gameMessage = await channel.send({ embeds: [setupEmbed] });
             game.messageId = gameMessage.id;
 
-            // Send role DM (only to real player)
-            try {
-                const user = await client.users.fetch(realPlayer.id);
-                const role = ROLES[realPlayer.role];
+            // Send role DMs to all real players
+            const failedDMs = [];
+            for (const player of realPlayers) {
+                try {
+                    const user = await client.users.fetch(player.id);
+                    const role = ROLES[player.role];
 
-                const roleEmbed = new EmbedBuilder()
-                    .setColor(role.team === 'bee' ? '#FFD700' : role.team === 'wasp' ? '#8B0000' : '#808080')
-                    .setTitle(`${role.emoji} Your Role: ${role.name}`)
-                    .setDescription(role.description)
-                    .addFields(
-                        { name: 'Abilities', value: role.abilities.join('\n'), inline: false },
-                        { name: 'Win Condition', value: role.winCondition, inline: false }
-                    )
-                    .setFooter({ text: 'The game will begin shortly!' })
-                    .setTimestamp();
+                    const roleEmbed = new EmbedBuilder()
+                        .setColor(role.team === 'bee' ? '#FFD700' : role.team === 'wasp' ? '#8B0000' : '#808080')
+                        .setTitle(`${role.emoji} Your Role: ${role.name}`)
+                        .setDescription(role.description)
+                        .addFields(
+                            { name: 'Abilities', value: role.abilities.join('\n'), inline: false },
+                            { name: 'Win Condition', value: role.winCondition, inline: false }
+                        )
+                        .setFooter({ text: 'The game will begin shortly!' })
+                        .setTimestamp();
 
-                await user.send({ embeds: [roleEmbed] });
-            } catch (error) {
-                console.error('Could not send debug role DM:', error);
-                await channel.send(`⚠️ <@${realPlayer.id}> Could not send you a DM! Please enable DMs from server members.`);
+                    await user.send({ embeds: [roleEmbed] });
+                } catch (error) {
+                    console.error(`Could not send debug role DM to ${player.displayName}:`, error);
+                    failedDMs.push(player.id);
+                }
+            }
+
+            // Notify about failed DMs
+            if (failedDMs.length > 0) {
+                await channel.send(`⚠️ ${failedDMs.map(id => `<@${id}>`).join(', ')} Could not send you a DM! Please enable DMs from server members.`);
             }
 
             // Show all bot roles in the channel for debugging
@@ -2211,6 +2318,13 @@ module.exports = (client) => {
                 if (choice >= 1 && choice <= validTargets.length) {
                     const target = validTargets[choice - 1];
                     target.alive = false;
+
+                    // Send death notification to haunted player
+                    await sendDeathNotification(game, client, {
+                        victimId: target.id,
+                        killerId: message.author.id,
+                        attackType: 'jester_haunt'
+                    });
 
                     await message.reply(`You haunted **${target.displayName}**! 👻`);
 
