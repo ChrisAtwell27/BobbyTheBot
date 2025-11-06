@@ -437,6 +437,137 @@ async function startNightPhase(game, client) {
         }, nightDuration - warningTime);
     }
 
+    // In debug mode, make bots automatically perform night actions after a short delay
+    if (game.debugMode) {
+        setTimeout(() => {
+            const botPlayers = game.players.filter(p => p.alive && p.id.startsWith('bot'));
+            botPlayers.forEach(bot => {
+                const role = ROLES[bot.role];
+                if (!role.nightAction) return;
+
+                const alivePlayers = game.players.filter(p => p.alive);
+                let validTargets = [];
+                let target = null;
+
+                switch (role.actionType) {
+                    case 'mafia_kill':
+                        // Wasps target non-wasps
+                        validTargets = alivePlayers.filter(p => ROLES[p.role].team !== 'wasp');
+                        break;
+                    case 'investigate_suspicious':
+                    case 'investigate_exact':
+                    case 'consigliere':
+                    case 'lookout':
+                    case 'seance':
+                        // Can target anyone except self
+                        validTargets = alivePlayers.filter(p => p.id !== bot.id);
+                        break;
+                    case 'frame':
+                    case 'clean':
+                    case 'disguise':
+                        // Can target anyone except self and team members
+                        validTargets = alivePlayers.filter(p => p.id !== bot.id && ROLES[p.role].team !== 'wasp');
+                        break;
+                    case 'witch':
+                        // Spider needs to control someone and redirect them to a new target
+                        validTargets = alivePlayers.filter(p => p.id !== bot.id);
+                        if (validTargets.length > 0 && alivePlayers.length > 0) {
+                            const controlled = validTargets[Math.floor(Math.random() * validTargets.length)];
+                            const newTarget = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+                            game.nightActions[bot.id] = {
+                                actionType: 'witch',
+                                target: controlled.id,
+                                newTarget: newTarget.id
+                            };
+                            console.log(`[Debug] ${bot.displayName} (Spider) controlling ${controlled.displayName} to target ${newTarget.displayName}`);
+                        }
+                        return;
+                    case 'roleblock':
+                        // Can roleblock anyone except self
+                        validTargets = alivePlayers.filter(p => p.id !== bot.id);
+                        break;
+                    case 'shoot':
+                        // Soldier - can shoot anyone except self
+                        if (bot.bullets && bot.bullets > 0) {
+                            validTargets = alivePlayers.filter(p => p.id !== bot.id);
+                        }
+                        break;
+                    case 'serial_kill':
+                        // Murder Hornet can target anyone except self
+                        validTargets = alivePlayers.filter(p => p.id !== bot.id);
+                        break;
+                    case 'arsonist':
+                        // Fire Ant - decide whether to douse or ignite
+                        const dousedCount = game.dousedPlayers ? game.dousedPlayers.size : 0;
+                        // 40% chance to ignite if at least 2 players are doused
+                        if (dousedCount >= 2 && Math.random() < 0.4) {
+                            game.nightActions[bot.id] = { actionType: 'arsonist', ignite: true };
+                            console.log(`[Debug] ${bot.displayName} (Fire Ant) is igniting all doused players!`);
+                            return;
+                        } else {
+                            // Otherwise douse someone
+                            validTargets = alivePlayers.filter(p => p.id !== bot.id);
+                        }
+                        break;
+                    case 'heal':
+                    case 'guard':
+                        // Can protect/heal anyone
+                        validTargets = alivePlayers;
+                        break;
+                    case 'jail':
+                        // Jailer - can jail anyone except self
+                        validTargets = alivePlayers.filter(p => p.id !== bot.id);
+                        break;
+                    case 'alert':
+                        // Veteran - goes on alert (no target needed)
+                        if (bot.alerts && bot.alerts > 0) {
+                            game.nightActions[bot.id] = { actionType: 'alert' };
+                            console.log(`[Debug] ${bot.displayName} went on alert`);
+                        }
+                        return;
+                    case 'vest':
+                        // Survivor - puts on vest (no target needed)
+                        if (bot.vests && bot.vests > 0) {
+                            game.nightActions[bot.id] = { actionType: 'vest' };
+                            console.log(`[Debug] ${bot.displayName} put on vest`);
+                        }
+                        return;
+                    case 'remember':
+                        // Amnesiac - remember a dead role
+                        const deadPlayers = game.players.filter(p => !p.alive);
+                        if (deadPlayers.length > 0 && !bot.hasRemembered) {
+                            target = deadPlayers[Math.floor(Math.random() * deadPlayers.length)];
+                            game.nightActions[bot.id] = { actionType: 'remember', target: target.id };
+                            console.log(`[Debug] ${bot.displayName} chose to remember ${target.displayName}'s role`);
+                        }
+                        return;
+                    default:
+                        return;
+                }
+
+                // Select random target from valid targets
+                if (validTargets.length > 0) {
+                    target = validTargets[Math.floor(Math.random() * validTargets.length)];
+
+                    // Special handling for Jailer - randomly decide whether to execute
+                    if (role.actionType === 'jail' && bot.executions > 0) {
+                        const shouldExecute = Math.random() < 0.3; // 30% chance to execute
+                        game.nightActions[bot.id] = {
+                            actionType: 'jail',
+                            target: target.id,
+                            execute: shouldExecute
+                        };
+                        console.log(`[Debug] ${bot.displayName} (${role.name}) jailed ${target.displayName}${shouldExecute ? ' and will execute' : ''}`);
+                    } else {
+                        game.nightActions[bot.id] = { actionType: role.actionType, target: target.id };
+                        console.log(`[Debug] ${bot.displayName} (${role.name}) targeted ${target.displayName}`);
+                    }
+                }
+            });
+            game.lastActivityTime = Date.now();
+        }, 3000); // Bots act after 3 seconds
+    }
+
     // Set timer for day phase
     game.phaseTimer = setTimeout(async () => {
         await endNightPhase(game, client);
@@ -1225,6 +1356,23 @@ async function startVotingPhase(game, client) {
         components: votingButtons
     });
 
+    // In debug mode, make bots automatically vote after a short delay
+    if (game.debugMode) {
+        setTimeout(() => {
+            const botPlayers = game.players.filter(p => p.alive && p.id.startsWith('bot'));
+            botPlayers.forEach(bot => {
+                // Bots vote for random alive players (can vote for each other or the human)
+                const votableTargets = alivePlayers.filter(p => p.id !== bot.id);
+                if (votableTargets.length > 0) {
+                    const randomTarget = votableTargets[Math.floor(Math.random() * votableTargets.length)];
+                    game.votes[bot.id] = randomTarget.id;
+                    console.log(`[Debug] ${bot.displayName} voted for ${randomTarget.displayName}`);
+                }
+            });
+            game.lastActivityTime = Date.now();
+        }, 2000); // Bots vote after 2 seconds
+    }
+
     // Set timer for vote results
     game.phaseTimer = setTimeout(async () => {
         await endVotingPhase(game, client);
@@ -1258,8 +1406,9 @@ async function endVotingPhase(game, client) {
         const maxVotes = Math.max(...Object.values(voteCounts));
         const topTargets = Object.keys(voteCounts).filter(id => voteCounts[id] === maxVotes);
 
-        // If tie and at least 2 votes, random selection, otherwise no elimination
-        if (maxVotes >= 2) {
+        // In debug mode, only 1 vote needed. In normal mode, at least 2 votes needed
+        const votesNeeded = game.debugMode ? 1 : 2;
+        if (maxVotes >= votesNeeded) {
             const targetId = topTargets[Math.floor(Math.random() * topTargets.length)];
             eliminatedPlayer = game.players.find(p => p.id === targetId);
             if (eliminatedPlayer) {
