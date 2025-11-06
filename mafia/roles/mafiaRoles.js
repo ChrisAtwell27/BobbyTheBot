@@ -82,14 +82,14 @@ const ROLES = {
         name: 'Soldier Bee',
         emoji: '⚔️',
         team: 'bee',
-        description: 'You are a **Soldier Bee**! You have 3 bullets. You can shoot one player each night.',
-        abilities: ['Shoot one player each night (3 bullets total)', 'Basic attack', 'If you shoot a Bee, you die from guilt'],
+        description: 'You are a **Soldier Bee**! You have 1 bullets. You can shoot one player at night.',
+        abilities: ['Shoot one player each night (1 bullets total)', 'Basic attack', 'If you shoot a Bee, you die from guilt'],
         winCondition: 'Eliminate all Wasps and harmful Neutrals',
         nightAction: true,
         actionType: 'shoot',
         attack: 1, // Basic attack
         defense: 0,
-        bullets: 3
+        bullets: 1
     },
     QUEEN_BEE: {
         name: 'Queen Bee',

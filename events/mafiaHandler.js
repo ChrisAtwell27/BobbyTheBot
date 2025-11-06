@@ -2275,7 +2275,17 @@ module.exports = (client) => {
 
         if (!interaction.isButton()) return;
 
-        const [action, gameId, targetId] = interaction.customId.split('_');
+        // Parse customId correctly - gameId contains underscores (e.g., mafia_1234567890)
+        const parts = interaction.customId.split('_');
+        const action = parts[0]; // e.g., 'mafiavote'
+
+        let gameId, targetId;
+        if (action === 'mafiavote') {
+            // For mafiavote buttons: mafiavote_mafia_timestamp_targetId
+            // targetId is always the last part, gameId is everything in between
+            targetId = parts[parts.length - 1];
+            gameId = parts.slice(1, -1).join('_');
+        }
 
         if (action === 'mafiavote') {
             const game = getGame(gameId);
