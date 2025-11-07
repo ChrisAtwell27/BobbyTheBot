@@ -299,7 +299,7 @@ const ROLES = {
         defense: 0,
         hasUsedProtection: false
     },
-    KELLER_BEE: {
+    MUTE_BEE: {
         name: 'Mute Bee',
         emoji: '🤐',
         team: 'bee',
@@ -309,7 +309,7 @@ const ROLES = {
         nightAction: false,
         attack: 0,
         defense: 0,
-        isKellerBee: true // Special flag for message handling
+        isMuteBee: true // Special flag for message handling
     },
     DEAF_BEE: {
         name: 'Deaf Bee',

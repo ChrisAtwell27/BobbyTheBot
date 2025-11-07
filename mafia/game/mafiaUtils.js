@@ -9,9 +9,10 @@ const { ROLES } = require('../roles/mafiaRoles');
  * Get role distribution based on player count
  * @param {number} playerCount - Number of players
  * @param {boolean} randomMode - If true, uses fully random distribution (only wasp count and queen guaranteed)
+ * @param {boolean} debugMode - If true, forces wasp count to 2 for testing
  * @returns {Array} Array of role keys
  */
-function getRoleDistribution(playerCount, randomMode = false) {
+function getRoleDistribution(playerCount, randomMode = false, debugMode = false) {
     const distribution = [];
 
     if (playerCount < 6) {
@@ -20,7 +21,11 @@ function getRoleDistribution(playerCount, randomMode = false) {
 
     // Calculate faction sizes based on player count
     let waspCount;
-    if (playerCount === 6) {
+
+    // Debug mode: force wasp count to 2
+    if (debugMode) {
+        waspCount = 2;
+    } else if (playerCount === 6) {
         waspCount = 1;
     } else if (playerCount >= 7 && playerCount <= 9) {
         waspCount = 2;

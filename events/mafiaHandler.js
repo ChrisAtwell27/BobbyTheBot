@@ -660,8 +660,8 @@ async function startNightPhase(game, client) {
         }, nightDuration - warningTime);
     }
 
-    // In debug mode, make bots automatically perform night actions after a short delay
-    if (game.debugMode) {
+    // In debug mode, make bots automatically perform night actions after a short delay (unless NoAI is enabled)
+    if (game.debugMode && !game.noAI) {
         setTimeout(() => {
             const botPlayers = game.players.filter(p => p.alive && p.id.startsWith('bot'));
             botPlayers.forEach(bot => {
@@ -1126,6 +1126,23 @@ async function sendNightActionPrompts(game, client) {
                         .setTitle(`${role.emoji} Night Phase - Remember Your Role`)
                         .setDescription(`Choose a dead player. You will become their role and join their team!\n\n${targets}`)
                         .setFooter({ text: 'Choose your destiny!' });
+                    break;
+
+                case 'pirate_duel':
+                    // Pirate Beetle - challenge someone to a duel
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    const duelsWon = player.duelsWon || 0;
+                    const duelsNeeded = player.duelsNeeded || 2;
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Challenge to a Duel`)
+                        .setDescription(`Choose someone to duel! Send: **[number] [rock/paper/scissors]**\n\nExample: **1 rock**\n\nDuels Won: ${duelsWon}/${duelsNeeded}\n\n${targets}`)
+                        .setFooter({ text: 'Win 2 duels to become a Butterfly!' });
                     break;
 
                 default:
@@ -2652,8 +2669,9 @@ module.exports = (client) => {
                 return message.reply(`You must be in the Mafia voice channel (<#${MAFIA_VC_ID}>) to create a debug game!`);
             }
 
-            // Parse arguments for role(s) and random mode
+            // Parse arguments for role(s), random mode, and NoAI
             let randomMode = false;
+            let noAI = false;
             let specifiedRoles = []; // Array to hold multiple roles
 
             // Check each argument
@@ -2661,6 +2679,8 @@ module.exports = (client) => {
                 const argUpper = args[i].toUpperCase();
                 if (argUpper === 'RANDOM') {
                     randomMode = true;
+                } else if (argUpper === 'NOAI') {
+                    noAI = true;
                 } else {
                     // Check if argument contains comma-separated roles
                     const roleList = args[i].split(',').map(r => r.trim().toUpperCase());
@@ -2672,7 +2692,7 @@ module.exports = (client) => {
                         } else {
                             // Invalid role name
                             const validRoles = Object.keys(ROLES).sort().join(', ');
-                            return message.reply(`❌ Invalid role: **${roleName}**\n\n**Valid roles:**\n${validRoles}\n\n**Usage:** \`!createmafiadebug [ROLE_ONE,ROLE_TWO,...] [random]\`\n**Examples:**\n• \`!createmafiadebug SCOUT_BEE\` - Play as Scout Bee\n• \`!createmafiadebug SCOUT_BEE,WASP_QUEEN\` - Assign Scout Bee to you, Wasp Queen to next person in VC\n• \`!createmafiadebug WASP_QUEEN random\` - Play as Wasp Queen with random mode\n• \`!createmafiadebug random\` - Random role with random mode`);
+                            return message.reply(`❌ Invalid role: **${roleName}**\n\n**Valid roles:**\n${validRoles}\n\n**Usage:** \`!createmafiadebug [ROLE_ONE,ROLE_TWO,...] [random] [NoAI]\`\n**Examples:**\n• \`!createmafiadebug SCOUT_BEE\` - Play as Scout Bee\n• \`!createmafiadebug SCOUT_BEE,WASP_QUEEN\` - Assign Scout Bee to you, Wasp Queen to next person in VC\n• \`!createmafiadebug WASP_QUEEN random\` - Play as Wasp Queen with random mode\n• \`!createmafiadebug PIRATE_BEETLE NoAI\` - Play as Pirate Beetle, bots don't auto-act\n• \`!createmafiadebug random\` - Random role with random mode`);
                         }
                     }
                 }
@@ -2706,13 +2726,20 @@ module.exports = (client) => {
                 role: null
             }));
 
-            // Create 5 fake bot players
+            // Create 12 fake bot players
             const fakePlayers = [
                 { id: 'bot1', username: 'TestBot1', displayName: 'Test Bot 1', alive: true, role: null },
                 { id: 'bot2', username: 'TestBot2', displayName: 'Test Bot 2', alive: true, role: null },
                 { id: 'bot3', username: 'TestBot3', displayName: 'Test Bot 3', alive: true, role: null },
                 { id: 'bot4', username: 'TestBot4', displayName: 'Test Bot 4', alive: true, role: null },
-                { id: 'bot5', username: 'TestBot5', displayName: 'Test Bot 5', alive: true, role: null }
+                { id: 'bot5', username: 'TestBot5', displayName: 'Test Bot 5', alive: true, role: null },
+                { id: 'bot6', username: 'TestBot6', displayName: 'Test Bot 6', alive: true, role: null },
+                { id: 'bot7', username: 'TestBot7', displayName: 'Test Bot 7', alive: true, role: null },
+                { id: 'bot8', username: 'TestBot8', displayName: 'Test Bot 8', alive: true, role: null },
+                { id: 'bot9', username: 'TestBot9', displayName: 'Test Bot 9', alive: true, role: null },
+                { id: 'bot10', username: 'TestBot10', displayName: 'Test Bot 10', alive: true, role: null },
+                { id: 'bot11', username: 'TestBot11', displayName: 'Test Bot 11', alive: true, role: null },
+                { id: 'bot12', username: 'TestBot12', displayName: 'Test Bot 12', alive: true, role: null }
             ];
 
             const players = [...realPlayers, ...fakePlayers];
@@ -2735,7 +2762,7 @@ module.exports = (client) => {
                 });
 
                 // Assign random roles to remaining players (both real and bots) from distribution
-                const roleDistribution = getRoleDistribution(players.length, randomMode);
+                const roleDistribution = getRoleDistribution(players.length, randomMode, true); // Pass true for debug mode
                 const shuffledRoles = shuffleArray(roleDistribution);
 
                 // Assign the remaining shuffled roles to players who don't have roles yet
@@ -2744,7 +2771,7 @@ module.exports = (client) => {
                 }
             } else {
                 // All players get random roles (original behavior)
-                const roleDistribution = getRoleDistribution(players.length, randomMode);
+                const roleDistribution = getRoleDistribution(players.length, randomMode, true); // Pass true for debug mode
                 const shuffledRoles = shuffleArray(roleDistribution);
 
                 for (let i = 0; i < players.length; i++) {
@@ -2765,6 +2792,7 @@ module.exports = (client) => {
             // Create game using game state module
             const game = createGame(gameId, players, message.author.id, MAFIA_TEXT_CHANNEL_ID);
             game.debugMode = true; // Set debug flag
+            game.noAI = noAI; // Set NoAI flag to disable bot auto-actions
 
             // Send initial message
             const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
@@ -3265,6 +3293,9 @@ module.exports = (client) => {
         if (kellerGame && message.channel.id === MAFIA_TEXT_CHANNEL_ID) {
             const kellerPlayer = kellerGame.players.find(p => p.id === message.author.id);
             if (kellerPlayer && kellerPlayer.role === 'KELLER_BEE' && !message.content.startsWith('!')) {
+                // Store original message before deletion
+                const originalMessage = message.content;
+
                 // Delete the original message
                 try {
                     await message.delete();
@@ -3273,10 +3304,10 @@ module.exports = (client) => {
                 }
 
                 // Translate to emojis using OpenAI
-                const emojiMessage = await translateToEmojis(message.content, message.author.username);
+                const emojiMessage = await translateToEmojis(originalMessage, message.author.username);
 
                 if (emojiMessage) {
-                    // Send emoji translation
+                    // Send emoji translation to channel
                     const kellerEmbed = new EmbedBuilder()
                         .setColor('#9B59B6')
                         .setAuthor({
@@ -3288,6 +3319,27 @@ module.exports = (client) => {
                         .setTimestamp();
 
                     await message.channel.send({ embeds: [kellerEmbed] });
+
+                    // Send original message to all Deaf Bee players via DM
+                    const deafBeePlayers = kellerGame.players.filter(p => p.role === 'DEAF_BEE' && p.alive);
+                    for (const deafBee of deafBeePlayers) {
+                        try {
+                            const deafBeeUser = await client.users.fetch(deafBee.id);
+                            const translationEmbed = new EmbedBuilder()
+                                .setColor('#9B59B6')
+                                .setAuthor({
+                                    name: `${kellerPlayer.displayName} (Keller Bee) - Translation`,
+                                    iconURL: message.author.displayAvatarURL()
+                                })
+                                .setDescription(`**Emojis:** ${emojiMessage}\n\n**Original Message:** ${originalMessage}`)
+                                .setFooter({ text: '🦻 Only you can read this translation as a Deaf Bee' })
+                                .setTimestamp();
+
+                            await deafBeeUser.send({ embeds: [translationEmbed] });
+                        } catch (error) {
+                            console.error(`Could not send translation to Deaf Bee ${deafBee.displayName}:`, error);
+                        }
+                    }
                 }
             }
         }
