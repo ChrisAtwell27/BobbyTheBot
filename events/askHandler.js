@@ -651,6 +651,14 @@ module.exports = (client) => {
         const userMessage = message.content;
         const userMessageLower = userMessage.toLowerCase();
 
+        // EARLY RETURN: Skip mafia commands (let mafiaHandler handle them)
+        const isMafiaCommand = userMessageLower.startsWith('!createmafia') ||
+                              userMessageLower.startsWith('!mafia') ||
+                              userMessageLower.startsWith('!roles') ||
+                              userMessageLower.startsWith('!presets') ||
+                              userMessageLower.startsWith('!reveal');
+        if (isMafiaCommand) return;
+
         // EARLY RETURN: Skip if message doesn't contain Bobby commands or mentions
         const isBobbyCommand = userMessageLower.startsWith('!reset') || userMessageLower.startsWith('!clear') ||
                               userMessageLower.startsWith('!setmemory') || userMessageLower.startsWith('!remember') ||

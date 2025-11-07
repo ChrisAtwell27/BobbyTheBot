@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(del diagnose-cpu.js add-early-returns.js)"
+      "Bash(del diagnose-cpu.js add-early-returns.js)",
+      "Bash(node -e:*)"
     ],
     "deny": [],
     "ask": []
