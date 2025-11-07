@@ -3080,7 +3080,20 @@ async function startVotingPhase(game, client) {
             }
 
             const user = await client.users.fetch(player.id);
+            let title = '🗳️ Voting Phase';
             let description = `Vote for who you think is a Wasp! The player with the most votes will be eliminated.\n\n**Alive Players:** ${alivePlayers.length}\n**Time Remaining:** ${votingDuration / 1000} seconds`;
+
+            // Check if this is a revote
+            if (game.isRevote && game.tiedTargets) {
+                title = '🔄 Revote Phase!';
+                const tiedPlayerNames = game.tiedTargets
+                    .map(id => {
+                        const player = game.players.find(p => p.id === id);
+                        return player ? player.displayName : 'Unknown';
+                    })
+                    .join(', ');
+                description = `The vote was tied! Cast your vote again using the buttons below.\n\n**Tied players:** ${tiedPlayerNames}\n**Time Remaining:** ${votingDuration / 1000} seconds`;
+            }
 
             // Add Judge instructions if player is a Judge
             if (player.role === 'JUDGE' && !player.hasUsedRevote) {
@@ -3088,8 +3101,8 @@ async function startVotingPhase(game, client) {
             }
 
             const votingEmbed = new EmbedBuilder()
-                .setColor('#FF0000')
-                .setTitle('🗳️ Voting Phase')
+                .setColor(game.isRevote ? '#FFA500' : '#FF0000')
+                .setTitle(title)
                 .setDescription(description)
                 .setTimestamp();
 
@@ -3202,23 +3215,8 @@ async function endVotingPhase(game, client) {
                         console.error('Could not send tie announcement:', error);
                     }
 
-                    // Notify all alive players about the revote
-                    const { EmbedBuilder } = require('discord.js');
-                    for (const player of game.players.filter(p => p.alive)) {
-                        try {
-                            const user = await client.users.fetch(player.id);
-                            const embed = new EmbedBuilder()
-                                .setColor('#FFA500')
-                                .setTitle('🔄 Revote Phase!')
-                                .setDescription(`The vote was tied! Cast your vote again using the buttons below.\n\nTied players: **${tiedPlayerNames}**`)
-                                .setTimestamp();
-                            await user.send({ embeds: [embed] });
-                        } catch (error) {
-                            console.error(`Could not notify player ${player.displayName}:`, error);
-                        }
-                    }
-
                     // Start a new 60-second voting phase for the revote
+                    // This will send the voting buttons to all alive players
                     await startVotingPhase(game, client, 60);
                     return; // Exit early - don't process elimination yet
                 }
@@ -5066,12 +5064,29 @@ module.exports = (client) => {
 
                 // Relay message to all other players (alive and dead) during day phase
                 if (game.phase === 'day') {
+                    // Check if message needs transformation (blackmail/deceive)
+                    let messageToRelay = message.content;
+
+                    // Check blackmail first (higher priority than deceive)
+                    if (game.blackmailedPlayers && game.blackmailedPlayers.has(message.author.id)) {
+                        messageToRelay = await transformToPositive(message.content, message.author.username);
+                    }
+                    // Check deceive if not blackmailed
+                    else if (game.deceivedPlayers && game.deceivedPlayers.has(message.author.id)) {
+                        messageToRelay = await twistTextToNegative(message.content, message.author.username);
+                    }
+
+                    // Check if sender is a Mute Bee - translate to emojis AFTER transformation
+                    if (isMutePlayer(player)) {
+                        messageToRelay = await translateToEmojis(messageToRelay, message.author.username);
+                    }
+
                     const otherPlayers = game.players.filter(p => p.id !== message.author.id);
                     for (const otherPlayer of otherPlayers) {
                         try {
                             const user = await client.users.fetch(otherPlayer.id);
                             const prefix = otherPlayer.alive ? '💬' : '👻';
-                            await user.send(`${prefix} **${player.displayName}:** ${message.content}`);
+                            await user.send(`${prefix} **${player.displayName}:** ${messageToRelay}`);
                         } catch (error) {
                             console.error(`Could not relay day message to ${otherPlayer.displayName}:`, error);
                         }
