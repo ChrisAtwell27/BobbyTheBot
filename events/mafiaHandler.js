@@ -3670,6 +3670,92 @@ async function startDuskPhase(game, client) {
         }
     }
 
+    // In debug mode, make bots automatically perform dusk actions after a short delay (unless NoAI is enabled)
+    if (game.debugMode && !game.noAI) {
+        setTimeout(() => {
+            const botPlayers = duskPlayers.filter(p => p.id.startsWith('bot'));
+            botPlayers.forEach(bot => {
+                const role = ROLES[bot.role];
+                const alivePlayers = game.players.filter(p => p.alive);
+                let validTargets = [];
+                let target = null;
+
+                switch (role.actionType) {
+                    case 'jail':
+                        // Jailer - select jail target (anyone except self)
+                        validTargets = alivePlayers.filter(p => p.id !== bot.id);
+                        if (validTargets.length > 0) {
+                            target = validTargets[Math.floor(Math.random() * validTargets.length)];
+                            game.duskActions[bot.id] = {
+                                actionType: 'jail',
+                                target: target.id,
+                                execute: false // Bots won't auto-execute during dusk
+                            };
+                            bot.jailedTarget = target.id;
+                            console.log(`[Debug] ${bot.displayName} (Jailer) jailed ${target.displayName}`);
+                        }
+                        break;
+                    case 'transport':
+                        // Transporter - select two random targets
+                        validTargets = alivePlayers; // Can transport anyone including self
+                        if (validTargets.length >= 2) {
+                            const target1 = validTargets[Math.floor(Math.random() * validTargets.length)];
+                            let target2 = validTargets[Math.floor(Math.random() * validTargets.length)];
+                            // Make sure target2 is different from target1
+                            while (target2.id === target1.id && validTargets.length > 1) {
+                                target2 = validTargets[Math.floor(Math.random() * validTargets.length)];
+                            }
+                            game.duskActions[bot.id] = {
+                                actionType: 'transport',
+                                target1: target1.id,
+                                target2: target2.id
+                            };
+                            console.log(`[Debug] ${bot.displayName} (Transporter) transporting ${target1.displayName} and ${target2.displayName}`);
+                        }
+                        break;
+                    case 'pirate_duel':
+                        // Pirate - select random target and choice
+                        validTargets = alivePlayers.filter(p => p.id !== bot.id);
+                        if (validTargets.length > 0) {
+                            target = validTargets[Math.floor(Math.random() * validTargets.length)];
+                            const choices = ['rock', 'paper', 'scissors'];
+                            const choice = choices[Math.floor(Math.random() * choices.length)];
+                            game.duskActions[bot.id] = {
+                                actionType: 'pirate_duel',
+                                target: target.id,
+                                choice: choice
+                            };
+                            console.log(`[Debug] ${bot.displayName} (Pirate) challenging ${target.displayName} with ${choice}`);
+                        }
+                        break;
+                    default:
+                        // Unknown dusk action - skip
+                        game.duskActions[bot.id] = { actionType: 'skip' };
+                        break;
+                }
+            });
+        }, 3000); // Bots act after 3 seconds
+    }
+
+    // Set timeout to auto-skip dusk phase if it takes too long (60 seconds)
+    const duskTimeout = game.debugMode ? 30000 : 60000;
+    game.duskTimer = setTimeout(async () => {
+        if (game.phase !== 'dusk') return;
+
+        console.log('⏰ Dusk phase timeout - auto-skipping remaining players');
+
+        // Auto-skip any players who haven't acted
+        duskPlayers.forEach(p => {
+            if (!game.duskActions[p.id]) {
+                game.duskActions[p.id] = { actionType: 'skip' };
+                console.log(`[Debug] Auto-skipped dusk action for ${p.displayName}`);
+            }
+        });
+
+        // Move to night phase
+        await startNightPhase(game, client);
+    }, duskTimeout);
+
     // Check if everyone has acted after a short delay
     setTimeout(() => checkDuskComplete(game, client), 2000);
 }
@@ -3688,6 +3774,12 @@ async function checkDuskComplete(game, client) {
     const allActed = duskPlayers.every(p => game.duskActions[p.id]);
 
     if (allActed) {
+        // Clear the timeout timer
+        if (game.duskTimer) {
+            clearTimeout(game.duskTimer);
+            game.duskTimer = null;
+        }
+
         // Everyone has acted, move to night
         await startNightPhase(game, client);
     }
