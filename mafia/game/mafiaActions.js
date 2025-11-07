@@ -209,6 +209,9 @@ async function processNightActions(game, client) {
     // Process cult votes (tally and convert most voted target)
     await processCultVotes(game, client);
 
+    // Process mafia kill votes (tally wasp votes and execute single kill)
+    await processMafiaKillVotes(game, attacks);
+
     // Process trap results (must happen before roleblocks and attack resolution)
     await processTrapResults(game, client, attacks);
 
@@ -361,13 +364,21 @@ async function processNightActions(game, client) {
  */
 async function processHeal(game, healer, action, healers, protections) {
     const targetId = action.target;
+    const target = game.players.find(p => p.id === targetId);
     addVisit(game, healer.id, targetId);
 
     healers.set(targetId, healer.id);
 
+    // Decrement self-heal counter if healing self
+    if (targetId === healer.id && healer.selfHealsLeft !== undefined) {
+        healer.selfHealsLeft--;
+        console.log(`[Debug] ${healer.displayName} (Nurse Bee) used a self-heal. Remaining: ${healer.selfHealsLeft}`);
+    }
+
     // Heal provides protection against basic attacks
     const currentProtection = protections.get(targetId) || 0;
     protections.set(targetId, Math.max(currentProtection, 1));
+    console.log(`[Debug] ${healer.displayName} healed ${target?.displayName || targetId}. Protection set to ${protections.get(targetId)}`);
 
     // Cure poison if target is poisoned
     if (game.poisonedPlayers && game.poisonedPlayers.has(targetId)) {
@@ -423,22 +434,11 @@ async function processVest(game, survivor, protections) {
 }
 
 /**
- * Process mafia kill
+ * Process mafia kill vote - now just records the vote, actual kill happens in processMafiaKillVotes
  */
 async function processMafiaKill(game, killer, action, attacks) {
-    const targetId = action.target;
-    addVisit(game, killer.id, targetId);
-
-    if (!attacks.has(targetId)) {
-        attacks.set(targetId, []);
-    }
-
-    const role = ROLES[killer.role];
-    attacks.get(targetId).push({
-        attackerId: killer.id,
-        attackLevel: role.attack,
-        attackType: 'mafia'
-    });
+    // Mafia kill votes are tallied separately in processMafiaKillVotes
+    // This function is kept for compatibility but doesn't add attacks directly anymore
 }
 
 /**
@@ -663,6 +663,8 @@ function resolveAttacks(game, attacks, protections, healers) {
         const protection = protections.get(targetId) || 0;
         defense = Math.max(defense, protection);
 
+        console.log(`[Debug] Resolving attacks on ${target.displayName} - Natural defense: ${role.defense || 0}, Protection: ${protection}, Total defense: ${defense}`);
+
         // Check for Beekeeper protection - all Bees are immune to attacks
         const beekeeperProtecting = game.beekeeperProtection && game.beekeeperProtection.active && role.team === 'bee';
         if (beekeeperProtecting) {
@@ -685,7 +687,10 @@ function resolveAttacks(game, attacks, protections, healers) {
 
         // Check each attack
         for (const attack of filteredAttacks) {
+            const attacker = game.players.find(p => p.id === attack.attackerId);
+            console.log(`[Debug] Attack on ${target.displayName} from ${attacker?.displayName || attack.attackerId}: Level ${attack.attackLevel} vs Defense ${defense}`);
             if (attack.attackLevel >= defense) {
+                console.log(`[Debug] ⚠️  Attack penetrated defense!`);
                 // Check if target is Gambler Beetle with lucky coins (only once)
                 if (!usedCoin && target.role === 'GAMBLER_BEETLE' && target.luckyCoins > 0) {
                     // Spend a coin to survive
@@ -2914,6 +2919,88 @@ async function processCultVotes(game, client) {
 }
 
 /**
+ * Process mafia kill votes - tally all wasp votes and send a random Killer Wasp to execute the kill
+ */
+async function processMafiaKillVotes(game, attacks) {
+    // Get all alive wasp team members
+    const waspMembers = game.players.filter(p => {
+        const role = ROLES[p.role];
+        return p.alive && role.team === 'wasp';
+    });
+
+    if (waspMembers.length === 0) return;
+
+    // Tally votes from all wasps
+    const voteCount = {};
+    let totalVotes = 0;
+
+    for (const wasp of waspMembers) {
+        const action = game.nightActions[wasp.id];
+        if (action && action.actionType === 'mafia_kill' && action.target) {
+            voteCount[action.target] = (voteCount[action.target] || 0) + 1;
+            totalVotes++;
+        }
+    }
+
+    // No votes cast
+    if (totalVotes === 0) return;
+
+    // Find most voted target
+    let maxVotes = 0;
+    let topTargets = [];
+
+    for (const [targetId, votes] of Object.entries(voteCount)) {
+        if (votes > maxVotes) {
+            maxVotes = votes;
+            topTargets = [targetId];
+        } else if (votes === maxVotes) {
+            topTargets.push(targetId);
+        }
+    }
+
+    // Random selection if tie
+    const targetId = topTargets[Math.floor(Math.random() * topTargets.length)];
+
+    // Select a random Killer Wasp to carry out the kill (or Queen if no Killer Wasps)
+    let killerWasps = game.players.filter(p => p.alive && p.role === 'KILLER_WASP');
+
+    // If no Killer Wasps, use any wasp that can kill (including Queen)
+    if (killerWasps.length === 0) {
+        killerWasps = waspMembers.filter(p => {
+            const role = ROLES[p.role];
+            return role.actionType === 'mafia_kill';
+        });
+    }
+
+    if (killerWasps.length === 0) return; // No one to carry out the kill
+
+    const killer = killerWasps[Math.floor(Math.random() * killerWasps.length)];
+    const killerRole = ROLES[killer.role];
+
+    // Add visit from killer to target
+    addVisit(game, killer.id, targetId);
+
+    // Add attack
+    if (!attacks.has(targetId)) {
+        attacks.set(targetId, []);
+    }
+
+    attacks.get(targetId).push({
+        attackerId: killer.id,
+        attackLevel: killerRole.attack,
+        attackType: 'mafia'
+    });
+
+    // Store which wasp carried out the kill for notifications
+    game.nightResults.push({
+        type: 'mafia_kill_executed',
+        killerId: killer.id,
+        targetId: targetId,
+        votes: maxVotes
+    });
+}
+
+/**
  * Process wildcard action - random passive ability
  */
 async function processWildcard(game, wildcard, action, client, protections, attacks) {
@@ -3430,5 +3517,6 @@ async function processWaspSuccession(game, deaths, client) {
 
 module.exports = {
     processNightActions,
-    processWaspSuccession
+    processWaspSuccession,
+    processMafiaKillVotes
 };

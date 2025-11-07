@@ -508,6 +508,11 @@ async function sendRoleDMs(game, client) {
 
     for (const player of game.players) {
         try {
+            // Skip bot players in debug mode (they don't have real Discord accounts)
+            if (player.id.startsWith('bot')) {
+                continue;
+            }
+
             const user = await client.users.fetch(player.id);
             const role = ROLES[player.role];
 
@@ -724,24 +729,22 @@ async function sendDeathNotification(game, client, death) {
         const victim = game.players.find(p => p.id === death.victimId);
         if (!victim) return;
 
+        // Skip bot players in debug mode (they don't have real Discord accounts)
+        if (victim.id.startsWith('bot')) {
+            return;
+        }
+
         const user = await client.users.fetch(victim.id);
         const role = ROLES[victim.role];
 
         const deathEmbed = new EmbedBuilder()
             .setColor('#000000')
             .setTitle('💀 You Have Been Eliminated')
-            .setDescription(`You have been killed and are now out of the game.\n\n**Your Role:** ${role.emoji} ${role.name}`)
+            .setDescription(`You have been killed and are now out of the game.\n\n**Your Role:** ${role.emoji} ${role.name}\n\n**Note:** You do not know who killed you. This prevents you from revealing killer identities to the Medium or other dead players.`)
             .setTimestamp();
 
-        // Add cause of death if in debug mode
-        if (game.debugMode) {
-            const causeOfDeath = getCauseOfDeath(game, death);
-            deathEmbed.addFields({
-                name: '🔍 Debug Info: Cause of Death',
-                value: causeOfDeath,
-                inline: false
-            });
-        }
+        // Do NOT show cause of death, even in debug mode
+        // Dead players can communicate with Medium, so they must not know who killed them
 
         await user.send({ embeds: [deathEmbed] });
     } catch (error) {
@@ -755,6 +758,11 @@ async function sendToAllPlayers(game, client, embed, components = []) {
 
     for (const player of alivePlayers) {
         try {
+            // Skip bot players in debug mode (they don't have real Discord accounts)
+            if (player.id.startsWith('bot')) {
+                continue;
+            }
+
             const user = await client.users.fetch(player.id);
             await user.send({ embeds: [embed], components });
         } catch (error) {
@@ -767,6 +775,11 @@ async function sendToAllPlayers(game, client, embed, components = []) {
 async function sendToEveryoneInGame(game, client, embed, components = []) {
     for (const player of game.players) {
         try {
+            // Skip bot players in debug mode (they don't have real Discord accounts)
+            if (player.id.startsWith('bot')) {
+                continue;
+            }
+
             const user = await client.users.fetch(player.id);
             await user.send({ embeds: [embed], components });
         } catch (error) {
@@ -1021,6 +1034,11 @@ async function startNightPhase(game, client) {
                 // Only warn if they haven't submitted an action yet
                 if (!game.nightActions[player.id]) {
                     try {
+                        // Skip bot players in debug mode (they don't have real Discord accounts)
+                        if (player.id.startsWith('bot')) {
+                            continue;
+                        }
+
                         const user = await client.users.fetch(player.id);
                         const timeLeft = game.debugMode ? '10 seconds' : '30 seconds';
                         await user.send(`⏰ **${timeLeft} remaining** in the night phase! Submit your action now!`);
@@ -1236,6 +1254,11 @@ async function sendNightActionPrompts(game, client) {
 
     for (const player of playersToPrompt) {
         try {
+            // Skip bot players in debug mode (they don't have real Discord accounts)
+            if (player.id.startsWith('bot')) {
+                continue;
+            }
+
             const user = await client.users.fetch(player.id);
             const role = ROLES[player.role];
 
@@ -2076,6 +2099,16 @@ async function processNightAction(userId, message, game, client) {
             // Nurse Bee heal
             if (choice >= 1 && choice <= alivePlayers.length) {
                 target = alivePlayers[choice - 1];
+
+                // Check self-heal limit
+                if (target.id === userId) {
+                    const selfHealsLeft = player.selfHealsLeft !== undefined ? player.selfHealsLeft : 1;
+                    if (selfHealsLeft <= 0) {
+                        await message.reply('❌ You have no self-heals remaining! Choose someone else to heal.');
+                        break;
+                    }
+                }
+
                 game.nightActions[userId] = { actionType: 'heal', target: target.id };
                 await message.reply(`You are healing **${target.displayName}** tonight. ⚕️`);
             } else {
@@ -3042,6 +3075,11 @@ async function startVotingPhase(game, client) {
     // Send voting message with buttons to each alive player's DM
     for (const player of alivePlayers) {
         try {
+            // Skip bot players in debug mode (they don't have real Discord accounts)
+            if (player.id.startsWith('bot')) {
+                continue;
+            }
+
             const user = await client.users.fetch(player.id);
             let description = `Vote for who you think is a Wasp! The player with the most votes will be eliminated.\n\n**Alive Players:** ${alivePlayers.length}\n**Time Remaining:** ${votingDuration / 1000} seconds`;
 
@@ -3437,6 +3475,11 @@ async function startDuskPhase(game, client) {
     // Send dusk action prompts to players with dusk abilities
     for (const player of duskPlayers) {
         try {
+            // Skip bot players in debug mode (they don't have real Discord accounts)
+            if (player.id.startsWith('bot')) {
+                continue;
+            }
+
             const user = await client.users.fetch(player.id);
             const role = ROLES[player.role];
             let embed;
