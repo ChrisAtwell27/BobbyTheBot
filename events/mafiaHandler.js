@@ -6,6 +6,7 @@ const { ROLES } = require('../mafia/roles/mafiaRoles');
 const { createGame, getGame, getGameByPlayer, deleteGame, getAllGames, addVisit, getVisitors, clearNightData, clearVotes, updateActivity } = require('../mafia/game/mafiaGameState');
 const { processNightActions } = require('../mafia/game/mafiaActions');
 const { getRoleDistribution, shuffleArray, getTeamCounts, countVotes, determineWinners, checkWinConditions, initializePlayerRole } = require('../mafia/game/mafiaUtils');
+const OpenAI = require('openai');
 
 // Constants
 const MAFIA_VC_ID = '1434633691455426600';
@@ -20,6 +21,52 @@ const GAME_INACTIVITY_TIMEOUT = 3600000; // 1 hour - games inactive longer than 
 
 // Store pending game configurations
 const pendingGameConfigs = new Map();
+
+// OpenAI API configuration for Keller Bee emoji translation
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+let openai = null;
+if (OPENAI_API_KEY) {
+    openai = new OpenAI({
+        apiKey: OPENAI_API_KEY
+    });
+    console.log('✅ OpenAI API loaded for Keller Bee emoji translation');
+} else {
+    console.warn('⚠️  OpenAI not configured - Keller Bee emoji translation will use fallback');
+}
+
+// Function to translate text to emojis using OpenAI (for Keller Bee)
+async function translateToEmojis(text, username) {
+    if (!openai) {
+        // Fallback: just add some emojis
+        return `${text} 🐝💭`;
+    }
+
+    try {
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a translator that converts text messages into ONLY emojis. Your goal is to express the meaning using ONLY emojis - no words, no letters, just emojis. Be creative and use combinations of emojis to convey the message. Maximum 15 emojis.'
+                },
+                {
+                    role: 'user',
+                    content: `Translate this message to emojis only: "${text}"`
+                }
+            ],
+            max_tokens: 100,
+            temperature: 0.8
+        });
+
+        const emojiTranslation = completion.choices[0].message.content.trim();
+        console.log(`🤐 Keller Bee (${username}): "${text}" -> "${emojiTranslation}"`);
+        return emojiTranslation;
+    } catch (error) {
+        console.error('Error translating to emojis:', error);
+        // Fallback
+        return `${text} 🐝💭`;
+    }
+}
 
 // Debug mode constants (shorter timers for testing)
 const DEBUG_SETUP_DELAY = 10000; // 10 seconds
@@ -112,6 +159,30 @@ async function startMafiaGame(client, config) {
         } catch (error) {
             console.error(`Could not notify Matchmaker:`, error);
         }
+    }
+
+    // Apply initial mute/deafen for Keller Bee and Deaf Bee
+    try {
+        const voiceChannel = await client.channels.fetch(MAFIA_VC_ID);
+        if (voiceChannel && voiceChannel.members) {
+            for (const player of game.players) {
+                const member = voiceChannel.members.get(player.id);
+                if (member) {
+                    // Keller Bee: Mute immediately
+                    if (player.role === 'KELLER_BEE') {
+                        await member.voice.setMute(true, 'Keller Bee - cannot speak');
+                        console.log(`🤐 Muted Keller Bee: ${player.displayName}`);
+                    }
+                    // Deaf Bee: Deafen immediately
+                    if (player.role === 'DEAF_BEE') {
+                        await member.voice.setDeaf(true, 'Deaf Bee - cannot hear voice');
+                        console.log(`🦻 Deafened Deaf Bee: ${player.displayName}`);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error applying initial mute/deafen for special roles:', error);
     }
 
     // Notify organizer if any DMs failed
@@ -463,7 +534,13 @@ async function muteVoiceAndLockText(game, client, shouldMute) {
             if (voiceChannel && voiceChannel.members) {
                 for (const [memberId, member] of voiceChannel.members) {
                     try {
+                        const player = game.players.find(p => p.id === memberId);
                         await member.voice.setMute(true, 'Night phase - discussion locked');
+
+                        // Deaf Bee: Always deafened
+                        if (player && player.role === 'DEAF_BEE') {
+                            await member.voice.setDeaf(true, 'Deaf Bee - cannot hear voice');
+                        }
                     } catch (error) {
                         console.error(`Could not mute ${member.displayName}:`, error);
                     }
@@ -477,7 +554,17 @@ async function muteVoiceAndLockText(game, client, shouldMute) {
                         // Check if player is alive
                         const player = game.players.find(p => p.id === memberId);
                         if (player && player.alive) {
-                            await member.voice.setMute(false, 'Day phase - discussion open');
+                            // Keller Bee: Always muted (but can be unmuted during day for Deaf Bee)
+                            if (player.role === 'KELLER_BEE') {
+                                await member.voice.setMute(true, 'Keller Bee - cannot speak');
+                            } else {
+                                await member.voice.setMute(false, 'Day phase - discussion open');
+                            }
+
+                            // Deaf Bee: Always deafened
+                            if (player.role === 'DEAF_BEE') {
+                                await member.voice.setDeaf(true, 'Deaf Bee - cannot hear voice');
+                            }
                         } else {
                             // Keep dead players muted
                             await member.voice.setMute(true, 'Dead - must remain silent');
@@ -1584,16 +1671,18 @@ async function processNightAction(userId, message, game, client) {
                 return;
             }
 
-            // List of Bee roles to mimic
-            const beeRoles = ['SCOUT_BEE', 'NURSE_BEE', 'LOOKOUT_BEE', 'TRACKER_BEE', 'WORKER_BEE'];
-            const roleNames = beeRoles.map((r, i) => `${i + 1}. ${ROLES[r].name}`).join('\n');
+            // List of ALL Bee roles to mimic
+            const beeRoles = Object.entries(ROLES)
+                .filter(([, role]) => role.team === 'bee')
+                .map(([key]) => key);
+            const roleNames = beeRoles.map((r, i) => `${i + 1}. ${ROLES[r].name} ${ROLES[r].emoji}`).join('\n');
 
             if (choice >= 1 && choice <= beeRoles.length) {
                 const chosenRole = beeRoles[choice - 1];
                 game.nightActions[userId] = { actionType: 'mimic', roleChoice: chosenRole };
-                await message.reply(`You will appear as **${ROLES[chosenRole].name}** if investigated tonight! 🎨`);
+                await message.reply(`You will appear as **${ROLES[chosenRole].name}** ${ROLES[chosenRole].emoji} if investigated tonight! 🎨 (${player.mimics - 1} mimic${player.mimics - 1 !== 1 ? 's' : ''} remaining)`);
             } else {
-                await message.reply(`Choose a role to mimic:\n\n${roleNames}\n\nSend a number (1-${beeRoles.length})`);
+                await message.reply(`🎨 Choose a Bee role to mimic (${player.mimics} mimic${player.mimics !== 1 ? 's' : ''} remaining):\n\n${roleNames}\n\nSend a number (1-${beeRoles.length})`);
             }
             break;
 
@@ -2356,6 +2445,30 @@ async function endGame(game, client, winnerType, specificWinner = null) {
     // Unmute voice and unlock text channel before ending game
     await muteVoiceAndLockText(game, client, false);
 
+    // Remove mute/deafen from Keller Bee and Deaf Bee players at game end
+    try {
+        const voiceChannel = await client.channels.fetch(MAFIA_VC_ID);
+        if (voiceChannel && voiceChannel.members) {
+            for (const player of game.players) {
+                const member = voiceChannel.members.get(player.id);
+                if (member) {
+                    // Unmute Keller Bee
+                    if (player.role === 'KELLER_BEE') {
+                        await member.voice.setMute(false, 'Game ended');
+                        console.log(`🤐 Unmuted Keller Bee: ${player.displayName}`);
+                    }
+                    // Undeafen Deaf Bee
+                    if (player.role === 'DEAF_BEE') {
+                        await member.voice.setDeaf(false, 'Game ended');
+                        console.log(`🦻 Undeafened Deaf Bee: ${player.displayName}`);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error removing mute/deafen for special roles at game end:', error);
+    }
+
     // Clean up game
     deleteGame(game.id);
 }
@@ -2539,21 +2652,29 @@ module.exports = (client) => {
                 return message.reply(`You must be in the Mafia voice channel (<#${MAFIA_VC_ID}>) to create a debug game!`);
             }
 
-            // Parse arguments for role and random mode
+            // Parse arguments for role(s) and random mode
             let randomMode = false;
-            let specifiedRole = null;
+            let specifiedRoles = []; // Array to hold multiple roles
 
             // Check each argument
             for (let i = 1; i < args.length; i++) {
                 const argUpper = args[i].toUpperCase();
                 if (argUpper === 'RANDOM') {
                     randomMode = true;
-                } else if (ROLES[argUpper]) {
-                    specifiedRole = argUpper;
                 } else {
-                    // Invalid role name
-                    const validRoles = Object.keys(ROLES).sort().join(', ');
-                    return message.reply(`❌ Invalid role: **${args[i]}**\n\n**Valid roles:**\n${validRoles}\n\n**Usage:** \`!createmafiadebug [role] [random]\`\n**Examples:**\n• \`!createmafiadebug SCOUT_BEE\` - Play as Scout Bee\n• \`!createmafiadebug WASP_QUEEN random\` - Play as Wasp Queen with random mode\n• \`!createmafiadebug random\` - Random role with random mode`);
+                    // Check if argument contains comma-separated roles
+                    const roleList = args[i].split(',').map(r => r.trim().toUpperCase());
+
+                    // Validate all roles in the list
+                    for (const roleName of roleList) {
+                        if (ROLES[roleName]) {
+                            specifiedRoles.push(roleName);
+                        } else {
+                            // Invalid role name
+                            const validRoles = Object.keys(ROLES).sort().join(', ');
+                            return message.reply(`❌ Invalid role: **${roleName}**\n\n**Valid roles:**\n${validRoles}\n\n**Usage:** \`!createmafiadebug [ROLE_ONE,ROLE_TWO,...] [random]\`\n**Examples:**\n• \`!createmafiadebug SCOUT_BEE\` - Play as Scout Bee\n• \`!createmafiadebug SCOUT_BEE,WASP_QUEEN\` - Assign Scout Bee to you, Wasp Queen to next person in VC\n• \`!createmafiadebug WASP_QUEEN random\` - Play as Wasp Queen with random mode\n• \`!createmafiadebug random\` - Random role with random mode`);
+                        }
+                    }
                 }
             }
 
@@ -2566,6 +2687,11 @@ module.exports = (client) => {
             const playersInGame = humanMembers.filter(m => getGameByPlayer(m.user.id));
             if (playersInGame.length > 0) {
                 return message.reply(`Some players are already in an active game: ${playersInGame.map(m => m.displayName).join(', ')}`);
+            }
+
+            // Validate that we don't have more specified roles than real players
+            if (specifiedRoles.length > humanMembers.length) {
+                return message.reply(`❌ You specified ${specifiedRoles.length} roles but there are only ${humanMembers.length} real players in the voice channel!\n\nRoles will be assigned to players in VC order (you first, then others).`);
             }
 
             // Create debug game with all VC members + bots
@@ -2592,21 +2718,29 @@ module.exports = (client) => {
             const players = [...realPlayers, ...fakePlayers];
 
             // Assign roles
-            if (specifiedRole) {
-                // Assign specified role to the game creator (message author)
-                const creator = realPlayers.find(p => p.id === message.author.id);
-                if (creator) {
-                    initializePlayerRole(creator, specifiedRole);
+            if (specifiedRoles.length > 0) {
+                // Assign specified roles to real players in order
+                // First role goes to game creator, then other roles to other VC members in order
+                for (let i = 0; i < specifiedRoles.length && i < realPlayers.length; i++) {
+                    initializePlayerRole(realPlayers[i], specifiedRoles[i]);
                 }
 
-                // Assign random roles to other players (both real and bots) from distribution
+                // Get remaining players who need random roles
+                const remainingPlayers = players.filter((p, index) => {
+                    // Skip real players who got assigned a specified role
+                    if (realPlayers.includes(p) && realPlayers.indexOf(p) < specifiedRoles.length) {
+                        return false;
+                    }
+                    return true;
+                });
+
+                // Assign random roles to remaining players (both real and bots) from distribution
                 const roleDistribution = getRoleDistribution(players.length, randomMode);
                 const shuffledRoles = shuffleArray(roleDistribution);
 
-                // Skip the first role for the creator, assign the rest to other players
-                const otherPlayers = players.filter(p => p.id !== message.author.id);
-                for (let i = 0; i < otherPlayers.length; i++) {
-                    initializePlayerRole(otherPlayers[i], shuffledRoles[i]);
+                // Assign the remaining shuffled roles to players who don't have roles yet
+                for (let i = 0; i < remainingPlayers.length; i++) {
+                    initializePlayerRole(remainingPlayers[i], shuffledRoles[i]);
                 }
             } else {
                 // All players get random roles (original behavior)
@@ -2636,10 +2770,21 @@ module.exports = (client) => {
             const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
             game.cachedChannel = channel;
 
+            // Build assigned roles text for embed
+            let assignedRolesText = '';
+            if (specifiedRoles.length > 0) {
+                assignedRolesText = '\n\n🎯 **Assigned Roles:**';
+                for (let i = 0; i < specifiedRoles.length && i < realPlayers.length; i++) {
+                    const player = realPlayers[i];
+                    const roleName = specifiedRoles[i];
+                    assignedRolesText += `\n• <@${player.id}>: ${ROLES[roleName].name} ${ROLES[roleName].emoji}`;
+                }
+            }
+
             const setupEmbed = new EmbedBuilder()
                 .setColor('#FFA500')
-                .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}${specifiedRole ? '🎯' : ''}🐝 [DEBUG MODE]`)
-                .setDescription(`**Debug game** created with **${players.length} players** (${realPlayers.length} real, ${fakePlayers.length} bots)!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}${specifiedRole ? `\n\n🎯 **<@${message.author.id}> is playing as:** ${ROLES[specifiedRole].name} ${ROLES[specifiedRole].emoji}` : ''}\n\nRoles are being assigned... Check your DMs!\n\n**Debug Commands:**\n\`!mafiadebugskip\` - Skip to next phase\n\`!mafiadebugend\` - End the game`)
+                .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}${specifiedRoles.length > 0 ? '🎯' : ''}🐝 [DEBUG MODE]`)
+                .setDescription(`**Debug game** created with **${players.length} players** (${realPlayers.length} real, ${fakePlayers.length} bots)!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}${assignedRolesText}\n\nRoles are being assigned... Check your DMs!\n\n**Debug Commands:**\n\`!mafiadebugskip\` - Skip to next phase\n\`!mafiadebugend\` - End the game`)
                 .addFields({
                     name: 'Players',
                     value: players.map(p => `• ${p.displayName}`).join('\n'),
@@ -2755,6 +2900,26 @@ module.exports = (client) => {
 
             // Unmute and unlock
             await muteVoiceAndLockText(game, client, false);
+
+            // Remove mute/deafen from special roles
+            try {
+                const voiceChannel = await client.channels.fetch(MAFIA_VC_ID);
+                if (voiceChannel && voiceChannel.members) {
+                    for (const player of game.players) {
+                        const member = voiceChannel.members.get(player.id);
+                        if (member) {
+                            if (player.role === 'KELLER_BEE') {
+                                await member.voice.setMute(false, 'Game ended');
+                            }
+                            if (player.role === 'DEAF_BEE') {
+                                await member.voice.setDeaf(false, 'Game ended');
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error removing mute/deafen in debug end:', error);
+            }
 
             // Clean up
             deleteGame(game.id);
@@ -3092,6 +3257,39 @@ module.exports = (client) => {
             // Regular night actions
             if (game.phase !== 'night') return;
             await processNightAction(message.author.id, message, game, client);
+        }
+
+        // Handle Keller Bee message interception
+        // Check if user is in an active mafia game and is a Keller Bee
+        const kellerGame = getGameByPlayer(message.author.id);
+        if (kellerGame && message.channel.id === MAFIA_TEXT_CHANNEL_ID) {
+            const kellerPlayer = kellerGame.players.find(p => p.id === message.author.id);
+            if (kellerPlayer && kellerPlayer.role === 'KELLER_BEE' && !message.content.startsWith('!')) {
+                // Delete the original message
+                try {
+                    await message.delete();
+                } catch (error) {
+                    console.error('Could not delete Keller Bee message:', error);
+                }
+
+                // Translate to emojis using OpenAI
+                const emojiMessage = await translateToEmojis(message.content, message.author.username);
+
+                if (emojiMessage) {
+                    // Send emoji translation
+                    const kellerEmbed = new EmbedBuilder()
+                        .setColor('#9B59B6')
+                        .setAuthor({
+                            name: `${kellerPlayer.displayName} (Keller Bee)`,
+                            iconURL: message.author.displayAvatarURL()
+                        })
+                        .setDescription(emojiMessage)
+                        .setFooter({ text: '🔇 Translated to emojis' })
+                        .setTimestamp();
+
+                    await message.channel.send({ embeds: [kellerEmbed] });
+                }
+            }
         }
     });
 

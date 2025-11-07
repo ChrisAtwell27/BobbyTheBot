@@ -299,6 +299,30 @@ const ROLES = {
         defense: 0,
         hasUsedProtection: false
     },
+    KELLER_BEE: {
+        name: 'Mute Bee',
+        emoji: '🤐',
+        team: 'bee',
+        description: 'You are a **Mute Bee**! You are mute and cannot speak in voice, but when you communicate in text, its translated to emojis!',
+        abilities: ['Server muted for entire game', 'All text messages are translated to emojis', 'Can hear voice chat normally', 'Can still participate in voting', 'Unique emoji communication style'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: false,
+        attack: 0,
+        defense: 0,
+        isKellerBee: true // Special flag for message handling
+    },
+    DEAF_BEE: {
+        name: 'Deaf Bee',
+        emoji: '🦻',
+        team: 'bee',
+        description: 'You are a **Deaf Bee**! You are deafened and cannot hear voice chat, but you can read text and speak normally!',
+        abilities: ['Server deafened for entire game', 'Cannot hear voice communications', 'Can speak in voice and text normally', 'Can still participate in voting', 'Rely on text chat for information'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: false,
+        attack: 0,
+        defense: 0,
+        isDeafBee: true // Special flag for voice state handling
+    },
 
     // === WASP ROLES (Mafia equivalent) ===
     WASP_QUEEN: {
