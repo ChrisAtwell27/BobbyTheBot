@@ -323,8 +323,7 @@ async function startMafiaGame(client, config) {
     const gameMessage = await channel.send({ embeds: [setupEmbed] });
     game.messageId = gameMessage.id;
 
-    // Send role DMs
-    const { sendRoleDMs, startNightPhase } = require('../mafia/game/mafiaPhases');
+    // Send role DMs (function defined later in this file)
     const dmFailures = await sendRoleDMs(game, client);
 
     // Link Matchmaker Beetle with a random player
@@ -4322,7 +4321,69 @@ module.exports = (client) => {
                         .setFooter({ text: 'The game will begin shortly!' })
                         .setTimestamp();
 
+                    // Add teammate info for Wasps
+                    if (getPlayerTeam(player) === 'wasp') {
+                        const teammates = game.players
+                            .filter(p => getPlayerTeam(p) === 'wasp' && p.id !== player.id)
+                            .map(p => `${p.displayName} (${ROLES[p.role].name})`)
+                            .join('\n');
+
+                        if (teammates) {
+                            roleEmbed.addFields({
+                                name: '🐝 Your Fellow Wasps',
+                                value: teammates,
+                                inline: false
+                            });
+                        }
+                    }
+
+                    // Add Bounty Hunter target
+                    if (player.role === 'BOUNTY_HUNTER' && player.target) {
+                        const targetPlayer = game.players.find(p => p.id === player.target);
+                        if (targetPlayer) {
+                            roleEmbed.addFields({
+                                name: '🎯 Your Target',
+                                value: `You must get **${targetPlayer.displayName}** lynched during the day!`,
+                                inline: false
+                            });
+                        }
+                    }
+
+                    // Add Mercenary team assignment
+                    if (player.role === 'MERCENARY' && player.mercenaryTeam) {
+                        const teamName = player.mercenaryTeam === 'bee' ? 'Bee Team 🐝' : 'Wasp Team 🐝';
+                        const winCondition = player.mercenaryTeam === 'bee'
+                            ? 'Eliminate all Wasps and harmful Neutrals'
+                            : 'Eliminate all Bees and harmful Neutrals';
+                        roleEmbed.addFields({
+                            name: '💰 Your Assignment',
+                            value: `You have been hired by the **${teamName}**!\n\nYour new win condition: ${winCondition}`,
+                            inline: false
+                        });
+                    }
+
+                    // Add resource counts
+                    if (player.bullets !== undefined) {
+                        roleEmbed.addFields({
+                            name: '⚔️ Bullets Remaining',
+                            value: `${player.bullets} bullets`,
+                            inline: true
+                        });
+                    }
+                    if (player.vests !== undefined) {
+                        roleEmbed.addFields({
+                            name: '🛡️ Vests Remaining',
+                            value: `${player.vests} vests`,
+                            inline: true
+                        });
+                    }
+
                     await user.send({ embeds: [roleEmbed] });
+
+                    // Send night instructions for Wasps
+                    if (getPlayerTeam(player) === 'wasp') {
+                        await user.send('During night phase, you can send messages to coordinate with your team. Just send me a DM during the night!');
+                    }
                 } catch (error) {
                     console.error(`Could not send debug role DM to ${player.displayName}:`, error);
                     failedDMs.push(player.id);
