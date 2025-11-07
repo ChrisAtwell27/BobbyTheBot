@@ -1006,17 +1006,22 @@ async function sendNightActionPrompts(game, client) {
                     break;
 
                 case 'jail':
-                    // Jailer Bee - jail and optionally execute
-                    targets = alivePlayers
-                        .filter(p => p.id !== player.id)
-                        .map((p, i) => `${i + 1}. ${p.displayName}`)
-                        .join('\n');
-
-                    embed = new EmbedBuilder()
-                        .setColor(color)
-                        .setTitle(`${role.emoji} Night Phase - Jail Someone`)
-                        .setDescription(`Choose a player to jail. Send a **number** to jail, or **number exe** to jail and execute.\n\nExecutions remaining: ${player.executions}\n\n${targets}`)
-                        .setFooter({ text: 'Justice must be served!' });
+                    // Jailer Bee - execute decision (target already selected at dusk)
+                    if (player.jailedTarget) {
+                        const jailedPlayer = game.players.find(p => p.id === player.jailedTarget);
+                        embed = new EmbedBuilder()
+                            .setColor(color)
+                            .setTitle(`${role.emoji} Night Phase - Execute Decision`)
+                            .setDescription(`You have jailed **${jailedPlayer.displayName}**.\n\nSend **"execute"** to execute them (${player.executions} execution${player.executions !== 1 ? 's' : ''} remaining)\nSend **"skip"** to keep them jailed without execution`)
+                            .setFooter({ text: 'Choose wisely!' });
+                    } else {
+                        // No target selected at dusk (shouldn't happen normally)
+                        embed = new EmbedBuilder()
+                            .setColor(color)
+                            .setTitle(`${role.emoji} Night Phase`)
+                            .setDescription(`You did not select anyone to jail at dusk.\n\nSend **"skip"** to continue.`)
+                            .setFooter({ text: 'You can jail someone next time!' });
+                    }
                     break;
 
                 case 'roleblock':
@@ -1263,19 +1268,6 @@ async function sendNightActionPrompts(game, client) {
                         .setTitle(`${role.emoji} Night Phase - Examine the Dead`)
                         .setDescription(`Choose a dead player to examine. You will learn how they died.\n\n${targets}`)
                         .setFooter({ text: 'Determine the cause of death!' });
-                    break;
-
-                case 'transport':
-                    // Transporter Bee - swap two players
-                    targets = alivePlayers
-                        .map((p, i) => `${i + 1}. ${p.displayName}`)
-                        .join('\n');
-
-                    embed = new EmbedBuilder()
-                        .setColor(color)
-                        .setTitle(`${role.emoji} Night Phase - Transport Two Players`)
-                        .setDescription(`Send two numbers separated by a space: **first second**\n\nAll actions targeting them will be swapped.\n\n${targets}`)
-                        .setFooter({ text: 'Cause chaos!' });
                     break;
 
                 case 'psychic':
@@ -1757,27 +1749,39 @@ async function processNightAction(userId, message, game, client) {
             break;
 
         case 'jail':
-            // Jailer - jail and optionally execute
-            const parts = input.split(' ');
-            const jailChoice = parseInt(parts[0]);
-            const shouldExecute = parts.length > 1 && parts[1] === 'exe';
+            // Jailer - execute decision (target already selected at dusk)
+            if (!player.jailedTarget) {
+                // No target jailed (skipped at dusk)
+                if (input === 'skip') {
+                    await message.reply('You did not jail anyone tonight.');
+                } else {
+                    await message.reply('You did not select anyone to jail at dusk. Send **"skip"** to continue.');
+                }
+                break;
+            }
 
-            validTargets = alivePlayers.filter(p => p.id !== userId);
-            if (jailChoice >= 1 && jailChoice <= validTargets.length) {
-                target = validTargets[jailChoice - 1];
+            const jailedPlayer = game.players.find(p => p.id === player.jailedTarget);
+
+            if (input === 'execute') {
+                if (player.executions <= 0) {
+                    await message.reply('You have no executions remaining!');
+                    break;
+                }
                 game.nightActions[userId] = {
                     actionType: 'jail',
-                    target: target.id,
-                    execute: shouldExecute
+                    target: player.jailedTarget,
+                    execute: true
                 };
-
-                if (shouldExecute) {
-                    await message.reply(`You are jailing and executing **${target.displayName}** tonight. ⛓️⚡`);
-                } else {
-                    await message.reply(`You are jailing **${target.displayName}** tonight. ⛓️`);
-                }
+                await message.reply(`You are executing **${jailedPlayer.displayName}** tonight! ⛓️⚡`);
+            } else if (input === 'skip') {
+                game.nightActions[userId] = {
+                    actionType: 'jail',
+                    target: player.jailedTarget,
+                    execute: false
+                };
+                await message.reply(`You are keeping **${jailedPlayer.displayName}** jailed without execution. ⛓️`);
             } else {
-                await sendInvalidChoiceMessage(message, validTargets, 'Send a number to jail, or "number exe" to jail and execute.');
+                await message.reply('Send **"execute"** to execute them or **"skip"** to keep them jailed without execution.');
             }
             break;
 
@@ -2160,29 +2164,8 @@ async function processNightAction(userId, message, game, client) {
             break;
 
         case 'transport':
-            // Transporter Bee - swap two players
-            const transportNumbers = input.split(' ').map(n => parseInt(n)).filter(n => !isNaN(n));
-            if (transportNumbers.length === 2) {
-                const target1Idx = transportNumbers[0] - 1;
-                const target2Idx = transportNumbers[1] - 1;
-
-                if (target1Idx >= 0 && target1Idx < alivePlayers.length &&
-                    target2Idx >= 0 && target2Idx < alivePlayers.length &&
-                    target1Idx !== target2Idx) {
-                    const target1 = alivePlayers[target1Idx];
-                    const target2 = alivePlayers[target2Idx];
-                    game.nightActions[userId] = {
-                        actionType: 'transport',
-                        target1: target1.id,
-                        target2: target2.id
-                    };
-                    await message.reply(`You are swapping **${target1.displayName}** and **${target2.displayName}** tonight. 🔄`);
-                } else {
-                    await sendInvalidChoiceMessage(message, alivePlayers, 'Send two different numbers separated by a space (e.g., "1 3")');
-                }
-            } else {
-                await sendInvalidChoiceMessage(message, alivePlayers, 'Send two numbers separated by a space (e.g., "1 3")');
-            }
+            // Transporter - already handled at dusk
+            await message.reply('Your transport was already set at dusk! The swap will happen tonight. 🔄');
             break;
 
         case 'psychic':
@@ -2642,7 +2625,7 @@ async function endVotingPhase(game, client) {
 
                         // Check win condition after haunt
                         if (!checkWinCondition(game, client)) {
-                            await startNightPhase(game, client);
+                            await startDuskPhase(game, client);
                         }
                     }
                 }, 30000);
@@ -2690,8 +2673,191 @@ async function endVotingPhase(game, client) {
         return;
     }
 
-    // Start next night phase
-    await startNightPhase(game, client);
+    // Start dusk phase (for daytime ability selections like Jailer)
+    await startDuskPhase(game, client);
+}
+
+// Start dusk phase - for daytime ability selections
+async function startDuskPhase(game, client) {
+    game.phase = 'dusk';
+    game.duskActions = {}; // Track who has submitted their dusk action or skipped
+
+    // Find all alive players with dusk actions
+    const alivePlayers = game.players.filter(p => p.alive);
+    const duskPlayers = alivePlayers.filter(p => {
+        const role = ROLES[p.role];
+        return role.duskAction;
+    });
+
+    // If no players have dusk actions, skip directly to night
+    if (duskPlayers.length === 0) {
+        await startNightPhase(game, client);
+        return;
+    }
+
+    // Send dusk phase announcements
+    const duskEmbed = new EmbedBuilder()
+        .setColor('#4B0082')
+        .setTitle('🌆 Dusk Falls')
+        .setDescription('The sun sets... Those with special preparations may act now before night falls.')
+        .setTimestamp();
+
+    await sendToEveryoneInGame(game, client, duskEmbed);
+
+    // Send dusk action prompts to players with dusk abilities
+    for (const player of duskPlayers) {
+        try {
+            const user = await client.users.fetch(player.id);
+            const role = ROLES[player.role];
+            let embed;
+
+            // Determine color based on team
+            let color;
+            if (role.team === 'bee') color = '#FFD700';
+            else if (role.team === 'wasp') color = '#8B0000';
+            else color = '#808080';
+
+            switch (role.actionType) {
+                case 'jail':
+                    // Jailer Bee - select who to jail at dusk
+                    const targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Dusk Phase - Select Prisoner`)
+                        .setDescription(`Choose who to jail tonight. Send me the **number** or **"skip"** to jail no one.\n\n${targets}\n\n*You'll decide whether to execute them during the night phase.*`)
+                        .setFooter({ text: 'Everyone is waiting for you!' });
+                    break;
+
+                case 'transport':
+                    // Transporter Bee - select two players to swap
+                    const transportTargets = alivePlayers
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Dusk Phase - Select Transport Targets`)
+                        .setDescription(`Choose two players to swap tonight. Send **two numbers** separated by a space (e.g., "1 3"), or **"skip"** to not transport.\n\n${transportTargets}\n\n*All actions targeting them will be swapped!*`)
+                        .setFooter({ text: 'Everyone is waiting for you!' });
+                    break;
+
+                default:
+                    continue;
+            }
+
+            if (embed) {
+                await user.send({ embeds: [embed] });
+            }
+        } catch (error) {
+            console.error(`Could not send dusk action prompt to ${player.displayName}:`, error);
+            // Auto-skip if we can't reach them
+            game.duskActions[player.id] = { actionType: 'skip' };
+        }
+    }
+
+    // Check if everyone has acted after a short delay
+    setTimeout(() => checkDuskComplete(game, client), 2000);
+}
+
+// Check if dusk phase is complete
+async function checkDuskComplete(game, client) {
+    if (game.phase !== 'dusk') return;
+
+    const alivePlayers = game.players.filter(p => p.alive);
+    const duskPlayers = alivePlayers.filter(p => {
+        const role = ROLES[p.role];
+        return role.duskAction;
+    });
+
+    // Check if all dusk players have acted
+    const allActed = duskPlayers.every(p => game.duskActions[p.id]);
+
+    if (allActed) {
+        // Everyone has acted, move to night
+        await startNightPhase(game, client);
+    }
+}
+
+// Process dusk action
+async function processDuskAction(userId, message, game, client) {
+    const player = game.players.find(p => p.id === userId);
+    if (!player || !player.alive) return;
+
+    const role = ROLES[player.role];
+    if (!role.duskAction) return;
+
+    const alivePlayers = game.players.filter(p => p.alive);
+    const input = message.content.trim().toLowerCase();
+    const choice = parseInt(input);
+
+    if (input === 'skip') {
+        game.duskActions[userId] = { actionType: 'skip' };
+        await message.reply('You have chosen to skip your dusk action.');
+        await checkDuskComplete(game, client);
+        return;
+    }
+
+    switch (role.actionType) {
+        case 'jail':
+            // Jailer - select jail target
+            const validTargets = alivePlayers.filter(p => p.id !== userId);
+            if (choice >= 1 && choice <= validTargets.length) {
+                const target = validTargets[choice - 1];
+                game.duskActions[userId] = {
+                    actionType: 'jail_select',
+                    target: target.id
+                };
+                player.jailedTarget = target.id; // Store for night phase
+                await message.reply(`You have selected **${target.displayName}** to jail tonight. ⛓️\n\nDuring the night phase, you can choose whether to execute them.`);
+                await checkDuskComplete(game, client);
+            } else {
+                await message.reply(`Invalid choice. Please send a valid number (1-${validTargets.length}) or **"skip"**.`);
+            }
+            break;
+
+        case 'transport':
+            // Transporter - select two players to swap
+            const numbers = input.split(' ').map(n => parseInt(n)).filter(n => !isNaN(n));
+            if (numbers.length === 2) {
+                const target1Idx = numbers[0] - 1;
+                const target2Idx = numbers[1] - 1;
+
+                if (target1Idx >= 0 && target1Idx < alivePlayers.length &&
+                    target2Idx >= 0 && target2Idx < alivePlayers.length &&
+                    target1Idx !== target2Idx) {
+                    const target1 = alivePlayers[target1Idx];
+                    const target2 = alivePlayers[target2Idx];
+
+                    game.duskActions[userId] = {
+                        actionType: 'transport_select',
+                        target1: target1.id,
+                        target2: target2.id
+                    };
+
+                    // Store for night phase processing
+                    game.nightActions[userId] = {
+                        actionType: 'transport',
+                        target1: target1.id,
+                        target2: target2.id
+                    };
+
+                    await message.reply(`You will swap **${target1.displayName}** and **${target2.displayName}** tonight! 🔄`);
+                    await checkDuskComplete(game, client);
+                } else {
+                    await message.reply(`Invalid choice. Please send two different numbers (1-${alivePlayers.length}) or **"skip"**.`);
+                }
+            } else {
+                await message.reply(`Please send two numbers separated by a space (e.g., "1 3") or **"skip"**.`);
+            }
+            break;
+
+        default:
+            break;
+    }
 }
 
 // Check win condition wrapper (uses imported checkWinConditions)
@@ -3559,18 +3725,9 @@ module.exports = (client) => {
                         try {
                             const user = await client.users.fetch(alivePlayer.id);
 
-                            // Deaf Bees get the translation
+                            // Deaf Bees see the regular message (not emojis)
                             if (alivePlayer.role === 'DEAF_BEE') {
-                                const translationEmbed = new EmbedBuilder()
-                                    .setColor('#9B59B6')
-                                    .setAuthor({
-                                        name: `${player.displayName} (Mute Bee) - Translation`,
-                                        iconURL: message.author.displayAvatarURL()
-                                    })
-                                    .setDescription(`**Emojis:** ${emojiMessage}\n\n**Original Message:** ${originalMessage}`)
-                                    .setFooter({ text: '🦻 Only you can read this translation as a Deaf Bee' })
-                                    .setTimestamp();
-                                await user.send({ embeds: [translationEmbed] });
+                                await user.send(`💬 **${player.displayName}:** ${originalMessage}`);
                             } else {
                                 // Everyone else just gets emojis
                                 await user.send(`💬 **${player.displayName}:** ${emojiMessage}`);
@@ -3615,7 +3772,7 @@ module.exports = (client) => {
 
                     // Check win condition after haunt
                     if (!checkWinCondition(game, client)) {
-                        await startNightPhase(game, client);
+                        await startDuskPhase(game, client);
                     }
                 } else {
                     await message.reply(`Invalid choice! Please send a number between 1 and ${validTargets.length}.`);
@@ -3712,6 +3869,12 @@ module.exports = (client) => {
                 return;
             }
 
+            // Dusk actions (daytime ability selections)
+            if (game.phase === 'dusk') {
+                await processDuskAction(message.author.id, message, game, client);
+                return;
+            }
+
             // Regular night actions
             if (game.phase !== 'night') return;
             await processNightAction(message.author.id, message, game, client);
@@ -3756,19 +3919,10 @@ module.exports = (client) => {
                     for (const deafBee of deafBeePlayers) {
                         try {
                             const deafBeeUser = await client.users.fetch(deafBee.id);
-                            const translationEmbed = new EmbedBuilder()
-                                .setColor('#9B59B6')
-                                .setAuthor({
-                                    name: `${kellerPlayer.displayName} (Mute Bee) - Translation`,
-                                    iconURL: message.author.displayAvatarURL()
-                                })
-                                .setDescription(`**Emojis:** ${emojiMessage}\n\n**Original Message:** ${originalMessage}`)
-                                .setFooter({ text: '🦻 Only you can read this translation as a Deaf Bee' })
-                                .setTimestamp();
-
-                            await deafBeeUser.send({ embeds: [translationEmbed] });
+                            // Deaf Bees see the regular message (not emojis)
+                            await deafBeeUser.send(`💬 **${kellerPlayer.displayName}:** ${originalMessage}`);
                         } catch (error) {
-                            console.error(`Could not send translation to Deaf Bee ${deafBee.displayName}:`, error);
+                            console.error(`Could not send message to Deaf Bee ${deafBee.displayName}:`, error);
                         }
                     }
                 }

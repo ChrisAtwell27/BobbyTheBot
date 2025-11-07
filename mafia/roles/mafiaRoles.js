@@ -122,6 +122,7 @@ const ROLES = {
         abilities: ['Jail one player each night', 'Target cannot perform actions or be visited', 'Execute jailed target (3 executions max)', 'If you execute a Bee, you lose all executions'],
         winCondition: 'Eliminate all Wasps and harmful Neutrals',
         nightAction: true,
+        duskAction: true, // Select target at dusk, execute decision at night
         actionType: 'jail',
         attack: 3, // Unstoppable execution
         defense: 0,
@@ -269,7 +270,8 @@ const ROLES = {
         description: 'You are a **Transporter Bee**! You can swap two players each night, redirecting all actions targeting them.',
         abilities: ['Choose two players each night', 'All actions targeting them are swapped', 'Visitors targeting player A go to player B and vice versa', 'Can cause chaos or save people'],
         winCondition: 'Eliminate all Wasps and harmful Neutrals',
-        nightAction: true,
+        nightAction: false, // No night action needed - selection happens at dusk
+        duskAction: true, // Select transport targets at dusk
         actionType: 'transport',
         attack: 0,
         defense: 0
