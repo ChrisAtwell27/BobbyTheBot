@@ -59,7 +59,7 @@ async function translateToEmojis(text, username) {
         });
 
         const emojiTranslation = completion.choices[0].message.content.trim();
-        console.log(`🤐 Keller Bee (${username}): "${text}" -> "${emojiTranslation}"`);
+        console.log(`🤐 Mute Bee (${username}): "${text}" -> "${emojiTranslation}"`);
         return emojiTranslation;
     } catch (error) {
         console.error('Error translating to emojis:', error);
@@ -1145,6 +1145,401 @@ async function sendNightActionPrompts(game, client) {
                         .setFooter({ text: 'Win 2 duels to become a Butterfly!' });
                     break;
 
+                case 'track':
+                    // Tracker Bee - follow someone
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Track Someone`)
+                        .setDescription(`Choose a player to track. You will see who they visit tonight.\n\n${targets}`)
+                        .setFooter({ text: 'Follow their movements!' });
+                    break;
+
+                case 'pollinate':
+                    // Pollinator Bee - pollinate someone
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Pollinate Someone`)
+                        .setDescription(`Choose a player to pollinate. You will receive results in 2 nights showing all visitors and who they visited.\n\n${targets}`)
+                        .setFooter({ text: 'Plant your seeds of knowledge!' });
+                    break;
+
+                case 'spy':
+                    // Spy Bee - automatic spy (no input needed)
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Spying Automatically`)
+                        .setDescription(`You are automatically spying on the Wasps tonight!\n\nYou will see who the Wasps visit and read their communications.\n\n*No action required - results will arrive at dawn.*`)
+                        .setFooter({ text: 'Gathering intelligence...' });
+
+                    // Auto-trigger spy action
+                    game.nightActions[player.id] = { actionType: 'spy' };
+                    break;
+
+                case 'trap':
+                    // Trapper Bee - set a trap
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Set a Trap`)
+                        .setDescription(`Choose a player's house to set a trap at. Attackers visiting will be roleblocked and revealed to you.\n\n${targets}`)
+                        .setFooter({ text: 'Catch the predators!' });
+                    break;
+
+                case 'retribution':
+                    // Retributionist Bee - revive someone
+                    if (player.hasRevived) {
+                        await user.send('You have already used your revive!');
+                        continue;
+                    }
+
+                    const deadBees = game.players.filter(p => !p.alive && ROLES[p.role].team === 'bee');
+                    if (deadBees.length === 0) {
+                        await user.send('There are no dead Bees to revive yet.');
+                        continue;
+                    }
+
+                    targets = deadBees
+                        .map((p, i) => `${i + 1}. ${p.displayName} (${ROLES[p.role].name})`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Revive a Bee`)
+                        .setDescription(`Choose a dead Bee to revive for one night. Send **"skip"** to not revive tonight.\n\n${targets}`)
+                        .setFooter({ text: 'Bring them back!' });
+                    break;
+
+                case 'beekeeper':
+                    // Beekeeper - protect or inspect
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Choose Your Action`)
+                        .setDescription(`Send **"protect"** to learn if Wasps tried to kill tonight${player.hasProtected ? ' (already used)' : ''}\nSend **"inspect"** to learn how many Wasps are alive\nSend **"skip"** to do nothing`)
+                        .setFooter({ text: 'Protect the hive!' });
+                    break;
+
+                case 'librarian':
+                    // Librarian Bee - check for limited abilities
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Investigate Powers`)
+                        .setDescription(`Choose a player to investigate. You will learn if they have limited-use abilities (bullets, vests, cleans, etc.).\n\n${targets}`)
+                        .setFooter({ text: 'Check the records!' });
+                    break;
+
+                case 'coroner':
+                    // Coroner Bee - examine dead
+                    const deadForCoroner = game.players.filter(p => !p.alive);
+                    if (deadForCoroner.length === 0) {
+                        await user.send('There are no dead players to examine yet.');
+                        continue;
+                    }
+
+                    targets = deadForCoroner
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Examine the Dead`)
+                        .setDescription(`Choose a dead player to examine. You will learn how they died.\n\n${targets}`)
+                        .setFooter({ text: 'Determine the cause of death!' });
+                    break;
+
+                case 'transport':
+                    // Transporter Bee - swap two players
+                    targets = alivePlayers
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Transport Two Players`)
+                        .setDescription(`Send two numbers separated by a space: **first second**\n\nAll actions targeting them will be swapped.\n\n${targets}`)
+                        .setFooter({ text: 'Cause chaos!' });
+                    break;
+
+                case 'psychic':
+                    // Psychic Bee - automatic vision (no input needed)
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Receiving Vision`)
+                        .setDescription(`You are automatically receiving a psychic vision tonight!\n\nYou will see 3 players, at least one is Evil.\n\n*No action required - vision will arrive at dawn.*`)
+                        .setFooter({ text: 'The spirits are speaking...' });
+
+                    // Auto-trigger psychic action
+                    game.nightActions[player.id] = { actionType: 'psychic' };
+                    break;
+
+                case 'blackmail':
+                    // Blackmailer Wasp - blackmail someone
+                    targets = alivePlayers
+                        .filter(p => ROLES[p.role].team !== 'wasp')
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Blackmail Someone`)
+                        .setDescription(`Choose a player to blackmail. They cannot talk during the next day phase.\n\n${targets}`)
+                        .setFooter({ text: 'Silence the Bees!' });
+                    break;
+
+                case 'hypnotize':
+                    // Hypnotist Wasp - give false feedback
+                    targets = alivePlayers
+                        .filter(p => ROLES[p.role].team !== 'wasp')
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Hypnotize Someone`)
+                        .setDescription(`Choose a player to hypnotize. They will receive false night feedback.\n\n${targets}`)
+                        .setFooter({ text: 'Confuse the investigators!' });
+                    break;
+
+                case 'poison':
+                    // Poisoner Wasp - poison someone
+                    targets = alivePlayers
+                        .filter(p => ROLES[p.role].team !== 'wasp')
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Poison Someone`)
+                        .setDescription(`Choose a player to poison. They will die in 2 nights unless healed.\n\n${targets}`)
+                        .setFooter({ text: 'A slow, silent death!' });
+                    break;
+
+                case 'sabotage':
+                    // Saboteur Wasp - sabotage someone
+                    targets = alivePlayers
+                        .filter(p => ROLES[p.role].team !== 'wasp')
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Sabotage Someone`)
+                        .setDescription(`Choose a player to sabotage. Their action will fail silently (they receive false success feedback).\n\n${targets}`)
+                        .setFooter({ text: 'Undermine their efforts!' });
+                    break;
+
+                case 'mimic':
+                    // Mimic Wasp - disguise as a role
+                    if (player.mimics <= 0) {
+                        await user.send('You have no mimics remaining!');
+                        continue;
+                    }
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Mimic a Role`)
+                        .setDescription(`Choose a Bee role to mimic (${player.mimics} mimic${player.mimics !== 1 ? 's' : ''} remaining).\n\nSend the role name (e.g., "Scout Bee", "Nurse Bee")\n\nYou will appear as that role if investigated.`)
+                        .setFooter({ text: 'Predict the investigators!' });
+                    break;
+
+                case 'silencer':
+                    // Silencer Wasp - silence results
+                    if (player.silences <= 0) {
+                        await user.send('You have no silences remaining!');
+                        continue;
+                    }
+
+                    targets = alivePlayers
+                        .filter(p => ROLES[p.role].team !== 'wasp')
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Silence Someone`)
+                        .setDescription(`Choose a player to silence (${player.silences} silence${player.silences !== 1 ? 's' : ''} remaining). Their ability results will return nothing.\n\n${targets}`)
+                        .setFooter({ text: 'Block their information!' });
+                    break;
+
+                case 'mole':
+                    // Mole Wasp - automatic intelligence gathering (no input needed)
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Gathering Intelligence`)
+                        .setDescription(`You are automatically infiltrating the hive tonight!\n\nYou will learn the role of one random Bee.\n\n*No action required - intelligence will arrive at dawn.*`)
+                        .setFooter({ text: 'Infiltrating...' });
+
+                    // Auto-trigger mole action
+                    game.nightActions[player.id] = { actionType: 'mole' };
+                    break;
+
+                case 'kidnap':
+                    // Kidnapper Wasp - kidnap someone
+                    if (player.hasKidnapped) {
+                        await user.send('You have already used your kidnap!');
+                        continue;
+                    }
+
+                    targets = alivePlayers
+                        .filter(p => ROLES[p.role].team !== 'wasp')
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Kidnap Someone`)
+                        .setDescription(`Choose a player to kidnap for an entire cycle. Send **"skip"** to not kidnap tonight.\n\n${targets}`)
+                        .setFooter({ text: 'Take them away!' });
+                    break;
+
+                case 'yakuza':
+                    // Yakuza Wasp - convert neutral
+                    if (player.hasConverted) {
+                        await user.send('You have already used your conversion!');
+                        continue;
+                    }
+
+                    targets = alivePlayers
+                        .filter(p => ROLES[p.role].team === 'neutral')
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    if (!targets) {
+                        await user.send('There are no neutral players to convert.');
+                        continue;
+                    }
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Convert a Neutral`)
+                        .setDescription(`Choose a neutral player to convert to a Killer Wasp. Send **"skip"** to not convert tonight.\n\n${targets}`)
+                        .setFooter({ text: 'Recruit them!' });
+                    break;
+
+                case 'guardian':
+                    // Guardian Ant - choose target (Night 1 only)
+                    if (player.guardianTarget) {
+                        continue; // Already has a target
+                    }
+
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night 1 - Choose Your Ward`)
+                        .setDescription(`Choose one player to protect for the entire game. They cannot die at night while you live.\n\n${targets}`)
+                        .setFooter({ text: 'Choose wisely - this is permanent!' });
+                    break;
+
+                case 'gossip':
+                    // Gossip Beetle - send anonymous message
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Spread Gossip`)
+                        .setDescription(`Send: **[number] [message]**\n\nExample: **1 You are suspicious!**\n\nThey will receive an anonymous message.\n\n${targets}`)
+                        .setFooter({ text: 'Create chaos!' });
+                    break;
+
+                case 'gamble':
+                    // Gambler Beetle - bet on death
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    const luckyCoins = player.luckyCoins || 0;
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Place Your Bet`)
+                        .setDescription(`Bet on who will die tonight. Guess correctly to earn a lucky coin!\n\nLucky Coins: ${luckyCoins}/3\n\n${targets}`)
+                        .setFooter({ text: 'Feeling lucky?' });
+                    break;
+
+                case 'doppelganger':
+                    // Doppelgänger - copy someone (Night 1 only)
+                    if (player.hasCopied) {
+                        continue; // Already copied
+                    }
+
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night 1 - Choose Your Target`)
+                        .setDescription(`Choose one player to copy. You will become their exact role and team.\n\n${targets}`)
+                        .setFooter({ text: 'Become someone else!' });
+                    break;
+
+                case 'oracle':
+                    // Oracle - automatic hint (no input needed)
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Receiving Vision`)
+                        .setDescription(`You are automatically receiving a cryptic hint tonight!\n\nYou will receive information about the game state.\n\n*No action required - hint will arrive at dawn.*`)
+                        .setFooter({ text: 'The spirits whisper secrets...' });
+
+                    // Auto-trigger oracle action
+                    game.nightActions[player.id] = { actionType: 'oracle' };
+                    break;
+
+                case 'cultist':
+                    // Cultist - convert someone
+                    targets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    const conversions = player.conversions || 0;
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Convert Someone`)
+                        .setDescription(`Choose a player to convert to your cult.\n\nConversions: ${conversions}/3\n\n${targets}`)
+                        .setFooter({ text: 'Join us!' });
+                    break;
+
+                case 'wildcard':
+                    // Wildcard - automatic random ability (no input needed)
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Rolling the Dice`)
+                        .setDescription(`You are automatically receiving a random ability tonight!\n\nYou will receive a random power.\n\n*No action required - ability will activate at dawn.*`)
+                        .setFooter({ text: 'Lady Luck is spinning...' });
+
+                    // Auto-trigger wildcard action
+                    game.nightActions[player.id] = { actionType: 'wildcard' };
+                    break;
+
                 default:
                     // Unknown action type
                     continue;
@@ -1184,7 +1579,6 @@ async function processNightAction(userId, message, game, client) {
             }
         }
 
-        await message.reply('Message sent to your fellow Wasps! 🐝');
         return;
     }
 
@@ -1576,9 +1970,8 @@ async function processNightAction(userId, message, game, client) {
             break;
 
         case 'spy':
-            // Spy Bee - automatically spy on Wasps (no target needed)
-            game.nightActions[userId] = { actionType: 'spy' };
-            await message.reply('You are spying on the Wasps tonight. You will see who they visit! 🕵️');
+            // Spy Bee - automatically set (no input needed, already set in prompt)
+            await message.reply('Your spy action has already been set! Results at dawn. 🕵️');
             break;
 
         case 'trap':
@@ -1733,9 +2126,8 @@ async function processNightAction(userId, message, game, client) {
             break;
 
         case 'oracle':
-            // Oracle - automatically receives hints (no action needed)
-            game.nightActions[userId] = { actionType: 'oracle' };
-            await message.reply('You are meditating tonight. The spirits will send you a vision... 🔮');
+            // Oracle - automatically set (no input needed, already set in prompt)
+            await message.reply('Your oracle vision has already been set! Results at dawn. 🔮');
             break;
 
         case 'librarian':
@@ -1794,9 +2186,8 @@ async function processNightAction(userId, message, game, client) {
             break;
 
         case 'psychic':
-            // Psychic Bee - automatic vision (no target needed)
-            game.nightActions[userId] = { actionType: 'psychic' };
-            await message.reply('You are meditating tonight. You will receive a vision about 3 players... 🔮');
+            // Psychic Bee - automatically set (no input needed, already set in prompt)
+            await message.reply('Your psychic vision has already been set! Results at dawn. 🔮');
             break;
 
         case 'silencer':
@@ -1812,9 +2203,8 @@ async function processNightAction(userId, message, game, client) {
             break;
 
         case 'mole':
-            // Mole Wasp - learn random Bee role (automatic)
-            game.nightActions[userId] = { actionType: 'mole' };
-            await message.reply('You are infiltrating the hive tonight. You will learn a random Bee\'s role! 🐛');
+            // Mole Wasp - automatically set (no input needed, already set in prompt)
+            await message.reply('Your infiltration has already been set! Results at dawn. 🐛');
             break;
 
         case 'kidnap':
@@ -1880,15 +2270,8 @@ async function processNightAction(userId, message, game, client) {
             break;
 
         case 'wildcard':
-            // Wildcard - random ability each night
-            validTargets = alivePlayers.filter(p => p.id !== userId);
-            if (choice >= 1 && choice <= validTargets.length) {
-                target = validTargets[choice - 1];
-                game.nightActions[userId] = { actionType: 'wildcard', target: target.id };
-                await message.reply(`You are targeting **${target.displayName}** tonight with a random ability! 🎲`);
-            } else {
-                await sendInvalidChoiceMessage(message, validTargets);
-            }
+            // Wildcard - automatically set (no input needed, already set in prompt)
+            await message.reply('Your wildcard ability has already been set! Results at dawn. 🎲');
             break;
 
         default:
@@ -3156,6 +3539,50 @@ module.exports = (client) => {
             const game = getGameByPlayer(message.author.id);
             if (!game) return;
 
+            const player = game.players.find(p => p.id === message.author.id);
+
+            // Handle Mute Bee message interception in DMs (day phase messages)
+            if (player && (player.role === 'MUTE_BEE' || player.role === 'KELLER_BEE') &&
+                (game.phase === 'day' || game.phase === 'voting') &&
+                !message.content.startsWith('!') && player.alive) {
+
+                // Store original message
+                const originalMessage = message.content;
+
+                // Translate to emojis using OpenAI
+                const emojiMessage = await translateToEmojis(originalMessage, message.author.username);
+
+                if (emojiMessage) {
+                    // Send emoji translation to all alive players via DM
+                    const alivePlayers = game.players.filter(p => p.alive && p.id !== message.author.id);
+                    for (const alivePlayer of alivePlayers) {
+                        try {
+                            const user = await client.users.fetch(alivePlayer.id);
+
+                            // Deaf Bees get the translation
+                            if (alivePlayer.role === 'DEAF_BEE') {
+                                const translationEmbed = new EmbedBuilder()
+                                    .setColor('#9B59B6')
+                                    .setAuthor({
+                                        name: `${player.displayName} (Mute Bee) - Translation`,
+                                        iconURL: message.author.displayAvatarURL()
+                                    })
+                                    .setDescription(`**Emojis:** ${emojiMessage}\n\n**Original Message:** ${originalMessage}`)
+                                    .setFooter({ text: '🦻 Only you can read this translation as a Deaf Bee' })
+                                    .setTimestamp();
+                                await user.send({ embeds: [translationEmbed] });
+                            } else {
+                                // Everyone else just gets emojis
+                                await user.send(`💬 **${player.displayName}:** ${emojiMessage}`);
+                            }
+                        } catch (error) {
+                            console.error(`Could not relay Mute Bee message to ${alivePlayer.displayName}:`, error);
+                        }
+                    }
+                }
+                return;
+            }
+
             // Check if this is a haunt selection
             if (game.pendingHaunt && game.pendingHaunt.jesterId === message.author.id) {
                 const choice = parseInt(message.content.trim());
@@ -3212,10 +3639,8 @@ module.exports = (client) => {
                         const targetUser = await client.users.fetch(targetId);
                         const prefix = isMedium ? '👻 **From Medium:**' : '💀 **From the Dead:**';
                         await targetUser.send(`${prefix} ${message.content}`);
-                        await message.reply('📨 Message sent!');
                     } catch (error) {
                         console.error('Could not relay seance message:', error);
-                        await message.reply('❌ Failed to send message.');
                     }
                     return;
                 }
@@ -3226,6 +3651,12 @@ module.exports = (client) => {
                 const player = game.players.find(p => p.id === message.author.id);
                 if (!player || !player.alive) {
                     await message.reply('❌ Only alive players can send messages during the day phase!');
+                    return;
+                }
+
+                // Check if player is blackmailed
+                if (game.blackmailedPlayers && game.blackmailedPlayers.has(player.id)) {
+                    await message.reply('🤐 You have been blackmailed! You cannot speak today.');
                     return;
                 }
 
@@ -3265,19 +3696,18 @@ module.exports = (client) => {
                     return;
                 }
 
-                // Relay message to all alive players (day phase only)
+                // Relay message to all other players (alive and dead) during day phase
                 if (game.phase === 'day') {
-                    const alivePlayers = game.players.filter(p => p.alive && p.id !== message.author.id);
-                    for (const alivePlayer of alivePlayers) {
+                    const otherPlayers = game.players.filter(p => p.id !== message.author.id);
+                    for (const otherPlayer of otherPlayers) {
                         try {
-                            const user = await client.users.fetch(alivePlayer.id);
-                            await user.send(`💬 **${player.displayName}:** ${message.content}`);
+                            const user = await client.users.fetch(otherPlayer.id);
+                            const prefix = otherPlayer.alive ? '💬' : '👻';
+                            await user.send(`${prefix} **${player.displayName}:** ${message.content}`);
                         } catch (error) {
-                            console.error(`Could not relay day message to ${alivePlayer.displayName}:`, error);
+                            console.error(`Could not relay day message to ${otherPlayer.displayName}:`, error);
                         }
                     }
-
-                    await message.reply('✅ Message sent to all players!');
                 }
                 return;
             }
@@ -3287,12 +3717,13 @@ module.exports = (client) => {
             await processNightAction(message.author.id, message, game, client);
         }
 
-        // Handle Keller Bee message interception
-        // Check if user is in an active mafia game and is a Keller Bee
+        // Handle Mute Bee (Keller Bee) message interception
+        // Check if user is in an active mafia game and is a Mute Bee
         const kellerGame = getGameByPlayer(message.author.id);
         if (kellerGame && message.channel.id === MAFIA_TEXT_CHANNEL_ID) {
             const kellerPlayer = kellerGame.players.find(p => p.id === message.author.id);
-            if (kellerPlayer && kellerPlayer.role === 'KELLER_BEE' && !message.content.startsWith('!')) {
+            // Check for both MUTE_BEE and KELLER_BEE (alias)
+            if (kellerPlayer && (kellerPlayer.role === 'MUTE_BEE' || kellerPlayer.role === 'KELLER_BEE') && !message.content.startsWith('!')) {
                 // Store original message before deletion
                 const originalMessage = message.content;
 
@@ -3300,7 +3731,7 @@ module.exports = (client) => {
                 try {
                     await message.delete();
                 } catch (error) {
-                    console.error('Could not delete Keller Bee message:', error);
+                    console.error('Could not delete Mute Bee message:', error);
                 }
 
                 // Translate to emojis using OpenAI
@@ -3311,11 +3742,11 @@ module.exports = (client) => {
                     const kellerEmbed = new EmbedBuilder()
                         .setColor('#9B59B6')
                         .setAuthor({
-                            name: `${kellerPlayer.displayName} (Keller Bee)`,
+                            name: `${kellerPlayer.displayName} (Mute Bee)`,
                             iconURL: message.author.displayAvatarURL()
                         })
                         .setDescription(emojiMessage)
-                        .setFooter({ text: '🔇 Translated to emojis' })
+                        .setFooter({ text: '🤐 Translated to emojis' })
                         .setTimestamp();
 
                     await message.channel.send({ embeds: [kellerEmbed] });
@@ -3328,7 +3759,7 @@ module.exports = (client) => {
                             const translationEmbed = new EmbedBuilder()
                                 .setColor('#9B59B6')
                                 .setAuthor({
-                                    name: `${kellerPlayer.displayName} (Keller Bee) - Translation`,
+                                    name: `${kellerPlayer.displayName} (Mute Bee) - Translation`,
                                     iconURL: message.author.displayAvatarURL()
                                 })
                                 .setDescription(`**Emojis:** ${emojiMessage}\n\n**Original Message:** ${originalMessage}`)
