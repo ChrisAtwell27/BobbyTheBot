@@ -258,6 +258,21 @@ function initializePlayerRole(player, roleKey) {
     if (roleInfo.hasRemembered !== undefined) {
         player.hasRemembered = roleInfo.hasRemembered;
     }
+    if (roleInfo.mimics !== undefined) {
+        player.mimics = roleInfo.mimics;
+    }
+    if (roleInfo.conversions !== undefined) {
+        player.conversions = roleInfo.conversions;
+    }
+    if (roleInfo.luckyCoins !== undefined) {
+        player.luckyCoins = roleInfo.luckyCoins;
+    }
+
+    // Special role initialization
+    if (roleKey === 'MERCENARY') {
+        // Mercenary randomly joins Bee or Wasp team
+        player.mercenaryTeam = Math.random() < 0.5 ? 'bee' : 'wasp';
+    }
 }
 
 module.exports = {

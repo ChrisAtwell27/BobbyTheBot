@@ -164,6 +164,141 @@ const ROLES = {
         defense: 0, // 2 when on alert
         alerts: 3
     },
+    TRACKER_BEE: {
+        name: 'Tracker Bee',
+        emoji: '🗺️',
+        team: 'bee',
+        description: 'You are a **Tracker Bee**! You can follow one player each night to see who they visit.',
+        abilities: ['Follow one player each night', 'See who they visit', 'Does not see what action they perform'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'track',
+        attack: 0,
+        defense: 0
+    },
+    POLLINATOR_BEE: {
+        name: 'Pollinator Bee',
+        emoji: '🌸',
+        team: 'bee',
+        description: 'You are a **Pollinator Bee**! You can pollinate a player each night. The next night, you will see everyone who visited them and everyone they visited.',
+        abilities: ['Pollinate one player each night', 'Receive results from 2 nights ago', 'See all visitors to target and all players target visited'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'pollinate',
+        attack: 0,
+        defense: 0
+    },
+    SPY_BEE: {
+        name: 'Spy Bee',
+        emoji: '🕵️',
+        team: 'bee',
+        description: 'You are a **Spy Bee**! You can see who the Wasps visit each night and read all their communications.',
+        abilities: ['See all Wasp visits each night', 'Read all Wasp chat messages', 'Identify Wasp targets and plans'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'spy',
+        attack: 0,
+        defense: 0
+    },
+    TRAPPER_BEE: {
+        name: 'Trapper Bee',
+        emoji: '🪤',
+        team: 'bee',
+        description: 'You are a **Trapper Bee**! You can set a trap at one player\'s house. If an attacker visits, they are roleblocked and revealed to you.',
+        abilities: ['Set a trap at one player\'s house each night', 'Attackers visiting are roleblocked', 'Learn the identity of trapped attackers'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'trap',
+        attack: 0,
+        defense: 0
+    },
+    RETRIBUTIONIST_BEE: {
+        name: 'Retributionist Bee',
+        emoji: '⚰️',
+        team: 'bee',
+        description: 'You are a **Retributionist Bee**! Once per game, you can revive a dead Bee to use their ability for one night.',
+        abilities: ['Revive one dead Bee once per game', 'Revived player uses their ability for one night', 'Only works on Bee team members'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'retribution',
+        attack: 0,
+        defense: 0,
+        hasRevived: false
+    },
+    BEEKEEPER: {
+        name: 'Beekeeper',
+        emoji: '🍯',
+        team: 'bee',
+        description: 'You are a **Beekeeper**! You can choose to protect the hive or inspect honey stores each night.',
+        abilities: ['Protect the hive: Learn if Wasps tried to kill tonight (once per game)', 'Inspect stores: Learn how many Wasps are alive', 'Choose your action each night'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'beekeeper',
+        attack: 0,
+        defense: 0,
+        hasProtected: false
+    },
+    LIBRARIAN_BEE: {
+        name: 'Librarian Bee',
+        emoji: '📚',
+        team: 'bee',
+        description: 'You are a **Librarian Bee**! You can investigate if a player has special powers (limited-use abilities).',
+        abilities: ['Investigate one player each night', 'Learn if they have limited-use abilities (bullets, vests, cleans, etc.)', 'Does not reveal exact role or which ability'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'librarian',
+        attack: 0,
+        defense: 0
+    },
+    CORONER_BEE: {
+        name: 'Coroner Bee',
+        emoji: '🔬',
+        team: 'bee',
+        description: 'You are a **Coroner Bee**! You can examine dead players to learn how they died.',
+        abilities: ['Examine one dead player each night', 'Learn how they died (attacked, lynched, poison, etc.)', 'If attacked, learn attack level (basic/powerful/unstoppable)'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'coroner',
+        attack: 0,
+        defense: 0
+    },
+    TRANSPORTER_BEE: {
+        name: 'Transporter Bee',
+        emoji: '🔄',
+        team: 'bee',
+        description: 'You are a **Transporter Bee**! You can swap two players each night, redirecting all actions targeting them.',
+        abilities: ['Choose two players each night', 'All actions targeting them are swapped', 'Visitors targeting player A go to player B and vice versa', 'Can cause chaos or save people'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'transport',
+        attack: 0,
+        defense: 0
+    },
+    PSYCHIC_BEE: {
+        name: 'Psychic Bee',
+        emoji: '🔮',
+        team: 'bee',
+        description: 'You are a **Psychic Bee**! You receive visions showing you suspects each night.',
+        abilities: ['Receive a vision of 3 random players each night', 'At least one is Evil (Wasp or Evil Neutral)', 'Use deduction to narrow down suspects'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'psychic',
+        attack: 0,
+        defense: 0
+    },
+    MARSHAL_BEE: {
+        name: 'Marshal Bee',
+        emoji: '🎖️',
+        team: 'bee',
+        description: 'You are a **Marshal Bee**! You can protect someone from being lynched if they are innocent.',
+        abilities: ['Choose one player during day phase (before voting)', 'If they are lynched and are Bee team, you reveal and save them', 'If Wasp or Evil Neutral, they still die', 'One-time use'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: false,
+        actionType: 'marshal',
+        attack: 0,
+        defense: 0,
+        hasUsedProtection: false
+    },
 
     // === WASP ROLES (Mafia equivalent) ===
     WASP_QUEEN: {
@@ -252,6 +387,118 @@ const ROLES = {
         attack: 0,
         defense: 0,
         disguises: 3
+    },
+    BLACKMAILER_WASP: {
+        name: 'Blackmailer Wasp',
+        emoji: '🤐',
+        team: 'wasp',
+        description: 'You are a **Blackmailer Wasp**! You can blackmail one player each night, preventing them from talking during the next day phase.',
+        abilities: ['Blackmail one player each night', 'Target cannot send messages during next day phase', 'Can be revealed if they try to speak', 'Communicate with Wasps'],
+        winCondition: 'Equal or outnumber all other players',
+        nightAction: true,
+        actionType: 'blackmail',
+        attack: 0,
+        defense: 0
+    },
+    HYPNOTIST_WASP: {
+        name: 'Hypnotist Wasp',
+        emoji: '🌀',
+        team: 'wasp',
+        description: 'You are a **Hypnotist Wasp**! You can hypnotize one player each night to give them false feedback about what happened.',
+        abilities: ['Hypnotize one player each night', 'Give them false night feedback', 'Confuse investigators with fake messages', 'Communicate with Wasps'],
+        winCondition: 'Equal or outnumber all other players',
+        nightAction: true,
+        actionType: 'hypnotize',
+        attack: 0,
+        defense: 0
+    },
+    POISONER_WASP: {
+        name: 'Poisoner Wasp',
+        emoji: '🧪',
+        team: 'wasp',
+        description: 'You are a **Poisoner Wasp**! You can poison one player each night. They will die in 2 nights unless healed.',
+        abilities: ['Poison one player each night', 'Victim dies in 2 nights', 'Poison can be cured by healing', 'Poison is undetectable until death', 'Communicate with Wasps'],
+        winCondition: 'Equal or outnumber all other players',
+        nightAction: true,
+        actionType: 'poison',
+        attack: 1, // Basic attack (delayed)
+        defense: 0
+    },
+    SABOTEUR_WASP: {
+        name: 'Saboteur Wasp',
+        emoji: '⚙️',
+        team: 'wasp',
+        description: 'You are a **Saboteur Wasp**! You can sabotage one player each night. Their ability fails without them knowing.',
+        abilities: ['Sabotage one player each night', 'Their action fails silently', 'They receive false success feedback', 'Different from roleblock - appears to succeed', 'Communicate with Wasps'],
+        winCondition: 'Equal or outnumber all other players',
+        nightAction: true,
+        actionType: 'sabotage',
+        attack: 0,
+        defense: 0
+    },
+    MIMIC_WASP: {
+        name: 'Mimic Wasp',
+        emoji: '🎨',
+        team: 'wasp',
+        description: 'You are a **Mimic Wasp**! You can disguise as a Bee role each night. If investigated, you appear as that role.',
+        abilities: ['Choose a Bee role each night (3 uses)', 'Appear as that role if investigated', 'Must predict investigator timing', 'Communicate with Wasps'],
+        winCondition: 'Equal or outnumber all other players',
+        nightAction: true,
+        actionType: 'mimic',
+        attack: 0,
+        defense: 0,
+        mimics: 3
+    },
+    SILENCER_WASP: {
+        name: 'Silencer Wasp',
+        emoji: '🔇',
+        team: 'wasp',
+        description: 'You are a **Silencer Wasp**! You can silence one player each night, making their ability results return nothing.',
+        abilities: ['Choose one player each night (3 uses)', 'Their ability results return "No result"', 'Does not roleblock them - they think it worked', 'More subtle than Saboteur', 'Communicate with Wasps'],
+        winCondition: 'Equal or outnumber all other players',
+        nightAction: true,
+        actionType: 'silencer',
+        attack: 0,
+        defense: 0,
+        silences: 3
+    },
+    MOLE_WASP: {
+        name: 'Mole Wasp',
+        emoji: '🐛',
+        team: 'wasp',
+        description: 'You are a **Mole Wasp**! Each night, you learn the role of one random Bee.',
+        abilities: ['Automatically learn one random Bee role each night', 'Cannot learn the same Bee twice', 'No control over who you learn', 'Basic defense', 'Communicate with Wasps'],
+        winCondition: 'Equal or outnumber all other players',
+        nightAction: true,
+        actionType: 'mole',
+        attack: 0,
+        defense: 1 // Basic defense
+    },
+    KIDNAPPER_WASP: {
+        name: 'Kidnapper Wasp',
+        emoji: '🎒',
+        team: 'wasp',
+        description: 'You are a **Kidnapper Wasp**! Once per game, you can kidnap someone for an entire cycle.',
+        abilities: ['Once per game, kidnap one player', 'They cannot act, vote, or be visited for 1 night/day cycle', 'They can see and talk in Wasp chat during kidnapping', 'They return next night', 'Communicate with Wasps'],
+        winCondition: 'Equal or outnumber all other players',
+        nightAction: true,
+        actionType: 'kidnap',
+        attack: 0,
+        defense: 0,
+        hasKidnapped: false
+    },
+    YAKUZA_WASP: {
+        name: 'Yakuza Wasp',
+        emoji: '⚡',
+        team: 'wasp',
+        description: 'You are a **Yakuza Wasp**! Once per game, you can convert a neutral player to become a Wasp.',
+        abilities: ['Once per game, convert a neutral player', 'They become a Killer Wasp', 'Fails on Bees or Neutral Killing roles', 'Basic defense', 'Communicate with Wasps'],
+        winCondition: 'Equal or outnumber all other players',
+        nightAction: true,
+        actionType: 'yakuza',
+        attack: 0,
+        defense: 1, // Basic defense
+        hasConverted: false
     },
 
     // === NEUTRAL ROLES ===
@@ -346,6 +593,175 @@ const ROLES = {
         attack: 0,
         defense: 1, // Basic defense
         hasRemembered: false
+    },
+    PIRATE_BEETLE: {
+        name: 'Pirate Beetle',
+        emoji: '🏴‍☠️',
+        team: 'neutral',
+        subteam: 'chaos',
+        description: 'You are a **Pirate Beetle**! You must plunder players by dueling them at night. Win 2 duels to achieve victory.',
+        abilities: ['Challenge one player to a duel each night (rock-paper-scissors)', 'Win 2 duels to win the game', 'Basic defense', 'Become Butterfly after winning'],
+        winCondition: 'Successfully plunder 2 players by winning duels',
+        nightAction: true,
+        actionType: 'pirate_duel',
+        attack: 0,
+        defense: 1, // Basic defense
+        duelsWon: 0,
+        duelsNeeded: 2
+    },
+    GUARDIAN_ANT: {
+        name: 'Guardian Ant',
+        emoji: '🐜',
+        team: 'neutral',
+        subteam: 'benign',
+        description: 'You are a **Guardian Ant**! You choose one player on Night 1 to protect. They cannot die at night while you live.',
+        abilities: ['Choose one player to guard on Night 1', 'Target cannot die at night while you are alive', 'If target dies, become Butterfly', 'Basic defense'],
+        winCondition: 'Keep your target alive and see them win',
+        nightAction: true,
+        actionType: 'guardian',
+        attack: 0,
+        defense: 1, // Basic defense
+        hasTarget: true,
+        guardianTarget: null
+    },
+    GOSSIP_BEETLE: {
+        name: 'Gossip Beetle',
+        emoji: '🗣️',
+        team: 'neutral',
+        subteam: 'benign',
+        description: 'You are a **Gossip Beetle**! You can send anonymous messages to players at night to spread rumors and create chaos.',
+        abilities: ['Send one anonymous message each night', 'Messages appear as "Anonymous Gossip"', 'Spread false information and create chaos', 'Basic defense'],
+        winCondition: 'Survive to the end of the game',
+        nightAction: true,
+        actionType: 'gossip',
+        attack: 0,
+        defense: 1 // Basic defense
+    },
+    PHANTOM_MOTH: {
+        name: 'Phantom Moth',
+        emoji: '👤',
+        team: 'neutral',
+        subteam: 'evil',
+        description: 'You are a **Phantom Moth**! If you get lynched during the day, you become invisible and return after 1 cycle.',
+        abilities: ['No night action', 'Survive being lynched once', 'Become invisible for 1 night/day cycle', 'Return to the game after', 'Must survive to the end after returning'],
+        winCondition: 'Get lynched, then survive to the end',
+        nightAction: false,
+        attack: 0,
+        defense: 1, // Basic defense
+        hasBeenLynched: false
+    },
+    GAMBLER_BEETLE: {
+        name: 'Gambler Beetle',
+        emoji: '🎰',
+        team: 'neutral',
+        subteam: 'chaos',
+        description: 'You are a **Gambler Beetle**! Bet on who will die each night. Collect 3 coins to win!',
+        abilities: ['Bet on one player each night', 'Gain a lucky coin if they die', 'Win at 3 coins', 'Spend 1 coin to survive an attack'],
+        winCondition: 'Collect 3 lucky coins by correctly predicting deaths',
+        nightAction: true,
+        actionType: 'gamble',
+        attack: 0,
+        defense: 0, // Special coin defense
+        luckyCoins: 0
+    },
+    MATCHMAKER_BEETLE: {
+        name: 'Matchmaker Beetle',
+        emoji: '💕',
+        team: 'neutral',
+        subteam: 'chaos',
+        description: 'You are a **Matchmaker Beetle**! On Night 1, you are linked with one random player. If they die, you die. If they win, you win.',
+        abilities: ['Automatically linked with one player on Night 1', 'If they die, you die', 'If they win, you win', 'They don\'t know about the link', 'Basic defense'],
+        winCondition: 'Your linked partner wins',
+        nightAction: false,
+        attack: 0,
+        defense: 1, // Basic defense
+        hasLinkedPartner: false,
+        linkedPartner: null,
+        minPlayers: 10
+    },
+    DOPPELGANGER: {
+        name: 'Doppelgänger',
+        emoji: '🎭',
+        team: 'neutral',
+        subteam: 'benign',
+        description: 'You are a **Doppelgänger**! On Night 1, choose a player. You become their exact role and team, but they don\'t know.',
+        abilities: ['Choose one player on Night 1', 'Become their exact role and team', 'If they die, you die', 'They don\'t know you copied them'],
+        winCondition: 'Win with the team of whoever you copied',
+        nightAction: true,
+        actionType: 'doppelganger',
+        attack: 0,
+        defense: 0,
+        hasCopied: false,
+        copiedTarget: null
+    },
+    ORACLE: {
+        name: 'Oracle',
+        emoji: '🔮',
+        team: 'neutral',
+        subteam: 'benign',
+        description: 'You are an **Oracle**! Each night, receive a cryptic hint about the game state to help you survive.',
+        abilities: ['Receive cryptic hints each night', 'Hints about game state, visits, or future events', 'Use information to play both sides', 'Basic defense'],
+        winCondition: 'Survive to the end of the game',
+        nightAction: true,
+        actionType: 'oracle',
+        attack: 0,
+        defense: 1 // Basic defense
+    },
+    JUDGE: {
+        name: 'Judge',
+        emoji: '⚖️',
+        team: 'neutral',
+        subteam: 'chaos',
+        description: 'You are a **Judge**! You can force a revote during voting phase once per game.',
+        abilities: ['Once per game, cancel all current votes and force a revote', 'Must be used before execution', 'Can save someone or force different target', 'Must successfully change the vote outcome to win'],
+        winCondition: 'Survive and successfully use your ability to change a vote outcome, then survive to end',
+        nightAction: false,
+        attack: 0,
+        defense: 1, // Basic defense
+        hasUsedAbility: false,
+        changedOutcome: false
+    },
+    MERCENARY: {
+        name: 'Mercenary',
+        emoji: '💰',
+        team: 'neutral',
+        subteam: 'benign',
+        description: 'You are a **Mercenary**! You are automatically assigned to help either Bees or Wasps.',
+        abilities: ['Randomly assigned to Bee or Wasp side on Night 1', 'Receive 2 bulletproof vests', 'Learn which side you are on', 'Win with your assigned team'],
+        winCondition: 'Win with assigned team (Bees or Wasps)',
+        nightAction: true,
+        actionType: 'vest', // Uses vest like Butterfly
+        attack: 0,
+        defense: 0, // Vests provide defense
+        vests: 2,
+        assignedTeam: null // Will be set to 'bee' or 'wasp'
+    },
+    CULTIST: {
+        name: 'Cultist',
+        emoji: '🕯️',
+        team: 'neutral',
+        subteam: 'evil',
+        description: 'You are a **Cultist**! Convert players to your cult and win together.',
+        abilities: ['Convert one player each night', 'Converted players join the Cult', 'Win after converting 3 players', 'Fails on Wasps and Neutral Killing roles', 'Basic defense'],
+        winCondition: 'Convert 3 players and have all cult members alive',
+        nightAction: true,
+        actionType: 'cultist',
+        attack: 0,
+        defense: 1, // Basic defense
+        conversions: 0
+    },
+    WILDCARD: {
+        name: 'Wildcard',
+        emoji: '🎲',
+        team: 'neutral',
+        subteam: 'chaos',
+        description: 'You are a **Wildcard**! Each night, you randomly receive a different ability.',
+        abilities: ['Randomly receive one ability each night:', '1) Basic Defense', '2) Random Investigation Result', '3) See who visited you', '4) Roleblock Immunity', '5) Nothing'],
+        winCondition: 'Survive to the end of the game',
+        nightAction: true,
+        actionType: 'wildcard',
+        attack: 0,
+        defense: 0 // Varies by night
     }
 };
 

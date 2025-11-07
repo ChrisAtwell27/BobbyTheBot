@@ -18,7 +18,8 @@
       "Bash(findstr:*)",
       "Bash(test:*)",
       "Bash(del test-monthly-bounds.js)",
-      "Bash(nul)"
+      "Bash(nul)",
+      "Read(//e/**)"
     ],
     "deny": [],
     "ask": []
