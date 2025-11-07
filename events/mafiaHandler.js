@@ -3359,8 +3359,9 @@ async function endVotingPhase(game, client) {
                 console.error(`Could not notify Phantom Moth:`, error);
             }
 
-            // Don't actually eliminate them - they'll appear eliminated but stay "alive"
-            eliminatedPlayer = null; // Clear so announcement says no one was eliminated
+            // Mark them as "fake dead" - they appear eliminated but stay alive (invisibly)
+            // Don't set eliminatedPlayer to null - they should appear eliminated to others
+            // The phantomInvisible flag will handle their invisibility
         } else if (eliminatedPlayer) {
             eliminatedPlayer.alive = false;
             // Send death notification
