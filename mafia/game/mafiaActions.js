@@ -27,10 +27,29 @@ async function processNightActions(game, client) {
     const jailedPlayers = new Set(); // players who are jailed
     const alertPlayers = new Set(); // players who are on alert
 
+    // Process guilty vigilantes (Soldier Bees who killed a Bee) - they die from guilt
+    for (const player of game.players) {
+        if (player.alive && player.guiltyNextNight) {
+            player.alive = false;
+            player.guiltyNextNight = false;
+            deaths.push({
+                victimId: player.id,
+                killers: [{
+                    killerId: player.id, // Self-inflicted (guilt)
+                    attackType: 'guilt'
+                }]
+            });
+        }
+    }
+
     // First pass: Process all actions and determine protections/attacks
     for (const [userId, action] of Object.entries(game.nightActions)) {
         const player = game.players.find(p => p.id === userId);
-        if (!player || !player.alive) continue;
+
+        // Check if player is revived (dead but temporarily brought back by Retributionist)
+        const isRevived = (game.revivals || []).some(r => r.revivedId === userId);
+
+        if (!player || (!player.alive && !isRevived)) continue;
 
         const role = ROLES[player.role];
 
@@ -66,9 +85,6 @@ async function processNightActions(game, client) {
             case 'roleblock':
                 await processRoleblock(game, player, action, roleblocks);
                 break;
-            case 'seance':
-                await processSeance(game, player, action, client);
-                break;
             case 'alert':
                 await processAlert(game, player, action, alertPlayers, protections);
                 break;
@@ -89,6 +105,9 @@ async function processNightActions(game, client) {
                 break;
             case 'blackmail':
                 await processBlackmail(game, player, action);
+                break;
+            case 'deceive':
+                await processDeceive(game, player, action);
                 break;
             case 'hypnotize':
                 await processHypnotize(game, player, action);
@@ -165,11 +184,17 @@ async function processNightActions(game, client) {
         }
     }
 
+    // Process trap results (must happen before roleblocks and attack resolution)
+    await processTrapResults(game, client, attacks);
+
     // Apply roleblocks and jails (cancel actions)
     applyRoleblocks(game, roleblocks, jailedPlayers);
 
     // Apply witch controls (redirect actions)
     applyWitchControls(game, controlTargets, attacks);
+
+    // Apply transports (swap actions between transported players)
+    applyTransports(game, attacks, protections, healers);
 
     // Process Serial Killer counter-attacks (kills visitors)
     processSerialKillerCounterattacks(game, attacks);
@@ -200,8 +225,10 @@ async function processNightActions(game, client) {
             matchmaker.alive = false;
             matchmakerDeaths.push({
                 victimId: matchmaker.id,
-                killerId: null,
-                attackType: 'matchmaker_link'
+                killers: [{
+                    killerId: null,
+                    attackType: 'matchmaker_link'
+                }]
             });
         }
     }
@@ -220,8 +247,10 @@ async function processNightActions(game, client) {
             doppelganger.alive = false;
             doppelgangerDeaths.push({
                 victimId: doppelganger.id,
-                killerId: null,
-                attackType: 'doppelganger_link'
+                killers: [{
+                    killerId: null,
+                    attackType: 'doppelganger_link'
+                }]
             });
         }
     }
@@ -242,9 +271,6 @@ async function processNightActions(game, client) {
     // Process spy
     await processSpies(game, client);
 
-    // Process trap results
-    await processTrapResults(game, client, attacks);
-
     // Process poison deaths
     const poisonDeaths = await processPoisonDeaths(game, client);
     deaths.push(...poisonDeaths);
@@ -264,8 +290,27 @@ async function processNightActions(game, client) {
     // Process coroner results
     await processCoroners(game, client);
 
+    // Process janitor results (notify Janitors of cleaned roles)
+    await processJanitors(game, client, deaths);
+
+    // Process disguiser results (notify Disguisers of successful disguises)
+    await processDisguisers(game, client);
+
     // Process psychic results
     await processPsychics(game, client);
+
+    // Update lastRoleblockTarget for Escort Bees (only if their action succeeded)
+    for (const result of game.nightResults) {
+        if (result.type === 'roleblock') {
+            const blocker = game.players.find(p => p.id === result.blockerId);
+            if (blocker && blocker.role === 'ESCORT_BEE') {
+                blocker.lastRoleblockTarget = result.targetId;
+            }
+        }
+    }
+
+    // Process Killer Wasp succession (if Wasp Queen died)
+    await processWaspSuccession(game, deaths, client);
 
     return deaths;
 }
@@ -462,6 +507,58 @@ function applyWitchControls(game, controlTargets, attacks) {
 }
 
 /**
+ * Apply transports - swap all actions targeting the transported players
+ */
+function applyTransports(game, attacks, protections, healers) {
+    if (!game.transports || game.transports.length === 0) return;
+
+    for (const transport of game.transports) {
+        const { target1, target2 } = transport;
+
+        // Swap attacks
+        const attacks1 = attacks.get(target1);
+        const attacks2 = attacks.get(target2);
+        if (attacks1) attacks.set(target2, attacks1);
+        else attacks.delete(target2);
+        if (attacks2) attacks.set(target1, attacks2);
+        else attacks.delete(target1);
+
+        // Swap protections
+        const protection1 = protections.get(target1);
+        const protection2 = protections.get(target2);
+        if (protection1 !== undefined) protections.set(target2, protection1);
+        else protections.delete(target2);
+        if (protection2 !== undefined) protections.set(target1, protection2);
+        else protections.delete(target1);
+
+        // Swap healers
+        const healer1 = healers.get(target1);
+        const healer2 = healers.get(target2);
+        if (healer1) healers.set(target2, healer1);
+        else healers.delete(target2);
+        if (healer2) healers.set(target1, healer2);
+        else healers.delete(target1);
+
+        // Swap visits
+        const visits1 = game.visits[target1] || [];
+        const visits2 = game.visits[target2] || [];
+        if (visits1.length > 0) game.visits[target2] = visits1;
+        else delete game.visits[target2];
+        if (visits2.length > 0) game.visits[target1] = visits2;
+        else delete game.visits[target1];
+
+        // Redirect any actions targeting these players
+        for (const [userId, action] of Object.entries(game.nightActions)) {
+            if (action.target === target1) {
+                action.target = target2;
+            } else if (action.target === target2) {
+                action.target = target1;
+            }
+        }
+    }
+}
+
+/**
  * Serial Killer kills all visitors
  */
 function processSerialKillerCounterattacks(game, attacks) {
@@ -488,7 +585,7 @@ function processSerialKillerCounterattacks(game, attacks) {
 
 /**
  * Resolve all attacks against defenses
- * @returns {Array} Array of {victimId, killerId, attackType}
+ * @returns {Array} Array of {victimId, killers: [{killerId, attackType}]}
  */
 function resolveAttacks(game, attacks, protections, healers) {
     const deaths = [];
@@ -505,13 +602,28 @@ function resolveAttacks(game, attacks, protections, healers) {
         const protection = protections.get(targetId) || 0;
         defense = Math.max(defense, protection);
 
+        // Check for Beekeeper protection - all Bees are immune to attacks
+        const beekeeperProtecting = game.beekeeperProtection && game.beekeeperProtection.active && role.team === 'bee';
+        if (beekeeperProtecting) {
+            // Store that this Bee was saved by Beekeeper
+            if (!game.beekeeperProtection.savedBees) {
+                game.beekeeperProtection.savedBees = [];
+            }
+            game.beekeeperProtection.savedBees.push(targetId);
+            continue; // Skip this target - they're protected by Beekeeper
+        }
+
+        const killingAttacks = []; // Track all attacks that would kill
+        let usedCoin = false;
+
         // Check each attack
         for (const attack of attackArray) {
             if (attack.attackLevel >= defense) {
-                // Check if target is Gambler Beetle with lucky coins
-                if (target.role === 'GAMBLER_BEETLE' && target.luckyCoins > 0) {
+                // Check if target is Gambler Beetle with lucky coins (only once)
+                if (!usedCoin && target.role === 'GAMBLER_BEETLE' && target.luckyCoins > 0) {
                     // Spend a coin to survive
                     target.luckyCoins--;
+                    usedCoin = true;
 
                     game.nightResults.push({
                         type: 'gambler_coin_used',
@@ -522,11 +634,8 @@ function resolveAttacks(game, attacks, protections, healers) {
                     continue; // Survived this attack
                 }
 
-                // Attack succeeds
-                target.alive = false;
-
-                deaths.push({
-                    victimId: targetId,
+                // Track this killing attack
+                killingAttacks.push({
                     killerId: attack.attackerId,
                     attackType: attack.attackType
                 });
@@ -539,9 +648,17 @@ function resolveAttacks(game, attacks, protections, healers) {
                         attacker.guiltyNextNight = true;
                     }
                 }
-
-                break; // Target can only die once
             }
+        }
+
+        // If any attacks succeeded, target dies
+        if (killingAttacks.length > 0) {
+            target.alive = false;
+
+            deaths.push({
+                victimId: targetId,
+                killers: killingAttacks // Array of all killing attacks
+            });
         }
     }
 
@@ -570,8 +687,10 @@ async function processBodyguardCounterattacks(game, attackResults, attacks, clie
             guard.alive = false;
             deaths.push({
                 victimId: guardId,
-                killerId: targetAttacks[0].attackerId,
-                attackType: 'bodyguard_sacrifice'
+                killers: [{
+                    killerId: targetAttacks[0].attackerId,
+                    attackType: 'bodyguard_sacrifice'
+                }]
             });
 
             // Bodyguard kills one attacker (powerful attack)
@@ -583,8 +702,10 @@ async function processBodyguardCounterattacks(game, attackResults, attacks, clie
                     attacker.alive = false;
                     deaths.push({
                         victimId: attackerId,
-                        killerId: guardId,
-                        attackType: 'bodyguard_counter'
+                        killers: [{
+                            killerId: guardId,
+                            attackType: 'bodyguard_counter'
+                        }]
                     });
                 }
             }
@@ -624,7 +745,9 @@ async function processSheriffInvestigation(game, sheriff, action, client) {
     const target = game.players.find(p => p.id === targetId);
     if (!target) return;
 
-    const targetRole = ROLES[target.role];
+    // Check for disguise - if disguised, use disguised role instead
+    const roleToInvestigate = target.disguisedAs || target.role;
+    const targetRole = ROLES[roleToInvestigate];
     let isSuspicious = false;
 
     // Check if target is framed
@@ -666,7 +789,9 @@ async function processInvestigatorInvestigation(game, investigator, action, clie
     const target = game.players.find(p => p.id === targetId);
     if (!target) return;
 
-    const targetRole = ROLES[target.role];
+    // Check for disguise - if disguised, use disguised role instead
+    const roleToInvestigate = target.disguisedAs || target.role;
+    const targetRole = ROLES[roleToInvestigate];
 
     try {
         const user = await client.users.fetch(investigator.id);
@@ -693,7 +818,9 @@ async function processConsigliereInvestigation(game, consigliere, action, client
     const target = game.players.find(p => p.id === targetId);
     if (!target) return;
 
-    const targetRole = ROLES[target.role];
+    // Check for disguise - if disguised, use disguised role instead
+    const roleToInvestigate = target.disguisedAs || target.role;
+    const targetRole = ROLES[roleToInvestigate];
 
     try {
         const user = await client.users.fetch(consigliere.id);
@@ -807,6 +934,9 @@ async function processJail(game, jailer, action, jailedPlayers, protections, att
 async function processRoleblock(game, blocker, action, roleblocks) {
     const targetId = action.target;
 
+    // Record visit (roleblocking is a visiting action)
+    addVisit(game, blocker.id, targetId);
+
     // Record roleblock
     roleblocks.set(targetId, blocker.id);
 
@@ -818,56 +948,57 @@ async function processRoleblock(game, blocker, action, roleblocks) {
 }
 
 /**
- * Process seance (Medium) - establishes two-way communication
+ * Process seance (Medium) - NO LONGER USED
+ * Medium Bee now has access to all dead players via dead chat (see mafiaHandler.js)
  */
-async function processSeance(game, medium, action, client) {
-    const targetId = action.target;
-    const target = game.players.find(p => p.id === targetId);
-
-    if (!target || target.alive) return;
-
-    const targetRole = ROLES[target.role];
-
-    // Store active seance connection
-    if (!game.activeSeances) {
-        game.activeSeances = [];
-    }
-
-    game.activeSeances.push({
-        mediumId: medium.id,
-        mediumName: medium.displayName,
-        deadId: target.id,
-        deadName: target.displayName,
-        deadRole: targetRole.name,
-        deadEmoji: targetRole.emoji
-    });
-
-    try {
-        // Notify Medium
-        const mediumUser = await client.users.fetch(medium.id);
-        const mediumEmbed = new EmbedBuilder()
-            .setColor('#9B59B6')
-            .setTitle('👻 Seance Connection Established')
-            .setDescription(`You have connected with **${target.displayName}** from beyond the grave.\n\n**Their Role:** ${targetRole.name} ${targetRole.emoji}\n\n💬 You can now send messages to them! Just type your message and send it to me. They can respond back.`)
-            .setFooter({ text: 'Connection will end when the night ends.' })
-            .setTimestamp();
-
-        await mediumUser.send({ embeds: [mediumEmbed] });
-
-        // Notify dead player
-        const deadUser = await client.users.fetch(target.id);
-        const deadEmbed = new EmbedBuilder()
-            .setColor('#9B59B6')
-            .setTitle('👻 A Medium Has Contacted You!')
-            .setDescription(`**${medium.displayName}** the Medium Bee has connected with you from the living world!\n\n💬 You can send messages back! Just type your message and send it to me. They will receive it.`)
-            .setFooter({ text: 'Connection will end when the night ends.' })
-            .setTimestamp();
-
-        await deadUser.send({ embeds: [deadEmbed] });
-    } catch (error) {
-        console.error(`Could not send seance notifications:`, error);
-    }
-}
+// async function processSeance(game, medium, action, client) {
+//     const targetId = action.target;
+//     const target = game.players.find(p => p.id === targetId);
+//
+//     if (!target || target.alive) return;
+//
+//     const targetRole = ROLES[target.role];
+//
+//     // Store active seance connection
+//     if (!game.activeSeances) {
+//         game.activeSeances = [];
+//     }
+//
+//     game.activeSeances.push({
+//         mediumId: medium.id,
+//         mediumName: medium.displayName,
+//         deadId: target.id,
+//         deadName: target.displayName,
+//         deadRole: targetRole.name,
+//         deadEmoji: targetRole.emoji
+//     });
+//
+//     try {
+//         // Notify Medium
+//         const mediumUser = await client.users.fetch(medium.id);
+//         const mediumEmbed = new EmbedBuilder()
+//             .setColor('#9B59B6')
+//             .setTitle('👻 Seance Connection Established')
+//             .setDescription(`You have connected with **${target.displayName}** from beyond the grave.\n\n**Their Role:** ${targetRole.name} ${targetRole.emoji}\n\n💬 You can now send messages to them! Just type your message and send it to me. They can respond back.`)
+//             .setFooter({ text: 'Connection will end when the night ends.' })
+//             .setTimestamp();
+//
+//         await mediumUser.send({ embeds: [mediumEmbed] });
+//
+//         // Notify dead player
+//         const deadUser = await client.users.fetch(target.id);
+//         const deadEmbed = new EmbedBuilder()
+//             .setColor('#9B59B6')
+//             .setTitle('👻 A Medium Has Contacted You!')
+//             .setDescription(`**${medium.displayName}** the Medium Bee has connected with you from the living world!\n\n💬 You can send messages back! Just type your message and send it to me. They will receive it.`)
+//             .setFooter({ text: 'Connection will end when the night ends.' })
+//             .setTimestamp();
+//
+//         await deadUser.send({ embeds: [deadEmbed] });
+//     } catch (error) {
+//         console.error(`Could not send seance notifications:`, error);
+//     }
+// }
 
 /**
  * Process veteran alert
@@ -1127,23 +1258,27 @@ async function processPollinate(game, pollinator, action) {
  * Process pollinator results - send results from 2 nights ago
  */
 async function processPollinators(game, client) {
-    if (!game.pollinationHistory) return;
+    if (!game.pollinationHistory || !game.nightHistory) return;
 
     const currentNight = game.nightNumber;
 
     // Find pollinations from 2 nights ago
     for (const pollination of game.pollinationHistory) {
-        if (pollination.night === currentNight - 1) {
+        if (pollination.night === currentNight - 2) { // Fixed: was -1, should be -2
             const pollinator = game.players.find(p => p.id === pollination.pollinatorId);
             const target = game.players.find(p => p.id === pollination.targetId);
 
             if (!pollinator || !pollinator.alive) continue;
 
-            // Get visitors to the target from that night
-            const visitors = getVisitors(game, pollination.targetId);
+            // Get historical data from that night
+            const historicalNight = game.nightHistory.find(h => h.night === pollination.night);
+            if (!historicalNight) continue;
 
-            // Get who the target visited
-            const targetAction = game.nightActions[pollination.targetId];
+            // Get visitors to the target from THAT night (not current night)
+            const visitors = historicalNight.visits[pollination.targetId] || [];
+
+            // Get who the target visited on THAT night (not current night)
+            const targetAction = historicalNight.nightActions[pollination.targetId];
 
             let visitorsText = 'No one visited them.';
             if (visitors.length > 0) {
@@ -1199,6 +1334,27 @@ async function processBlackmail(game, blackmailer, action) {
     game.nightResults.push({
         type: 'blackmail',
         blackmailerId: blackmailer.id,
+        targetId: targetId
+    });
+}
+
+/**
+ * Process deceive action (Deceiver Wasp) - twists messages during next day
+ */
+async function processDeceive(game, deceiver, action) {
+    const targetId = action.target;
+    addVisit(game, deceiver.id, targetId);
+
+    // Initialize deceived players set if not exists
+    if (!game.deceivedPlayers) {
+        game.deceivedPlayers = new Set();
+    }
+
+    game.deceivedPlayers.add(targetId);
+
+    game.nightResults.push({
+        type: 'deceive',
+        deceiverId: deceiver.id,
         targetId: targetId
     });
 }
@@ -1478,17 +1634,46 @@ async function processRetribution(game, retributionist, action, client) {
         const user = await client.users.fetch(retributionist.id);
         await user.send(`⚰️ You have revived **${target.displayName}** (${targetRole.name}) for one night! They will perform their action tonight.`);
 
-        // Notify the revived player
+        // Notify the revived player with their role details
         const revivedUser = await client.users.fetch(targetId);
-        await revivedUser.send(`⚰️ The Retributionist Bee has revived you for one night! You can perform your action. Choose your target by sending me a number.`);
 
-        // Send them the player list
+        const { EmbedBuilder } = require('discord.js');
+        const revivalEmbed = new EmbedBuilder()
+            .setColor('#9B59B6')
+            .setTitle(`⚰️ You Have Been Revived!`)
+            .setDescription(`The Retributionist Bee has brought you back for one night!\n\n**Your Role:** ${targetRole.name} ${targetRole.emoji}\n**Abilities:** ${targetRole.abilities.map(a => `• ${a}`).join('\n')}\n\nYou can perform your night action! A prompt will follow.`)
+            .setFooter({ text: 'Use your ability wisely - you only have one night!' })
+            .setTimestamp();
+
+        await revivedUser.send({ embeds: [revivalEmbed] });
+
+        // Now we need to send them a proper night action prompt
+        // This is a simplified version - ideally we'd call the full prompt logic
         const alivePlayers = game.players.filter(p => p.alive);
-        const playerList = alivePlayers
-            .map((p, i) => `${i + 1}. ${p.displayName}`)
-            .join('\n');
 
-        await revivedUser.send(`**Alive Players:**\n${playerList}`);
+        if (targetRole.nightAction && targetRole.actionType) {
+            let promptText = '';
+            let targets = alivePlayers;
+
+            // Filter targets based on action type
+            if (['investigate_suspicious', 'investigate_exact', 'consigliere', 'lookout', 'track', 'roleblock', 'shoot', 'serial_kill'].includes(targetRole.actionType)) {
+                targets = alivePlayers.filter(p => p.id !== targetId);
+            } else if (['frame', 'clean', 'disguise'].includes(targetRole.actionType)) {
+                targets = alivePlayers.filter(p => p.id !== targetId && ROLES[p.role].team !== 'wasp');
+            }
+
+            const targetsList = targets.map((p, i) => `${i + 1}. ${p.displayName}`).join('\n');
+
+            promptText = `Choose your target by sending me the **number**.\n\n${targetsList}`;
+
+            const actionEmbed = new EmbedBuilder()
+                .setColor('#FFD700')
+                .setTitle(`${targetRole.emoji} Night Action - ${targetRole.name}`)
+                .setDescription(promptText)
+                .setFooter({ text: 'Send the number of your target' });
+
+            await revivedUser.send({ embeds: [actionEmbed] });
+        }
     } catch (error) {
         console.error(`Could not send retribution notifications:`, error);
     }
@@ -1536,8 +1721,10 @@ async function processPoisonDeaths(game, client) {
                 target.alive = false;
                 deaths.push({
                     victimId: targetId,
-                    killerId: poisonInfo.poisonerId,
-                    attackType: 'poison'
+                    killers: [{
+                        killerId: poisonInfo.poisonerId,
+                        attackType: 'poison'
+                    }]
                 });
 
                 // Notify victim
@@ -1590,6 +1777,14 @@ async function processGossip(game, gossiper, action, client) {
  * Process beekeeper action
  */
 async function processBeekeeper(game, beekeeper, action) {
+    // If Beekeeper chooses protect, all Bees are protected tonight
+    if (action.choice === 'protect') {
+        game.beekeeperProtection = {
+            beekeeperId: beekeeper.id,
+            active: true
+        };
+    }
+
     game.nightResults.push({
         type: 'beekeeper',
         beekeeperId: beekeeper.id,
@@ -1613,20 +1808,21 @@ async function processBeekeepers(game, client, attacks) {
                 .setTimestamp();
 
             if (result.actionChoice === 'protect') {
-                // Check if any Wasps tried to kill
-                let waspKilledTonight = false;
-                for (const [targetId, attackArray] of attacks.entries()) {
-                    for (const attack of attackArray) {
-                        const attacker = game.players.find(p => p.id === attack.attackerId);
-                        if (attacker && ROLES[attacker.role].team === 'wasp' && attack.attackType === 'mafia') {
-                            waspKilledTonight = true;
-                            break;
-                        }
-                    }
-                    if (waspKilledTonight) break;
+                // Check which Bees were saved by protection
+                const savedBees = game.beekeeperProtection?.savedBees || [];
+
+                let resultText = 'You protected all Bees tonight.\n\n';
+                if (savedBees.length > 0) {
+                    const savedNames = savedBees.map(id => {
+                        const saved = game.players.find(p => p.id === id);
+                        return saved ? saved.displayName : 'Unknown';
+                    });
+                    resultText += `**Result:** You saved **${savedNames.length}** Bee${savedNames.length === 1 ? '' : 's'} from death!\n\n• ${savedNames.join('\n• ')}`;
+                } else {
+                    resultText += '**Result:** No Bees were attacked tonight.';
                 }
 
-                embed.setDescription(`You protected the hive tonight.\n\n**Result:** The Wasps ${waspKilledTonight ? '**DID** attempt to kill someone' : 'did **NOT** attempt to kill anyone'}.`);
+                embed.setDescription(resultText);
                 beekeeper.hasProtected = true;
             } else if (result.actionChoice === 'inspect') {
                 // Count Wasps alive
@@ -2017,16 +2213,37 @@ async function processTransport(game, transporter, action) {
  * Process psychic action - generate 3-player vision
  */
 async function processPsychic(game, psychic, action) {
-    // Select 3 random alive players
     const alivePlayers = game.players.filter(p => p.alive);
-    const shuffled = [...alivePlayers].sort(() => Math.random() - 0.5);
-    const selectedPlayers = shuffled.slice(0, 3);
 
-    // Determine if at least one is evil (Wasp or Evil Neutral)
-    const hasEvil = selectedPlayers.some(p => {
+    // Separate evil and all players
+    const evilPlayers = alivePlayers.filter(p => {
         const role = ROLES[p.role];
         return role.team === 'wasp' || (role.team === 'neutral' && (role.subteam === 'evil' || role.subteam === 'killing'));
     });
+
+    const selectedPlayers = [];
+    let hasEvil = false;
+
+    // If evil players exist, guarantee at least one is selected
+    if (evilPlayers.length > 0) {
+        // Pick 1 random evil player
+        const randomEvil = evilPlayers[Math.floor(Math.random() * evilPlayers.length)];
+        selectedPlayers.push(randomEvil);
+        hasEvil = true;
+
+        // Pick 2 more random players from remaining pool (excluding the selected evil player)
+        const remainingPlayers = alivePlayers.filter(p => p.id !== randomEvil.id);
+        const shuffled = [...remainingPlayers].sort(() => Math.random() - 0.5);
+        selectedPlayers.push(...shuffled.slice(0, Math.min(2, shuffled.length)));
+
+        // Shuffle the final selection so the evil player isn't always first
+        selectedPlayers.sort(() => Math.random() - 0.5);
+    } else {
+        // No evil players alive - just pick 3 random players
+        const shuffled = [...alivePlayers].sort(() => Math.random() - 0.5);
+        selectedPlayers.push(...shuffled.slice(0, 3));
+        hasEvil = false;
+    }
 
     game.nightResults.push({
         type: 'psychic',
@@ -2387,6 +2604,93 @@ async function processCoroners(game, client) {
 }
 
 /**
+ * Process janitor results - notify Janitors of cleaned roles
+ */
+async function processJanitors(game, client, deaths) {
+    if (!game.cleanedPlayers || game.cleanedPlayers.size === 0) return;
+
+    // Find all Janitor clean actions
+    const janitorResults = game.nightResults.filter(r => r.type === 'clean');
+
+    for (const result of janitorResults) {
+        const janitor = game.players.find(p => p.id === result.janitorId);
+        if (!janitor) continue;
+
+        const targetId = result.targetId;
+
+        // Check if the target actually died
+        const targetDied = deaths.some(d => d.victimId === targetId);
+
+        if (!targetDied) {
+            // Target didn't die, clean failed
+            try {
+                const user = await client.users.fetch(result.janitorId);
+                const target = game.players.find(p => p.id === targetId);
+                await user.send(`🧹 Your clean failed - **${target?.displayName || 'Unknown'}** did not die tonight.`);
+            } catch (error) {
+                console.error(`Could not notify janitor of failed clean:`, error);
+            }
+            // Remove from cleaned players since clean failed
+            game.cleanedPlayers.delete(targetId);
+            continue;
+        }
+
+        // Target died and was cleaned - notify janitor of the role
+        const target = game.players.find(p => p.id === targetId);
+        if (!target) continue;
+
+        const targetRole = ROLES[target.role];
+
+        try {
+            const user = await client.users.fetch(result.janitorId);
+            const { EmbedBuilder } = require('discord.js');
+            const cleanEmbed = new EmbedBuilder()
+                .setColor('#8B0000')
+                .setTitle('🧹 Clean Successful!')
+                .setDescription(`You successfully cleaned **${target.displayName}**'s body!\n\n**Their Role:** ${targetRole.emoji} ${targetRole.name}\n\nTheir role will be hidden from all players at the end of the game.`)
+                .setFooter({ text: `Cleans remaining: ${janitor.cleans}` })
+                .setTimestamp();
+
+            await user.send({ embeds: [cleanEmbed] });
+        } catch (error) {
+            console.error(`Could not notify janitor of successful clean:`, error);
+        }
+    }
+}
+
+/**
+ * Process disguiser results - notify Disguisers of successful disguises
+ */
+async function processDisguisers(game, client) {
+    const disguiserResults = game.nightResults.filter(r => r.type === 'disguise');
+
+    for (const result of disguiserResults) {
+        const disguiser = game.players.find(p => p.id === result.disguiserId);
+        if (!disguiser) continue;
+
+        const target = game.players.find(p => p.id === result.targetId);
+        if (!target) continue;
+
+        const targetRole = ROLES[result.newRole];
+
+        try {
+            const user = await client.users.fetch(result.disguiserId);
+            const { EmbedBuilder } = require('discord.js');
+            const disguiseEmbed = new EmbedBuilder()
+                .setColor('#8B0000')
+                .setTitle('🎪 Disguise Successful!')
+                .setDescription(`You are now disguised as **${target.displayName}**!\n\n**Disguised Role:** ${targetRole.emoji} ${targetRole.name}\n\nInvestigators will see you as this role instead of your true identity.`)
+                .setFooter({ text: `Disguises remaining: ${disguiser.disguises}` })
+                .setTimestamp();
+
+            await user.send({ embeds: [disguiseEmbed] });
+        } catch (error) {
+            console.error(`Could not notify disguiser of successful disguise:`, error);
+        }
+    }
+}
+
+/**
  * Process psychic results - send visions
  */
 async function processPsychics(game, client) {
@@ -2427,6 +2731,57 @@ async function processPsychics(game, client) {
     }
 }
 
+/**
+ * Process Killer Wasp succession when Wasp Queen dies
+ * @param {Object} game - Game object
+ * @param {Array} deaths - Array of death objects
+ * @param {Object} client - Discord client
+ */
+async function processWaspSuccession(game, deaths, client) {
+    // Check if Wasp Queen died
+    const queenDied = deaths.some(death => {
+        const victim = game.players.find(p => p.id === death.victimId);
+        return victim && victim.role === 'WASP_QUEEN';
+    });
+
+    if (!queenDied) return;
+
+    // Find all alive Killer Wasps
+    const aliveKillerWasps = game.players.filter(p => p.alive && p.role === 'KILLER_WASP');
+
+    if (aliveKillerWasps.length === 0) return;
+
+    // Randomly select one Killer Wasp to promote
+    const newQueen = aliveKillerWasps[Math.floor(Math.random() * aliveKillerWasps.length)];
+
+    // Promote to Wasp Queen
+    newQueen.role = 'WASP_QUEEN';
+
+    // Notify the promoted Killer Wasp
+    try {
+        const { EmbedBuilder } = require('discord.js');
+        const user = await client.users.fetch(newQueen.id);
+        const promotionEmbed = new EmbedBuilder()
+            .setColor('#8B0000')
+            .setTitle('👸 You Have Been Promoted!')
+            .setDescription(`The Wasp Queen has fallen!\n\nYou have been promoted to **Wasp Queen**! 👸\n\n**New Abilities:**\n• Choose kill target each night\n• Basic attack (1)\n• Basic defense (1)\n• Immune to detection\n• Appear as not suspicious\n• Lead the Wasp team to victory!`)
+            .setFooter({ text: 'Long live the Queen!' })
+            .setTimestamp();
+
+        await user.send({ embeds: [promotionEmbed] });
+    } catch (error) {
+        console.error(`Could not notify promoted Killer Wasp:`, error);
+    }
+
+    // Add to night results for logging
+    game.nightResults.push({
+        type: 'wasp_succession',
+        newQueenId: newQueen.id,
+        oldRole: 'KILLER_WASP'
+    });
+}
+
 module.exports = {
-    processNightActions
+    processNightActions,
+    processWaspSuccession
 };

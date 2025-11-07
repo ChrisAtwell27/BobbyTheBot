@@ -35,7 +35,10 @@ function createGame(gameId, players, organizerId, channelId) {
         warningTimer: null,
         lastActivityTime: Date.now(),
         framedPlayers: new Set(), // Players framed this night
-        dousedPlayers: new Set() // Players doused by arsonist
+        dousedPlayers: new Set(), // Players doused by arsonist
+        deceivedPlayers: new Set(), // Players deceived by Deceiver Wasp (active during day)
+        nightNumber: 0, // Track which night it is (for Pollinator, Poison, etc.)
+        nightHistory: [] // Store historical visit and action data per night
     };
 
     activeGames.set(gameId, game);
@@ -132,12 +135,32 @@ function clearNightData(game) {
         game.blackmailedPlayers.clear();
     }
 
+    // Clear deception - players speak normally again after one day
+    if (game.deceivedPlayers) {
+        game.deceivedPlayers.clear();
+    }
+
     // Clear jailed targets so Jailers select new targets at next dusk
     game.players.forEach(p => {
         if (p.jailedTarget) {
             delete p.jailedTarget;
         }
     });
+
+    // Clear revivals - revived players only act for one night
+    if (game.revivals) {
+        game.revivals = [];
+    }
+
+    // Clear Beekeeper protection - only lasts one night
+    if (game.beekeeperProtection) {
+        game.beekeeperProtection = null;
+    }
+
+    // Clear transports - only last one night
+    if (game.transports) {
+        game.transports = [];
+    }
 }
 
 /**

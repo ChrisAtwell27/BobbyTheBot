@@ -75,6 +75,121 @@ async function translateToEmojis(text, username) {
     }
 }
 
+/**
+ * Twist text to make it sound negative/incriminating (Deceiver Wasp ability)
+ */
+async function twistTextToNegative(text, username) {
+    if (!openai) {
+        // Fallback: just reverse the meaning
+        return `${text}... NOT!`;
+    }
+
+    try {
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                {
+                    role: 'system',
+                    content: `You are a subtle text transformer for a Mafia-style game. Your job is to twist messages to make the sender sound suspicious or self-incriminating, but in a CASUAL and BELIEVABLE way.
+
+Rules for transformation:
+- If they say something POSITIVE about someone -> flip it to NEGATIVE about that same person
+- If they claim to be a GOOD role (Bee team) -> casually claim to be a similar EVIL role (Wasp team) instead
+- If they accuse Player X -> shift blame to a DIFFERENT random player or deflect
+- If they ask innocent questions -> make it sound like they already know the answer (implying guilt)
+- Keep the SAME tone and casualness - don't make it dramatic
+- Don't explicitly say "I'm a Wasp" - just subtly imply it through role claims or sus behavior
+- Keep it roughly the same length
+- Make it sound natural, like a genuine slip-up or Freudian slip
+
+Examples:
+"I trust player 5" -> "I don't trust player 5 at all"
+"I'm a guard bee" -> "I'm spy wasp actually"
+"We should vote player 3" -> "We should vote player 7 instead"
+"Did anyone visit player 2?" -> "I visited player 2 last night"
+"I investigated player 4, they're innocent" -> "I didn't investigate player 4, trust me"
+"Who died?" -> "Yeah I wonder who got killed"
+"I'm voting for 6" -> "I'm not voting for 6"
+"Player 8 is suspicious" -> "Player 2 is suspicious"
+"I swear I'm innocent!" -> "I swear I'm definitely guilty lol"`
+                },
+                {
+                    role: 'user',
+                    content: `Casually twist this message: "${text}"`
+                }
+            ],
+            max_tokens: 150,
+            temperature: 0.9
+        });
+
+        const twistedText = completion.choices[0].message.content.trim();
+        console.log(`🎭 Deceived Player (${username}): "${text}" -> "${twistedText}"`);
+        return twistedText;
+    } catch (error) {
+        console.error('Error twisting text:', error);
+        // Fallback
+        return `${text}... NOT!`;
+    }
+}
+
+/**
+ * Transform text to positive/deflecting context (Blackmailer Wasp ability)
+ */
+async function transformToPositive(text, username) {
+    if (!openai) {
+        // Fallback: just make it very casual and positive
+        return `nah everything's fine lol`;
+    }
+
+    try {
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                {
+                    role: 'system',
+                    content: `You are a text transformer for a Mafia-style game. Your job is to transform ANY message into something casual, positive, and deflecting - the OPPOSITE of suspicious.
+
+Rules for transformation:
+- If they say something NEGATIVE about someone -> flip it to POSITIVE/TRUSTING about that person
+- If they accuse Player X -> deflect to say they trust Player X or shift focus elsewhere
+- If they claim a role -> keep it but make it sound casual and confident (not desperate)
+- If they ask questions -> make them sound relaxed and unbothered
+- Make everything sound chill, friendly, and non-accusatory
+- Keep the SAME casual tone - don't make it formal
+- Avoid making them sound TOO positive (that's also suspicious), just casually deflecting
+- Keep it roughly the same length
+
+Examples:
+"I don't trust player 5" -> "I actually trust player 5"
+"Player 3 is suspicious" -> "Player 3 seems pretty chill tbh"
+"We should vote player 6" -> "Maybe we should look elsewhere, player 6 is fine"
+"Did player 2 visit anyone?" -> "nah everyone probably stayed home"
+"I investigated player 4, they're evil!" -> "I investigated player 4, they're clean"
+"Who killed player 8?" -> "rip player 8 but who knows"
+"I'm voting for 7" -> "I'm not sure who to vote yet"
+"Player 9 attacked me!" -> "Player 9 didn't do anything wrong"
+"I swear I'm innocent!" -> "yeah I'm innocent lol"
+"That's really suspicious" -> "that's not really suspicious"`
+                },
+                {
+                    role: 'user',
+                    content: `Transform this message to be positive/deflecting: "${text}"`
+                }
+            ],
+            max_tokens: 150,
+            temperature: 0.9
+        });
+
+        const transformedText = completion.choices[0].message.content.trim();
+        console.log(`🤐 Blackmailed Player (${username}): "${text}" -> "${transformedText}"`);
+        return transformedText;
+    } catch (error) {
+        console.error('Error transforming text:', error);
+        // Fallback
+        return `nah everything's fine lol`;
+    }
+}
+
 // Debug mode constants (shorter timers for testing)
 const DEBUG_SETUP_DELAY = 10000; // 10 seconds
 const DEBUG_NIGHT_DURATION = 45000; // 45 seconds
@@ -107,7 +222,7 @@ function getPhaseDuration(game, phaseType) {
 
 // Helper function to start a mafia game after configuration
 async function startMafiaGame(client, config) {
-    const { gameId, players, organizerId, randomMode, customDurations } = config;
+    const { gameId, players, organizerId, randomMode, customDurations, revealRoles, preset } = config;
 
     // Create game using game state module
     const game = createGame(gameId, players, organizerId, MAFIA_TEXT_CHANNEL_ID);
@@ -115,6 +230,16 @@ async function startMafiaGame(client, config) {
     // Store custom durations if provided
     if (customDurations) {
         game.customDurations = customDurations;
+    }
+
+    // Store revealRoles setting
+    if (revealRoles) {
+        game.revealRoles = true;
+    }
+
+    // Store preset setting
+    if (preset) {
+        game.preset = preset;
     }
 
     // Send initial message
@@ -127,16 +252,73 @@ async function startMafiaGame(client, config) {
         timeConfigText = `\n\n⏱️ **Custom Time Limits:**\n• Setup: ${customDurations.setup}s\n• Night Phase: ${customDurations.night}s\n• Day Phase: ${customDurations.day}s\n• Voting Phase: ${customDurations.voting}s`;
     }
 
+    // Build preset display
+    let presetText = '';
+    if (preset) {
+        const { getPresetDescription, PRESETS } = require('../mafia/game/mafiaPresets');
+        const presetInfo = PRESETS[preset];
+        presetText = `\n\n🎮 **${presetInfo.name} Preset** - ${presetInfo.description}`;
+    }
+
     const setupEmbed = new EmbedBuilder()
         .setColor('#FFD700')
-        .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}🐝`)
-        .setDescription(`A game has been created with **${players.length} players**!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}${timeConfigText}\n\nRoles are being assigned... Check your DMs!`)
+        .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}${revealRoles ? '👁️' : ''}${preset ? '🎮' : ''}🐝`)
+        .setDescription(`A game has been created with **${players.length} players**!${presetText}${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}${revealRoles ? '\n\n👁️ **REVEAL ROLES MODE** - All roles in the game are shown below!' : ''}${timeConfigText}\n\nRoles are being assigned... Check your DMs!`)
         .addFields({
             name: 'Players',
             value: players.map(p => `• ${p.displayName}`).join('\n'),
             inline: false
         })
         .setTimestamp();
+
+    // Add role list if revealRoles is enabled
+    if (revealRoles) {
+        // Group roles by team
+        const beeRoles = [];
+        const waspRoles = [];
+        const neutralRoles = [];
+
+        for (const player of players) {
+            const role = ROLES[player.role];
+            const roleText = `${role.emoji} ${role.name}`;
+
+            if (role.team === 'bee') {
+                beeRoles.push(roleText);
+            } else if (role.team === 'wasp') {
+                waspRoles.push(roleText);
+            } else if (role.team === 'neutral') {
+                neutralRoles.push(roleText);
+            }
+        }
+
+        // Sort roles alphabetically within each team
+        beeRoles.sort();
+        waspRoles.sort();
+        neutralRoles.sort();
+
+        // Build role list display
+        let roleListText = '';
+
+        if (beeRoles.length > 0) {
+            roleListText += `**🐝 Bee Team (${beeRoles.length}):**\n${beeRoles.map(r => `• ${r}`).join('\n')}`;
+        }
+
+        if (waspRoles.length > 0) {
+            if (roleListText) roleListText += '\n\n';
+            roleListText += `**🐝 Wasp Team (${waspRoles.length}):**\n${waspRoles.map(r => `• ${r}`).join('\n')}`;
+        }
+
+        if (neutralRoles.length > 0) {
+            if (roleListText) roleListText += '\n\n';
+            roleListText += `**⚪ Neutral (${neutralRoles.length}):**\n${neutralRoles.map(r => `• ${r}`).join('\n')}`;
+        }
+
+        setupEmbed.addFields({
+            name: '📋 Roles in This Game',
+            value: roleListText || 'No roles assigned',
+            inline: false
+        });
+    }
 
     const gameMessage = await channel.send({ embeds: [setupEmbed] });
     game.messageId = gameMessage.id;
@@ -419,35 +601,120 @@ async function sendRoleDMs(game, client) {
 
 // Get cause of death message based on attack type
 function getCauseOfDeath(game, death) {
-    const killer = game.players.find(p => p.id === death.killerId);
-    const killerName = killer ? killer.displayName : 'Unknown';
-    const killerRole = killer && ROLES[killer.role] ? ROLES[killer.role].name : 'Unknown';
+    // Handle new format with multiple killers
+    const killers = death.killers || [{ killerId: death.killerId, attackType: death.attackType }];
 
-    switch (death.attackType) {
+    if (killers.length === 1) {
+        // Single killer
+        const killerData = killers[0];
+        const killer = game.players.find(p => p.id === killerData.killerId);
+        const killerName = killer ? killer.displayName : 'Unknown';
+        const killerRole = killer && ROLES[killer.role] ? ROLES[killer.role].name : 'Unknown';
+
+        switch (killerData.attackType) {
+            case 'mafia':
+                return `You were killed by the Wasps (${killerName} - ${killerRole})`;
+            case 'vigilante':
+                return `You were shot by a Vigilante Bee (${killerName})`;
+            case 'serial_killer':
+                return `You were killed by the Hornet (${killerName})`;
+            case 'arson':
+                return `You were ignited by the Fire Ant (${killerName})`;
+            case 'bodyguard_sacrifice':
+                return `You died protecting your target as a Guard Bee`;
+            case 'bodyguard_counter':
+                return `You were killed by a Guard Bee's counterattack (${killerName})`;
+            case 'serial_killer_counter':
+                return `You were killed by the Hornet's counterattack (${killerName})`;
+            case 'veteran_counter':
+                return `You were killed by a Soldier Bee's alert (${killerName})`;
+            case 'jail_execute':
+                return `You were executed by the Queen Bee (${killerName})`;
+            case 'voted':
+                return `You were voted out by the hive`;
+            case 'jester_haunt':
+                return `You were haunted to death by the Clown Beetle`;
+            case 'guilt':
+                return `You died from guilt after killing a fellow Bee team member`;
+            case 'poison':
+                return `You died from poison (${killerName})`;
+            case 'matchmaker_link':
+                return `You died through a matchmaker link`;
+            case 'doppelganger_link':
+                return `You died through a doppelgänger link`;
+            default:
+                return `You were eliminated`;
+        }
+    } else {
+        // Multiple killers - list them all
+        const deathMessages = killers.map(killerData => {
+            const killer = game.players.find(p => p.id === killerData.killerId);
+            const killerName = killer ? killer.displayName : 'Unknown';
+            const killerRole = killer && ROLES[killer.role] ? ROLES[killer.role].name : 'Unknown';
+
+            switch (killerData.attackType) {
+                case 'mafia':
+                    return `the Wasps (${killerName} - ${killerRole})`;
+                case 'vigilante':
+                    return `a Vigilante Bee (${killerName})`;
+                case 'serial_killer':
+                    return `the Hornet (${killerName})`;
+                case 'arson':
+                    return `the Fire Ant (${killerName})`;
+                case 'bodyguard_counter':
+                    return `a Guard Bee's counterattack (${killerName})`;
+                case 'serial_killer_counter':
+                    return `the Hornet's counterattack (${killerName})`;
+                case 'veteran_counter':
+                    return `a Veteran Bee on alert (${killerName})`;
+                case 'jail_execute':
+                    return `the Jailer Bee (${killerName})`;
+                case 'poison':
+                    return `poison (${killerName})`;
+                default:
+                    return 'unknown sources';
+            }
+        });
+
+        return `You were killed by MULTIPLE sources: ${deathMessages.join(', ')}`;
+    }
+}
+
+// Get public death cause (without revealing killer identity)
+function getPublicDeathCause(attackType) {
+    switch (attackType) {
         case 'mafia':
-            return `You were killed by the Wasps (${killerName} - ${killerRole})`;
+            return 'killed by the Wasps';
         case 'vigilante':
-            return `You were shot by a Vigilante Bee (${killerName})`;
+            return 'shot by a Soldier Bee';
         case 'serial_killer':
-            return `You were killed by the Hornet (${killerName})`;
+            return 'killed by the Murder Hornet';
         case 'arson':
-            return `You were ignited by the Fire Ant (${killerName})`;
+            return 'ignited by the Fire Ant';
+        case 'poison':
+            return 'died from poison';
         case 'bodyguard_sacrifice':
-            return `You died protecting your target as a Guard Bee`;
+            return 'died protecting their target';
         case 'bodyguard_counter':
-            return `You were killed by a Guard Bee's counterattack (${killerName})`;
+            return 'killed by a Bodyguard Bee';
         case 'serial_killer_counter':
-            return `You were killed by the Hornet's counterattack (${killerName})`;
+            return 'killed by the Murder Hornet';
         case 'veteran_counter':
-            return `You were killed by a Soldier Bee's alert (${killerName})`;
+            return 'killed by a Veteran Bee on alert';
         case 'jail_execute':
-            return `You were executed by the Queen Bee (${killerName})`;
+            return 'executed by the Jailer Bee';
+        case 'matchmaker_link':
+            return 'died through a matchmaker link';
+        case 'doppelganger_link':
+            return 'died through a doppelgänger link';
         case 'voted':
-            return `You were voted out by the hive`;
+            return 'voted out by the hive';
         case 'jester_haunt':
-            return `You were haunted to death by the Clown Beetle`;
+            return 'haunted by the Clown Beetle';
+        case 'guilt':
+            return 'died from guilt';
         default:
-            return `You were eliminated`;
+            return 'eliminated';
     }
 }
 
@@ -561,10 +828,15 @@ async function muteVoiceAndLockText(game, client, shouldMute) {
                         // Check if player is alive
                         const player = game.players.find(p => p.id === memberId);
                         if (player && player.alive) {
-                            // Keller Bee: Always muted (but can be unmuted during day for Deaf Bee)
-                            if (player.role === 'KELLER_BEE') {
-                                await member.voice.setMute(true, 'Keller Bee - cannot speak');
-                            } else {
+                            // Mute Bee variants: Always muted
+                            if (isMutePlayer(player)) {
+                                await member.voice.setMute(true, 'Mute Bee - cannot speak');
+                            }
+                            // Blackmailed players: Muted during day phase
+                            else if (game.blackmailedPlayers && game.blackmailedPlayers.has(player.id)) {
+                                await member.voice.setMute(true, 'Blackmailed - cannot speak in voice');
+                            }
+                            else {
                                 await member.voice.setMute(false, 'Day phase - discussion open');
                             }
 
@@ -595,6 +867,9 @@ async function startNightPhase(game, client) {
     game.nightActions = {};
     game.nightMessages = [];
     game.lastActivityTime = Date.now();
+
+    // Increment night number for tracking (used by Pollinator, Poison, etc.)
+    game.nightNumber = (game.nightNumber || 0) + 1;
 
     // Check for Phantom Moth returning
     const phantomMoths = game.players.filter(p => p.role === 'PHANTOM_MOTH' && p.phantomInvisible && p.alive);
@@ -638,6 +913,50 @@ async function startNightPhase(game, client) {
 
     // Initialize jail communication tracking
     game.jailCommunication = [];
+
+    // Notify Medium Bee and dead players about dead chat
+    const mediums = game.players.filter(p => p.alive && p.role === 'MEDIUM_BEE');
+    const deadPlayers = game.players.filter(p => !p.alive);
+
+    // Notify Medium(s)
+    for (const medium of mediums) {
+        try {
+            const user = await client.users.fetch(medium.id);
+            const deadList = deadPlayers.length > 0
+                ? deadPlayers.map(p => `• ${p.displayName}`).join('\n')
+                : '• No dead players yet';
+
+            const mediumEmbed = new EmbedBuilder()
+                .setColor('#9B59B6')
+                .setTitle('👻 Dead Chat Active')
+                .setDescription(`You can now communicate with ALL dead players!\n\n**Dead Players:**\n${deadList}\n\n💬 Send messages here to talk to the dead. They will all see your messages and can reply back.`)
+                .setFooter({ text: 'Connection active during night phase' })
+                .setTimestamp();
+            await user.send({ embeds: [mediumEmbed] });
+        } catch (error) {
+            console.error(`Could not notify Medium ${medium.displayName}:`, error);
+        }
+    }
+
+    // Notify dead players
+    if (mediums.length > 0) {
+        for (const deadPlayer of deadPlayers) {
+            try {
+                const user = await client.users.fetch(deadPlayer.id);
+                const mediumList = mediums.map(p => `• ${p.displayName}`).join('\n');
+
+                const deadEmbed = new EmbedBuilder()
+                    .setColor('#9B59B6')
+                    .setTitle('👻 Medium(s) Can Hear You!')
+                    .setDescription(`**Active Medium Bees:**\n${mediumList}\n\n💬 Send messages here to communicate with the living Mediums and other dead players!`)
+                    .setFooter({ text: 'Connection active during night phase' })
+                    .setTimestamp();
+                await user.send({ embeds: [deadEmbed] });
+            } catch (error) {
+                console.error(`Could not notify dead player ${deadPlayer.displayName}:`, error);
+            }
+        }
+    }
 
     // Notify jailed players and set up communication
     const jailers = game.players.filter(p => p.alive && p.jailedTarget);
@@ -732,11 +1051,13 @@ async function startNightPhase(game, client) {
                         break;
                     case 'investigate_suspicious':
                     case 'investigate_exact':
-                    case 'consigliere':
                     case 'lookout':
-                    case 'seance':
                         // Can target anyone except self
                         validTargets = alivePlayers.filter(p => p.id !== bot.id);
+                        break;
+                    case 'consigliere':
+                        // Spy Wasp - can target anyone except self and other Wasps
+                        validTargets = alivePlayers.filter(p => p.id !== bot.id && ROLES[p.role].team !== 'wasp');
                         break;
                     case 'frame':
                     case 'clean':
@@ -854,7 +1175,13 @@ async function startNightPhase(game, client) {
 async function sendNightActionPrompts(game, client) {
     const alivePlayers = game.players.filter(p => p.alive);
 
-    for (const player of alivePlayers) {
+    // Also include revived players (dead players temporarily brought back by Retributionist)
+    const revivedPlayerIds = (game.revivals || []).map(r => r.revivedId);
+    const revivedPlayers = game.players.filter(p => revivedPlayerIds.includes(p.id));
+
+    const playersToPrompt = [...alivePlayers, ...revivedPlayers];
+
+    for (const player of playersToPrompt) {
         try {
             const user = await client.users.fetch(player.id);
             const role = ROLES[player.role];
@@ -1064,37 +1391,27 @@ async function sendNightActionPrompts(game, client) {
 
                 case 'roleblock':
                     // Escort/Consort - roleblock someone
-                    targets = alivePlayers
-                        .filter(p => p.id !== player.id)
+                    // Escort Bee cannot roleblock same person twice in a row
+                    let roleblockTargets = alivePlayers.filter(p => p.id !== player.id);
+                    if (player.role === 'ESCORT_BEE' && player.lastRoleblockTarget) {
+                        roleblockTargets = roleblockTargets.filter(p => p.id !== player.lastRoleblockTarget);
+                    }
+
+                    targets = roleblockTargets
                         .map((p, i) => `${i + 1}. ${p.displayName}`)
                         .join('\n');
 
                     const isWaspRoleblock = role.team === 'wasp';
+                    const lastTargetNote = (player.role === 'ESCORT_BEE' && player.lastRoleblockTarget)
+                        ? '\n\n⚠️ You cannot roleblock the same person twice in a row.'
+                        : '';
                     embed = new EmbedBuilder()
                         .setColor(color)
                         .setTitle(`${role.emoji} Night Phase - ${isWaspRoleblock ? 'Distract' : 'Escort'} Someone`)
-                        .setDescription(`Choose a player to roleblock. They will not perform their action tonight.\n\n${targets}`)
+                        .setDescription(`Choose a player to roleblock. They will not perform their action tonight.${lastTargetNote}\n\n${targets}`)
                         .setFooter({ text: isWaspRoleblock ? 'Sabotage the Bees!' : 'Protect the hive!' });
                     break;
 
-                case 'seance':
-                    // Medium - speak with dead
-                    const deadPlayers = game.players.filter(p => !p.alive);
-                    if (deadPlayers.length === 0) {
-                        await user.send('There are no dead players to speak with yet.');
-                        continue;
-                    }
-
-                    targets = deadPlayers
-                        .map((p, i) => `${i + 1}. ${p.displayName}`)
-                        .join('\n');
-
-                    embed = new EmbedBuilder()
-                        .setColor(color)
-                        .setTitle(`${role.emoji} Night Phase - Speak with the Dead`)
-                        .setDescription(`Choose a dead player to speak with. You will learn their role.\n\n${targets}`)
-                        .setFooter({ text: 'Commune with the spirits...' });
-                    break;
 
                 case 'alert':
                     // Veteran - go on alert
@@ -1598,7 +1915,11 @@ async function sendNightActionPrompts(game, client) {
 // Process night action
 async function processNightAction(userId, message, game, client) {
     const player = game.players.find(p => p.id === userId);
-    if (!player || !player.alive) return;
+
+    // Check if player is revived (dead but temporarily brought back)
+    const isRevived = (game.revivals || []).some(r => r.revivedId === userId);
+
+    if (!player || (!player.alive && !isRevived)) return;
 
     updateActivity(game);
 
@@ -1642,6 +1963,17 @@ async function processNightAction(userId, message, game, client) {
                 await user.send(`**${player.displayName}:** ${messageToSend}`);
             } catch (error) {
                 console.error(`Could not relay message to ${wasp.displayName}:`, error);
+            }
+        }
+
+        // Also send to Spy Bees (they can intercept Wasp communications)
+        const spies = game.players.filter(p => p.role === 'SPY_BEE' && p.alive);
+        for (const spy of spies) {
+            try {
+                const user = await client.users.fetch(spy.id);
+                await user.send(`🕵️ **[INTERCEPTED WASP COMMUNICATION]**\n**${player.displayName}:** ${messageToSend}`);
+            } catch (error) {
+                console.error(`Could not relay intercepted message to spy ${spy.displayName}:`, error);
             }
         }
 
@@ -1862,24 +2194,18 @@ async function processNightAction(userId, message, game, client) {
         case 'roleblock':
             // Escort/Consort - roleblock
             validTargets = alivePlayers.filter(p => p.id !== userId);
+
+            // Escort Bee cannot roleblock same person twice in a row
+            if (player.role === 'ESCORT_BEE' && player.lastRoleblockTarget) {
+                validTargets = validTargets.filter(p => p.id !== player.lastRoleblockTarget);
+            }
+
             if (choice >= 1 && choice <= validTargets.length) {
                 target = validTargets[choice - 1];
                 game.nightActions[userId] = { actionType: 'roleblock', target: target.id };
                 await message.reply(`You are roleblocking **${target.displayName}** tonight. 💃`);
             } else {
                 await sendInvalidChoiceMessage(message, validTargets);
-            }
-            break;
-
-        case 'seance':
-            // Medium - speak with dead
-            const deadPlayers = game.players.filter(p => !p.alive);
-            if (choice >= 1 && choice <= deadPlayers.length) {
-                target = deadPlayers[choice - 1];
-                game.nightActions[userId] = { actionType: 'seance', target: target.id };
-                await message.reply(`You are speaking with **${target.displayName}** tonight. 👻`);
-            } else {
-                await sendInvalidChoiceMessage(message, deadPlayers);
             }
             break;
 
@@ -2354,10 +2680,28 @@ async function endNightPhase(game, client) {
     if (deaths.length > 0) {
         const deathMessages = deaths.map(death => {
             const victim = game.players.find(p => p.id === death.victimId);
-            return `**${victim.displayName}**`;
+            const killers = death.killers || [{ killerId: death.killerId, attackType: death.attackType }];
+
+            // Check if victim was cleaned by Janitor
+            const isCleaned = game.cleanedPlayers && game.cleanedPlayers.has(death.victimId);
+
+            // If cleaned and RevealRoles is disabled, hide the cause of death
+            if (isCleaned && !game.revealRoles) {
+                return `**${victim.displayName}** died of **Unknown Cause**`;
+            }
+
+            if (killers.length === 1) {
+                // Single killer
+                const cause = getPublicDeathCause(killers[0].attackType);
+                return `**${victim.displayName}** was **${cause}**`;
+            } else {
+                // Multiple killers
+                const causes = killers.map(k => getPublicDeathCause(k.attackType));
+                return `**${victim.displayName}** was killed by **MULTIPLE SOURCES**: ${causes.join(', ')}`;
+            }
         });
 
-        dawnEmbed.setDescription(`The bees wake to find ${deathMessages.join(', ')} ${deaths.length === 1 ? 'has' : 'have'} been eliminated during the night! 💀\n\n*Their role${deaths.length === 1 ? '' : 's'} will be revealed at the end of the game.*`);
+        dawnEmbed.setDescription(`The bees wake to find the following deaths during the night! 💀\n\n${deathMessages.join('\n')}\n\n*Their role${deaths.length === 1 ? '' : 's'} will be revealed at the end of the game.*`);
     } else {
         dawnEmbed.setDescription('The bees wake to find everyone safe! The night was quiet... 🌙');
     }
@@ -2448,6 +2792,16 @@ async function endNightPhase(game, client) {
         }
     }
 
+    // Store historical data before clearing (for Pollinator results)
+    if (!game.nightHistory) {
+        game.nightHistory = [];
+    }
+    game.nightHistory.push({
+        night: game.nightNumber,
+        visits: JSON.parse(JSON.stringify(game.visits || {})), // Deep copy
+        nightActions: JSON.parse(JSON.stringify(game.nightActions || {})) // Deep copy
+    });
+
     // Clear night data after processing (including pirate duels)
     game.pirateDuels = [];
     clearNightData(game);
@@ -2473,6 +2827,26 @@ async function endNightPhase(game, client) {
 
     // Send day announcement to all players via DM
     await sendToEveryoneInGame(game, client, dayEmbed);
+
+    // Notify blackmailed players they've been voice muted (without revealing why)
+    if (game.blackmailedPlayers && game.blackmailedPlayers.size > 0) {
+        for (const playerId of game.blackmailedPlayers) {
+            const blackmailedPlayer = game.players.find(p => p.id === playerId);
+            if (blackmailedPlayer && blackmailedPlayer.alive) {
+                try {
+                    const user = await client.users.fetch(playerId);
+                    const muteNotificationEmbed = new EmbedBuilder()
+                        .setColor('#FFA500')
+                        .setTitle('🔇 You Have Been Voice Muted!')
+                        .setDescription('You have been muted in the voice channel for this day phase. You can still send text messages in the mafia channel.')
+                        .setTimestamp();
+                    await user.send({ embeds: [muteNotificationEmbed] });
+                } catch (error) {
+                    console.error(`Could not send mute notification to blackmailed player ${blackmailedPlayer.displayName}:`, error);
+                }
+            }
+        }
+    }
 
     // Send Marshal Bee protection instructions
     const marshals = game.players.filter(p => p.alive && p.role === 'MARSHAL_BEE');
@@ -2598,9 +2972,8 @@ async function endVotingPhase(game, client) {
         }
     }
 
-    // Tally votes with Queen Bee bonus and Marshal protection
+    // Tally votes with Queen Bee bonus
     const voteCounts = {};
-    const marshalBlockedVotes = {}; // Track votes blocked by Marshal
 
     Object.entries(game.votes).forEach(([voterId, targetId]) => {
         if (targetId !== 'skip') {
@@ -2608,12 +2981,7 @@ async function endVotingPhase(game, client) {
             // Check if voter is a revealed Queen Bee (gets 3 bonus votes for total of 4)
             const voteWeight = (voter && voter.role === 'QUEEN_BEE' && voter.hasRevealed) ? 4 : 1;
 
-            // Check if target is protected by Marshal
-            if (marshalProtectedPlayers.has(targetId)) {
-                marshalBlockedVotes[targetId] = (marshalBlockedVotes[targetId] || 0) + voteWeight;
-            } else {
-                voteCounts[targetId] = (voteCounts[targetId] || 0) + voteWeight;
-            }
+            voteCounts[targetId] = (voteCounts[targetId] || 0) + voteWeight;
         }
     });
 
@@ -2629,8 +2997,57 @@ async function endVotingPhase(game, client) {
             const targetId = topTargets[Math.floor(Math.random() * topTargets.length)];
             eliminatedPlayer = game.players.find(p => p.id === targetId);
             if (eliminatedPlayer) {
-                // Check if Phantom Moth and hasn't been lynched before
-                if (eliminatedPlayer.role === 'PHANTOM_MOTH' && !eliminatedPlayer.hasBeenLynched) {
+                // Check for Marshal Bee protection intervention
+                const protectingMarshal = marshals.find(m =>
+                    m.marshalProtectedToday === eliminatedPlayer.id &&
+                    !m.hasUsedProtection
+                );
+
+                if (protectingMarshal) {
+                    const { ROLES } = require('../mafia/roles/mafiaRoles');
+                    const targetRole = ROLES[eliminatedPlayer.role];
+
+                    // Marshal reveals themselves
+                    protectingMarshal.hasUsedProtection = true;
+
+                    if (targetRole.team === 'bee') {
+                        // Save the Bee player - Marshal successfully protected!
+                        try {
+                            const channel = await client.channels.fetch(game.channelId);
+                            const marshalRevealEmbed = new EmbedBuilder()
+                                .setColor('#00FF00')
+                                .setTitle('🎖️ MARSHAL BEE INTERVENTION!')
+                                .setDescription(`**${protectingMarshal.displayName}** has revealed themselves as the **Marshal Bee**!\n\nThey have saved **${eliminatedPlayer.displayName}** from being lynched!\n\n**${eliminatedPlayer.displayName}** is confirmed to be on the **Bee team**!`)
+                                .setTimestamp();
+
+                            await channel.send({ embeds: [marshalRevealEmbed] });
+                        } catch (error) {
+                            console.error('Could not send Marshal reveal:', error);
+                        }
+
+                        // Clear the elimination - player is saved
+                        eliminatedPlayer = null;
+                    } else {
+                        // Tried to save a Wasp or Evil Neutral - protection fails!
+                        try {
+                            const channel = await client.channels.fetch(game.channelId);
+                            const marshalFailEmbed = new EmbedBuilder()
+                                .setColor('#FF0000')
+                                .setTitle('🎖️ MARSHAL BEE INTERVENTION FAILED!')
+                                .setDescription(`**${protectingMarshal.displayName}** has revealed themselves as the **Marshal Bee**!\n\nThey tried to save **${eliminatedPlayer.displayName}**, but the protection failed!\n\n**${eliminatedPlayer.displayName}** is NOT on the Bee team!`)
+                                .setTimestamp();
+
+                            await channel.send({ embeds: [marshalFailEmbed] });
+                        } catch (error) {
+                            console.error('Could not send Marshal fail message:', error);
+                        }
+
+                        // Continue with elimination - protection failed
+                    }
+                }
+
+                // Check if Phantom Moth and hasn't been lynched before (only if not saved by Marshal)
+                if (eliminatedPlayer && eliminatedPlayer.role === 'PHANTOM_MOTH' && !eliminatedPlayer.hasBeenLynched) {
                     eliminatedPlayer.hasBeenLynched = true;
                     eliminatedPlayer.phantomInvisible = true;
                     eliminatedPlayer.phantomReturnPhase = game.phase; // Return after 1 night/day cycle
@@ -2655,8 +3072,18 @@ async function endVotingPhase(game, client) {
                     // Send death notification
                     await sendDeathNotification(game, client, {
                         victimId: eliminatedPlayer.id,
-                        attackType: 'voted'
+                        killers: [{
+                            killerId: null,
+                            attackType: 'voted'
+                        }]
                     });
+
+                    // Process Killer Wasp succession if Wasp Queen was lynched
+                    const { processWaspSuccession } = require('../mafia/game/mafiaActions');
+                    await processWaspSuccession(game, [{
+                        victimId: eliminatedPlayer.id,
+                        killers: [{ killerId: null, attackType: 'voted' }]
+                    }], client);
                 }
             }
         }
@@ -2675,28 +3102,15 @@ async function endVotingPhase(game, client) {
     }
 
     // Show vote breakdown
-    if (Object.keys(voteCounts).length > 0 || Object.keys(marshalBlockedVotes).length > 0) {
+    if (Object.keys(voteCounts).length > 0) {
         let voteBreakdown = '';
 
-        if (Object.keys(voteCounts).length > 0) {
-            voteBreakdown += Object.entries(voteCounts)
-                .map(([targetId, count]) => {
-                    const player = game.players.find(p => p.id === targetId);
-                    return `• ${player?.displayName || 'Unknown'}: ${count} vote${count !== 1 ? 's' : ''}`;
-                })
-                .join('\n');
-        }
-
-        if (Object.keys(marshalBlockedVotes).length > 0) {
-            if (voteBreakdown) voteBreakdown += '\n\n';
-            voteBreakdown += '**🎖️ Protected by Marshal:**\n';
-            voteBreakdown += Object.entries(marshalBlockedVotes)
-                .map(([targetId, count]) => {
-                    const player = game.players.find(p => p.id === targetId);
-                    return `• ${player?.displayName || 'Unknown'}: ${count} vote${count !== 1 ? 's' : ''} (blocked)`;
-                })
-                .join('\n');
-        }
+        voteBreakdown += Object.entries(voteCounts)
+            .map(([targetId, count]) => {
+                const player = game.players.find(p => p.id === targetId);
+                return `• ${player?.displayName || 'Unknown'}: ${count} vote${count !== 1 ? 's' : ''}`;
+            })
+            .join('\n');
 
         resultsEmbed.addFields({
             name: 'Vote Breakdown',
@@ -3115,7 +3529,18 @@ async function endGame(game, client, winnerType, specificWinner = null) {
 
     game.players.forEach(p => {
         const role = ROLES[p.role];
-        const roleText = `${role.emoji} ${p.displayName} - **${role.name}** ${p.alive ? '✅' : '💀'}`;
+
+        // Check if role was cleaned by Janitor
+        const isCleaned = game.cleanedPlayers && game.cleanedPlayers.has(p.id);
+
+        let roleText;
+        if (isCleaned) {
+            // Hide the role if it was cleaned
+            roleText = `🧹 ${p.displayName} - **[Role Cleaned]** 💀`;
+        } else {
+            roleText = `${role.emoji} ${p.displayName} - **${role.name}** ${p.alive ? '✅' : '💀'}`;
+        }
+
         if (role.team === 'bee') {
             beeRoles.push(roleText);
         } else if (role.team === 'wasp') {
@@ -3316,8 +3741,15 @@ module.exports = (client) => {
                 return message.reply(`Some players are already in an active game: ${playersInGame.map(m => m.displayName).join(', ')}`);
             }
 
-            // Check for random mode
-            const randomMode = args[1] && args[1].toLowerCase() === 'random';
+            // Check for random mode, revealroles, and preset
+            const randomMode = args.some(arg => arg && arg.toLowerCase() === 'random');
+            const revealRoles = args.some(arg => arg && arg.toLowerCase() === 'revealroles');
+
+            // Check for preset mode
+            const { getAvailablePresets, getPresetDistribution } = require('../mafia/game/mafiaPresets');
+            const availablePresets = getAvailablePresets();
+            const presetArg = args.find(arg => arg && availablePresets.includes(arg.toLowerCase()));
+            const preset = presetArg ? presetArg.toLowerCase() : null;
 
             // Create game ID and players
             const gameId = `mafia_${Date.now()}`;
@@ -3330,7 +3762,18 @@ module.exports = (client) => {
             }));
 
             // Assign roles
-            const roleDistribution = getRoleDistribution(players.length, randomMode);
+            let roleDistribution;
+            if (preset) {
+                // Use preset distribution
+                roleDistribution = getPresetDistribution(preset, players.length);
+                if (!roleDistribution) {
+                    return message.reply(`Invalid preset! Available presets: ${availablePresets.join(', ')}`);
+                }
+            } else {
+                // Use normal distribution
+                roleDistribution = getRoleDistribution(players.length, randomMode);
+            }
+
             const shuffledRoles = shuffleArray(roleDistribution);
 
             for (let i = 0; i < players.length; i++) {
@@ -3352,7 +3795,9 @@ module.exports = (client) => {
                 gameId,
                 players,
                 organizerId: message.author.id,
-                randomMode
+                randomMode,
+                revealRoles,
+                preset
             });
 
             // Send time configuration prompt
@@ -3407,9 +3852,10 @@ module.exports = (client) => {
                 return message.reply(`You must be in the Mafia voice channel (<#${MAFIA_VC_ID}>) to create a debug game!`);
             }
 
-            // Parse arguments for role(s), random mode, and NoAI
+            // Parse arguments for role(s), random mode, NoAI, and revealroles
             let randomMode = false;
             let noAI = false;
+            let revealRoles = false;
             let specifiedRoles = []; // Array to hold multiple roles
 
             // Check each argument
@@ -3419,6 +3865,8 @@ module.exports = (client) => {
                     randomMode = true;
                 } else if (argUpper === 'NOAI') {
                     noAI = true;
+                } else if (argUpper === 'REVEALROLES') {
+                    revealRoles = true;
                 } else {
                     // Check if argument contains comma-separated roles
                     const roleList = args[i].split(',').map(r => r.trim().toUpperCase());
@@ -3531,6 +3979,7 @@ module.exports = (client) => {
             const game = createGame(gameId, players, message.author.id, MAFIA_TEXT_CHANNEL_ID);
             game.debugMode = true; // Set debug flag
             game.noAI = noAI; // Set NoAI flag to disable bot auto-actions
+            game.revealRoles = revealRoles; // Set revealRoles flag
 
             // Send initial message
             const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
@@ -3549,14 +3998,63 @@ module.exports = (client) => {
 
             const setupEmbed = new EmbedBuilder()
                 .setColor('#FFA500')
-                .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}${specifiedRoles.length > 0 ? '🎯' : ''}🐝 [DEBUG MODE]`)
-                .setDescription(`**Debug game** created with **${players.length} players** (${realPlayers.length} real, ${fakePlayers.length} bots)!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}${assignedRolesText}\n\nRoles are being assigned... Check your DMs!\n\n**Debug Commands:**\n\`!mafiadebugskip\` - Skip to next phase\n\`!mafiadebugend\` - End the game`)
+                .setTitle(`🐝 Bee Mafia Game Starting! ${randomMode ? '🎲' : ''}${specifiedRoles.length > 0 ? '🎯' : ''}${revealRoles ? '👁️' : ''}🐝 [DEBUG MODE]`)
+                .setDescription(`**Debug game** created with **${players.length} players** (${realPlayers.length} real, ${fakePlayers.length} bots)!${randomMode ? '\n\n🎲 **RANDOM MODE** - All roles (except Wasp Queen) are completely randomized!' : ''}${revealRoles ? '\n\n👁️ **REVEAL ROLES MODE** - All roles in the game are shown below!' : ''}${assignedRolesText}\n\nRoles are being assigned... Check your DMs!\n\n**Debug Commands:**\n\`!mafiadebugskip\` - Skip to next phase\n\`!mafiadebugend\` - End the game`)
                 .addFields({
                     name: 'Players',
                     value: players.map(p => `• ${p.displayName}`).join('\n'),
                     inline: false
                 })
                 .setTimestamp();
+
+            // Add role list if revealRoles is enabled
+            if (revealRoles) {
+                // Group roles by team
+                const beeRoles = [];
+                const waspRoles = [];
+                const neutralRoles = [];
+
+                for (const player of players) {
+                    const role = ROLES[player.role];
+                    const roleText = `${role.emoji} ${role.name}`;
+
+                    if (role.team === 'bee') {
+                        beeRoles.push(roleText);
+                    } else if (role.team === 'wasp') {
+                        waspRoles.push(roleText);
+                    } else if (role.team === 'neutral') {
+                        neutralRoles.push(roleText);
+                    }
+                }
+
+                // Sort roles alphabetically within each team
+                beeRoles.sort();
+                waspRoles.sort();
+                neutralRoles.sort();
+
+                // Build role list display
+                let roleListText = '';
+
+                if (beeRoles.length > 0) {
+                    roleListText += `**🐝 Bee Team (${beeRoles.length}):**\n${beeRoles.map(r => `• ${r}`).join('\n')}`;
+                }
+
+                if (waspRoles.length > 0) {
+                    if (roleListText) roleListText += '\n\n';
+                    roleListText += `**🐝 Wasp Team (${waspRoles.length}):**\n${waspRoles.map(r => `• ${r}`).join('\n')}`;
+                }
+
+                if (neutralRoles.length > 0) {
+                    if (roleListText) roleListText += '\n\n';
+                    roleListText += `**⚪ Neutral (${neutralRoles.length}):**\n${neutralRoles.map(r => `• ${r}`).join('\n')}`;
+                }
+
+                setupEmbed.addFields({
+                    name: '📋 Roles in This Game',
+                    value: roleListText || 'No roles assigned',
+                    inline: false
+                });
+            }
 
             const gameMessage = await channel.send({ embeds: [setupEmbed] });
             game.messageId = gameMessage.id;
@@ -3851,6 +4349,32 @@ module.exports = (client) => {
             }
         }
 
+        // Handle !mafiapresets command
+        if (command === '!mafiapresets' || command === '!presets') {
+            const { getAvailablePresets, PRESETS } = require('../mafia/game/mafiaPresets');
+            const presets = getAvailablePresets();
+
+            const presetsEmbed = new EmbedBuilder()
+                .setColor('#9B59B6')
+                .setTitle('🎮 Mafia Game Presets')
+                .setDescription('Use presets to create themed games with preset role distributions!\n\n**Usage:** `!createmafia [preset]`\n**Example:** `!createmafia basic` or `!createmafia chaos revealroles`')
+                .setTimestamp();
+
+            // Add each preset as a field
+            for (const presetName of presets) {
+                const preset = PRESETS[presetName];
+                presetsEmbed.addFields({
+                    name: `${preset.name} (${presetName})`,
+                    value: preset.description,
+                    inline: false
+                });
+            }
+
+            presetsEmbed.setFooter({ text: `${presets.length} presets available | Use !mafiaroles to see all roles` });
+
+            await message.reply({ embeds: [presetsEmbed] });
+        }
+
         // Handle !reveal command (Queen Bee during day phase)
         if (command === '!reveal') {
             const game = getGameByPlayer(message.author.id);
@@ -3944,8 +4468,10 @@ module.exports = (client) => {
                     // Send death notification to haunted player
                     await sendDeathNotification(game, client, {
                         victimId: target.id,
-                        killerId: message.author.id,
-                        attackType: 'jester_haunt'
+                        killers: [{
+                            killerId: message.author.id,
+                            attackType: 'jester_haunt'
+                        }]
                     });
 
                     await message.reply(`You haunted **${target.displayName}**! 👻`);
@@ -4000,32 +4526,54 @@ module.exports = (client) => {
                 }
             }
 
-            // Check for active seance communication (during night phase)
-            if (game.phase === 'night' && game.activeSeances && game.activeSeances.length > 0) {
-                const seance = game.activeSeances.find(s =>
-                    s.mediumId === message.author.id || s.deadId === message.author.id
-                );
+            // Check for dead chat communication (during night phase)
+            // Dead players and Medium Bee can communicate with each other
+            if (game.phase === 'night') {
+                const player = game.players.find(p => p.id === message.author.id);
+                if (!player) return;
 
-                // If in an active seance and message is not a number, treat as seance message
-                if (seance && isNaN(message.content.trim())) {
-                    const isMedium = seance.mediumId === message.author.id;
-                    const targetId = isMedium ? seance.deadId : seance.mediumId;
-                    const senderName = isMedium ? seance.mediumName : seance.deadName;
+                const isMedium = player.alive && player.role === 'MEDIUM_BEE';
+                const isDead = !player.alive;
 
-                    // Check if sender is a mute variant
-                    const senderPlayer = game.players.find(p => p.id === message.author.id);
-                    let messageToSend = message.content;
-                    if (isMutePlayer(senderPlayer)) {
-                        messageToSend = await translateToEmojis(message.content, message.author.username);
+                // Only Medium or dead players can participate in dead chat
+                if (isMedium || isDead) {
+                    const messageContent = message.content.trim();
+
+                    // Skip if it's a number (might be selecting actions)
+                    if (!isNaN(messageContent)) return;
+
+                    // Check if sender is a mute variant and translate if needed
+                    let messageToSend = messageContent;
+                    if (isMutePlayer(player)) {
+                        messageToSend = await translateToEmojis(messageContent, message.author.username);
                     }
 
-                    try {
-                        const targetUser = await client.users.fetch(targetId);
-                        const prefix = isMedium ? '👻 **From Medium:**' : '💀 **From the Dead:**';
-                        await targetUser.send(`${prefix} ${messageToSend}`);
-                    } catch (error) {
-                        console.error('Could not relay seance message:', error);
+                    // Format the message with prefix
+                    const prefix = isMedium ? '**Medium:**' : `👻 **${player.displayName}:**`;
+                    const formattedMessage = `${prefix} ${messageToSend}`;
+
+                    // Send to all dead players
+                    const deadPlayers = game.players.filter(p => !p.alive);
+                    for (const deadPlayer of deadPlayers) {
+                        try {
+                            const user = await client.users.fetch(deadPlayer.id);
+                            await user.send(formattedMessage);
+                        } catch (error) {
+                            console.error(`Could not send dead chat to ${deadPlayer.displayName}:`, error);
+                        }
                     }
+
+                    // Send to Medium if they exist and aren't the sender
+                    const medium = game.players.find(p => p.alive && p.role === 'MEDIUM_BEE');
+                    if (medium && medium.id !== message.author.id) {
+                        try {
+                            const mediumUser = await client.users.fetch(medium.id);
+                            await mediumUser.send(formattedMessage);
+                        } catch (error) {
+                            console.error('Could not send message to Medium:', error);
+                        }
+                    }
+
                     return;
                 }
             }
@@ -4035,12 +4583,6 @@ module.exports = (client) => {
                 const player = game.players.find(p => p.id === message.author.id);
                 if (!player || !player.alive) {
                     await message.reply('❌ Only alive players can send messages during the day phase!');
-                    return;
-                }
-
-                // Check if player is blackmailed
-                if (game.blackmailedPlayers && game.blackmailedPlayers.has(player.id)) {
-                    await message.reply('🤐 You have been blackmailed! You cannot speak today.');
                     return;
                 }
 
@@ -4107,47 +4649,109 @@ module.exports = (client) => {
             await processNightAction(message.author.id, message, game, client);
         }
 
-        // Handle Mute Bee message interception in text channel
-        // Check if user is in an active mafia game and is any mute variant
+        // Handle message transformations in text channel (unified pipeline)
+        // Order: Deceive/Blackmail transform → THEN Mute emoji translation
         const kellerGame = getGameByPlayer(message.author.id);
-        if (kellerGame && message.channel.id === MAFIA_TEXT_CHANNEL_ID) {
+        if (kellerGame && message.channel.id === MAFIA_TEXT_CHANNEL_ID && kellerGame.phase === 'day') {
             const kellerPlayer = kellerGame.players.find(p => p.id === message.author.id);
-            // Check if player is any mute variant
-            if (kellerPlayer && isMutePlayer(kellerPlayer) && !message.content.startsWith('!')) {
-                // Store original message before deletion
-                const originalMessage = message.content;
 
-                // Delete the original message
-                try {
-                    await message.delete();
-                } catch (error) {
-                    console.error('Could not delete Mute Bee message:', error);
+            if (kellerPlayer && !message.content.startsWith('!')) {
+                // STEP 1: Check if message needs transformation (deceive/blackmail)
+                let transformedText = message.content;
+                let transformationType = null;
+                let footerText = null;
+                let embedColor = null;
+
+                // Check blackmail first (higher priority than deceive)
+                if (kellerGame.blackmailedPlayers && kellerGame.blackmailedPlayers.has(message.author.id)) {
+                    transformedText = await transformToPositive(message.content, message.author.username);
+                    transformationType = 'blackmail';
+                    footerText = '🤐 They seem oddly positive...';
+                    embedColor = '#4B0082';
+                }
+                // Check deceive if not blackmailed
+                else if (kellerGame.deceivedPlayers && kellerGame.deceivedPlayers.has(message.author.id)) {
+                    transformedText = await twistTextToNegative(message.content, message.author.username);
+                    transformationType = 'deceive';
+                    footerText = '🎭 Something seems off...';
+                    embedColor = '#8B0000';
                 }
 
-                // Translate to emojis using OpenAI
-                const emojiMessage = await translateToEmojis(originalMessage, message.author.username);
+                // STEP 2: Check if Mute Bee - translate the (potentially transformed) text to emojis
+                if (isMutePlayer(kellerPlayer)) {
+                    // Delete the original message
+                    try {
+                        await message.delete();
+                    } catch (error) {
+                        console.error('Could not delete message:', error);
+                    }
 
-                if (emojiMessage) {
-                    // Send emoji translation to channel
-                    const kellerEmbed = new EmbedBuilder()
-                        .setColor('#9B59B6')
+                    // Translate the transformed text to emojis
+                    const emojiMessage = await translateToEmojis(transformedText, message.author.username);
+
+                    if (emojiMessage) {
+                        // Determine footer based on transformation status
+                        let finalFooter = '🤐 Translated to emojis';
+                        if (transformationType === 'blackmail') {
+                            finalFooter = '🤐 Muted & Blackmailed - Positive then emojis';
+                        } else if (transformationType === 'deceive') {
+                            finalFooter = '🤐 Muted & Deceived - Twisted then emojis';
+                        }
+
+                        // Send emoji message to channel
+                        const emojiEmbed = new EmbedBuilder()
+                            .setColor('#9B59B6')
+                            .setAuthor({
+                                name: `${kellerPlayer.displayName} (Mute Bee)`,
+                                iconURL: message.author.displayAvatarURL()
+                            })
+                            .setDescription(emojiMessage)
+                            .setFooter({ text: finalFooter })
+                            .setTimestamp();
+
+                        await message.channel.send({ embeds: [emojiEmbed] });
+
+                        // Send TRANSFORMED (but not emoji'd) message to Deaf Bee players
+                        const deafBeePlayers = kellerGame.players.filter(p => p.role === 'DEAF_BEE' && p.alive);
+                        for (const deafBee of deafBeePlayers) {
+                            try {
+                                const deafBeeUser = await client.users.fetch(deafBee.id);
+                                // Deaf Bees see the transformed text (positive/negative) but NOT emojis
+                                await deafBeeUser.send(`💬 **${kellerPlayer.displayName}:** ${transformedText}`);
+                            } catch (error) {
+                                console.error(`Could not send message to Deaf Bee ${deafBee.displayName}:`, error);
+                            }
+                        }
+                    }
+                }
+                // STEP 3: If not Mute Bee but transformed, send transformed version
+                else if (transformationType) {
+                    // Delete the original message
+                    try {
+                        await message.delete();
+                    } catch (error) {
+                        console.error('Could not delete message:', error);
+                    }
+
+                    // Send transformed message to channel
+                    const transformedEmbed = new EmbedBuilder()
+                        .setColor(embedColor)
                         .setAuthor({
-                            name: `${kellerPlayer.displayName} (Mute Bee)`,
+                            name: `${kellerPlayer.displayName}`,
                             iconURL: message.author.displayAvatarURL()
                         })
-                        .setDescription(emojiMessage)
-                        .setFooter({ text: '🤐 Translated to emojis' })
+                        .setDescription(transformedText)
+                        .setFooter({ text: footerText })
                         .setTimestamp();
 
-                    await message.channel.send({ embeds: [kellerEmbed] });
+                    await message.channel.send({ embeds: [transformedEmbed] });
 
-                    // Send original message to all Deaf Bee players via DM
+                    // Send transformed message to all Deaf Bee players via DM
                     const deafBeePlayers = kellerGame.players.filter(p => p.role === 'DEAF_BEE' && p.alive);
                     for (const deafBee of deafBeePlayers) {
                         try {
                             const deafBeeUser = await client.users.fetch(deafBee.id);
-                            // Deaf Bees see the regular message (not emojis)
-                            await deafBeeUser.send(`💬 **${kellerPlayer.displayName}:** ${originalMessage}`);
+                            await deafBeeUser.send(`💬 **${kellerPlayer.displayName}:** ${transformedText}`);
                         } catch (error) {
                             console.error(`Could not send message to Deaf Bee ${deafBee.displayName}:`, error);
                         }

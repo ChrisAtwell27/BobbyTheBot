@@ -19,7 +19,9 @@
       "Bash(test:*)",
       "Bash(del test-monthly-bounds.js)",
       "Bash(nul)",
-      "Read(//e/**)"
+      "Read(//e/**)",
+      "Bash(/tmp/findings.txt)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
