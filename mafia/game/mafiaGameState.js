@@ -196,12 +196,14 @@ function clearNightData(game) {
  */
 function clearDayData(game) {
     // Clear blackmail - players can speak normally again after day phase ends
-    if (game.blackmailedPlayers) {
+    if (game.blackmailedPlayers && game.blackmailedPlayers.size > 0) {
+        console.log(`🧹 [DEBUG] Clearing blackmailedPlayers Set (had ${game.blackmailedPlayers.size} players)`);
         game.blackmailedPlayers.clear();
     }
 
     // Clear deception - players speak normally again after day phase ends
-    if (game.deceivedPlayers) {
+    if (game.deceivedPlayers && game.deceivedPlayers.size > 0) {
+        console.log(`🧹 [DEBUG] Clearing deceivedPlayers Set (had ${game.deceivedPlayers.size} players)`);
         game.deceivedPlayers.clear();
     }
 }

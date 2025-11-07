@@ -848,6 +848,10 @@ async function muteVoiceAndLockText(game, client, shouldMute) {
                             else if (game.blackmailedPlayers && game.blackmailedPlayers.has(player.id)) {
                                 await member.voice.setMute(true, 'Blackmailed - cannot speak in voice');
                             }
+                            // Deceived players: Muted during day phase
+                            else if (game.deceivedPlayers && game.deceivedPlayers.has(player.id)) {
+                                await member.voice.setMute(true, 'Deceived - cannot speak in voice');
+                            }
                             else {
                                 await member.voice.setMute(false, 'Day phase - discussion open');
                             }
@@ -914,10 +918,11 @@ async function startNightPhase(game, client) {
     // Mute voice channel (no longer need to lock text channel since we're not using it)
     await muteVoiceAndLockText(game, client, true);
 
+    const endTime = Math.floor((Date.now() + nightDuration) / 1000);
     const nightEmbed = new EmbedBuilder()
         .setColor('#000080')
         .setTitle('🌙 Night Falls Over the Hive')
-        .setDescription('The bees settle in for the night. Those with special abilities will receive prompts!\n\n🔇 Voice chat is now muted.')
+        .setDescription(`The bees settle in for the night. Those with special abilities will receive prompts!\n\n🔇 Voice chat is now muted.\n⏰ **Phase ends:** <t:${endTime}:R> (<t:${endTime}:T>)`)
         .setTimestamp();
 
     // Send night announcement to all players via DM
@@ -3015,10 +3020,11 @@ async function endNightPhase(game, client) {
     // Unmute voice channel
     await muteVoiceAndLockText(game, client, false);
 
+    const endTime = Math.floor((Date.now() + dayDuration) / 1000);
     const dayEmbed = new EmbedBuilder()
         .setColor('#FFD700')
         .setTitle('☀️ Day Discussion Phase')
-        .setDescription(`Discuss amongst yourselves and try to figure out who the Wasps are!\n\n🔊 Voice chat is now open! You can also send messages here and I'll relay them to everyone.\n\nVoting will begin in ${dayDuration / 1000} seconds.`)
+        .setDescription(`Discuss amongst yourselves and try to figure out who the Wasps are!\n\n🔊 Voice chat is now open! You can also send messages here and I'll relay them to everyone.\n\n⏰ **Phase ends:** <t:${endTime}:R> (<t:${endTime}:T>)\n📊 Voting will begin when the day phase ends.`)
         .setTimestamp();
 
     // Send day announcement to all players via DM
@@ -3039,6 +3045,26 @@ async function endNightPhase(game, client) {
                     await user.send({ embeds: [muteNotificationEmbed] });
                 } catch (error) {
                     console.error(`Could not send mute notification to blackmailed player ${blackmailedPlayer.displayName}:`, error);
+                }
+            }
+        }
+    }
+
+    // Notify deceived players they've been voice muted (without revealing why)
+    if (game.deceivedPlayers && game.deceivedPlayers.size > 0) {
+        for (const playerId of game.deceivedPlayers) {
+            const deceivedPlayer = game.players.find(p => p.id === playerId);
+            if (deceivedPlayer && deceivedPlayer.alive) {
+                try {
+                    const user = await client.users.fetch(playerId);
+                    const muteNotificationEmbed = new EmbedBuilder()
+                        .setColor('#FFA500')
+                        .setTitle('🔇 You Have Been Voice Muted!')
+                        .setDescription('You have been muted in the voice channel for this day phase. You can still send text messages in the mafia channel.')
+                        .setTimestamp();
+                    await user.send({ embeds: [muteNotificationEmbed] });
+                } catch (error) {
+                    console.error(`Could not send mute notification to deceived player ${deceivedPlayer.displayName}:`, error);
                 }
             }
         }
@@ -3107,8 +3133,9 @@ async function startVotingPhase(game, client) {
             }
 
             const user = await client.users.fetch(player.id);
+            const endTime = Math.floor((Date.now() + votingDuration) / 1000);
             let title = '🗳️ Voting Phase';
-            let description = `Vote for who you think is a Wasp! The player with the most votes will be eliminated.\n\n**Alive Players:** ${alivePlayers.length}\n**Time Remaining:** ${votingDuration / 1000} seconds`;
+            let description = `Vote for who you think is a Wasp! The player with the most votes will be eliminated.\n\n**Alive Players:** ${alivePlayers.length}\n⏰ **Voting ends:** <t:${endTime}:R> (<t:${endTime}:T>)`;
 
             // Check if this is a revote
             if (game.isRevote && game.tiedTargets) {
@@ -3560,7 +3587,7 @@ async function startDuskPhase(game, client) {
     const duskEmbed = new EmbedBuilder()
         .setColor('#4B0082')
         .setTitle('🌆 Dusk Falls')
-        .setDescription('The sun sets... Those with special preparations may act now before night falls.')
+        .setDescription('The sun sets... Those with special preparations may act now before night falls.\n\n⏰ **Waiting for players with dusk abilities to act...**')
         .setTimestamp();
 
     await sendToEveryoneInGame(game, client, duskEmbed);
@@ -5094,12 +5121,18 @@ module.exports = (client) => {
                     // Check if message needs transformation (blackmail/deceive)
                     let messageToRelay = message.content;
 
+                    console.log(`🔍 [DEBUG] Message from ${player.displayName}. Blackmailed: ${game.blackmailedPlayers?.has(message.author.id)}, Deceived: ${game.deceivedPlayers?.has(message.author.id)}`);
+                    console.log(`🔍 [DEBUG] Blackmailed Set:`, game.blackmailedPlayers ? Array.from(game.blackmailedPlayers) : 'undefined');
+                    console.log(`🔍 [DEBUG] Deceived Set:`, game.deceivedPlayers ? Array.from(game.deceivedPlayers) : 'undefined');
+
                     // Check blackmail first (higher priority than deceive)
                     if (game.blackmailedPlayers && game.blackmailedPlayers.has(message.author.id)) {
+                        console.log(`🤐 [DEBUG] Transforming blackmailed message from ${player.displayName}`);
                         messageToRelay = await transformToPositive(message.content, message.author.username);
                     }
                     // Check deceive if not blackmailed
                     else if (game.deceivedPlayers && game.deceivedPlayers.has(message.author.id)) {
+                        console.log(`🎭 [DEBUG] Transforming deceived message from ${player.displayName}`);
                         messageToRelay = await twistTextToNegative(message.content, message.author.username);
                     }
 

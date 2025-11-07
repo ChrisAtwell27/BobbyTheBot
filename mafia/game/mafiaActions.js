@@ -1659,6 +1659,7 @@ async function processDeceive(game, deceiver, action) {
     }
 
     game.deceivedPlayers.add(targetId);
+    console.log(`🎭 [DEBUG] Deceiver ${deceiver.displayName} deceived ${game.players.find(p => p.id === targetId)?.displayName}. Set size: ${game.deceivedPlayers.size}`);
 
     game.nightResults.push({
         type: 'deceive',
