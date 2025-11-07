@@ -2836,7 +2836,8 @@ async function processCultVotes(game, client) {
         }
     }
 
-    // Random selection if tie
+    // Random selection if tie - cult conversions use random selection for ties (no revote)
+    // This keeps night actions quick and decisive
     const targetId = topTargets[Math.floor(Math.random() * topTargets.length)];
     const target = game.players.find(p => p.id === targetId);
 
@@ -2958,7 +2959,8 @@ async function processMafiaKillVotes(game, attacks) {
         }
     }
 
-    // Random selection if tie
+    // Random selection if tie - mafia kills use random selection for ties (no revote)
+    // This keeps night actions quick and decisive
     const targetId = topTargets[Math.floor(Math.random() * topTargets.length)];
 
     // Select a random Killer Wasp to carry out the kill (or Queen if no Killer Wasps)

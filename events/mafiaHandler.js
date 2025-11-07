@@ -3168,98 +3168,164 @@ async function endVotingPhase(game, client) {
         // In debug mode, only 1 vote needed. In normal mode, at least 2 votes needed
         const votesNeeded = game.debugMode ? 1 : 2;
         if (maxVotes >= votesNeeded) {
-            const targetId = topTargets[Math.floor(Math.random() * topTargets.length)];
-            eliminatedPlayer = game.players.find(p => p.id === targetId);
-            if (eliminatedPlayer) {
-                // Check for Marshal Bee protection intervention
-                const protectingMarshal = marshals.find(m =>
-                    m.marshalProtectedToday === eliminatedPlayer.id &&
-                    !m.hasUsedProtection
-                );
-
-                if (protectingMarshal) {
-                    const { ROLES } = require('../mafia/roles/mafiaRoles');
-                    const targetRole = ROLES[eliminatedPlayer.role];
-
-                    // Marshal reveals themselves
-                    protectingMarshal.hasUsedProtection = true;
-
-                    if (targetRole.team === 'bee') {
-                        // Save the Bee player - Marshal successfully protected!
-                        try {
-                            const channel = await client.channels.fetch(game.channelId);
-                            const marshalRevealEmbed = new EmbedBuilder()
-                                .setColor('#00FF00')
-                                .setTitle('🎖️ MARSHAL BEE INTERVENTION!')
-                                .setDescription(`**${protectingMarshal.displayName}** has revealed themselves as the **Marshal Bee**!\n\nThey have saved **${eliminatedPlayer.displayName}** from being lynched!\n\n**${eliminatedPlayer.displayName}** is confirmed to be on the **Bee team**!`)
-                                .setTimestamp();
-
-                            await channel.send({ embeds: [marshalRevealEmbed] });
-                        } catch (error) {
-                            console.error('Could not send Marshal reveal:', error);
-                        }
-
-                        // Clear the elimination - player is saved
-                        eliminatedPlayer = null;
-                    } else {
-                        // Tried to save a Wasp or Evil Neutral - protection fails!
-                        try {
-                            const channel = await client.channels.fetch(game.channelId);
-                            const marshalFailEmbed = new EmbedBuilder()
-                                .setColor('#FF0000')
-                                .setTitle('🎖️ MARSHAL BEE INTERVENTION FAILED!')
-                                .setDescription(`**${protectingMarshal.displayName}** has revealed themselves as the **Marshal Bee**!\n\nThey tried to save **${eliminatedPlayer.displayName}**, but the protection failed!\n\n**${eliminatedPlayer.displayName}** is NOT on the Bee team!`)
-                                .setTimestamp();
-
-                            await channel.send({ embeds: [marshalFailEmbed] });
-                        } catch (error) {
-                            console.error('Could not send Marshal fail message:', error);
-                        }
-
-                        // Continue with elimination - protection failed
-                    }
-                }
-
-                // Check if Phantom Moth and hasn't been lynched before (only if not saved by Marshal)
-                if (eliminatedPlayer && eliminatedPlayer.role === 'PHANTOM_MOTH' && !eliminatedPlayer.hasBeenLynched) {
-                    eliminatedPlayer.hasBeenLynched = true;
-                    eliminatedPlayer.phantomInvisible = true;
-                    eliminatedPlayer.phantomReturnPhase = game.phase; // Return after 1 night/day cycle
-
-                    // Notify Phantom Moth
-                    try {
-                        const user = await client.users.fetch(eliminatedPlayer.id);
-                        const embed = new EmbedBuilder()
-                            .setColor('#9370DB')
-                            .setTitle('👤 Phantom Form Activated!')
-                            .setDescription('You have survived being lynched! You are now invisible and will return after 1 night/day cycle. You must survive to the end to win!')
-                            .setTimestamp();
-                        await user.send({ embeds: [embed] });
-                    } catch (error) {
-                        console.error(`Could not notify Phantom Moth:`, error);
-                    }
-
-                    // Don't actually eliminate them - they'll appear eliminated but stay "alive"
-                    eliminatedPlayer = null; // Clear so announcement says no one was eliminated
+            // Check if there's a tie (multiple players with the same max votes)
+            if (topTargets.length > 1) {
+                // Check if we've already had a revote for this tie
+                if (game.isRevote) {
+                    // This is already a revote, so proceed with random selection to break the tie
+                    const targetId = topTargets[Math.floor(Math.random() * topTargets.length)];
+                    eliminatedPlayer = game.players.find(p => p.id === targetId);
+                    game.isRevote = false; // Reset revote flag
                 } else {
-                    eliminatedPlayer.alive = false;
-                    // Send death notification
-                    await sendDeathNotification(game, client, {
-                        victimId: eliminatedPlayer.id,
-                        killers: [{
-                            killerId: null,
-                            attackType: 'voted'
-                        }]
-                    });
+                    // First time tie detected - trigger revote phase
+                    game.isRevote = true;
+                    game.tiedTargets = topTargets;
+                    game.votes = {}; // Clear all votes for revote
 
-                    // Process Killer Wasp succession if Wasp Queen was lynched
-                    const { processWaspSuccession } = require('../mafia/game/mafiaActions');
-                    await processWaspSuccession(game, [{
-                        victimId: eliminatedPlayer.id,
-                        killers: [{ killerId: null, attackType: 'voted' }]
-                    }], client);
+                    // Build the list of tied players
+                    const tiedPlayerNames = topTargets
+                        .map(id => {
+                            const player = game.players.find(p => p.id === id);
+                            return player ? player.displayName : 'Unknown';
+                        })
+                        .join(', ');
+
+                    // Announce the tie and revote to the channel
+                    try {
+                        const tieEmbed = new EmbedBuilder()
+                            .setColor('#FFA500')
+                            .setTitle('🔄 Vote Tied - Revote Required!')
+                            .setDescription(`There is a tie between: **${tiedPlayerNames}** (each with ${maxVotes} vote${maxVotes !== 1 ? 's' : ''}).\n\nAll votes have been cleared. Everyone must vote again!\n\nRevote phase will last 60 seconds.`)
+                            .setTimestamp();
+                        await channel.send({ embeds: [tieEmbed] });
+                    } catch (error) {
+                        console.error('Could not send tie announcement:', error);
+                    }
+
+                    // Notify all alive players about the revote
+                    const { EmbedBuilder } = require('discord.js');
+                    for (const player of game.players.filter(p => p.alive)) {
+                        try {
+                            const user = await client.users.fetch(player.id);
+                            const embed = new EmbedBuilder()
+                                .setColor('#FFA500')
+                                .setTitle('🔄 Revote Phase!')
+                                .setDescription(`The vote was tied! Cast your vote again using the buttons below.\n\nTied players: **${tiedPlayerNames}**`)
+                                .setTimestamp();
+                            await user.send({ embeds: [embed] });
+                        } catch (error) {
+                            console.error(`Could not notify player ${player.displayName}:`, error);
+                        }
+                    }
+
+                    // Start a new 60-second voting phase for the revote
+                    await startVotingPhase(game, client, 60);
+                    return; // Exit early - don't process elimination yet
                 }
+            } else {
+                // No tie - proceed with single target
+                const targetId = topTargets[0];
+                eliminatedPlayer = game.players.find(p => p.id === targetId);
+                game.isRevote = false; // Reset revote flag just in case
             }
+        } else {
+            // Not enough votes to eliminate anyone
+            game.isRevote = false; // Reset revote flag
+        }
+    } else {
+        // No votes at all
+        game.isRevote = false; // Reset revote flag
+    }
+
+    // Continue with elimination processing if we have an eliminated player
+    if (eliminatedPlayer) {
+        // Check for Marshal Bee protection intervention
+        const protectingMarshal = marshals.find(m =>
+            m.marshalProtectedToday === eliminatedPlayer.id &&
+            !m.hasUsedProtection
+        );
+
+        if (protectingMarshal) {
+            const { ROLES } = require('../mafia/roles/mafiaRoles');
+            const targetRole = ROLES[eliminatedPlayer.role];
+
+            // Marshal reveals themselves
+            protectingMarshal.hasUsedProtection = true;
+
+            if (targetRole.team === 'bee') {
+                // Save the Bee player - Marshal successfully protected!
+                try {
+                    const channel = await client.channels.fetch(game.channelId);
+                    const marshalRevealEmbed = new EmbedBuilder()
+                        .setColor('#00FF00')
+                        .setTitle('🎖️ MARSHAL BEE INTERVENTION!')
+                        .setDescription(`**${protectingMarshal.displayName}** has revealed themselves as the **Marshal Bee**!\n\nThey have saved **${eliminatedPlayer.displayName}** from being lynched!\n\n**${eliminatedPlayer.displayName}** is confirmed to be on the **Bee team**!`)
+                        .setTimestamp();
+
+                    await channel.send({ embeds: [marshalRevealEmbed] });
+                } catch (error) {
+                    console.error('Could not send Marshal reveal:', error);
+                }
+
+                // Clear the elimination - player is saved
+                eliminatedPlayer = null;
+            } else {
+                // Tried to save a Wasp or Evil Neutral - protection fails!
+                try {
+                    const channel = await client.channels.fetch(game.channelId);
+                    const marshalFailEmbed = new EmbedBuilder()
+                        .setColor('#FF0000')
+                        .setTitle('🎖️ MARSHAL BEE INTERVENTION FAILED!')
+                        .setDescription(`**${protectingMarshal.displayName}** has revealed themselves as the **Marshal Bee**!\n\nThey tried to save **${eliminatedPlayer.displayName}**, but the protection failed!\n\n**${eliminatedPlayer.displayName}** is NOT on the Bee team!`)
+                        .setTimestamp();
+
+                    await channel.send({ embeds: [marshalFailEmbed] });
+                } catch (error) {
+                    console.error('Could not send Marshal fail message:', error);
+                }
+
+                // Continue with elimination - protection failed
+            }
+        }
+
+        // Check if Phantom Moth and hasn't been lynched before (only if not saved by Marshal)
+        if (eliminatedPlayer && eliminatedPlayer.role === 'PHANTOM_MOTH' && !eliminatedPlayer.hasBeenLynched) {
+            eliminatedPlayer.hasBeenLynched = true;
+            eliminatedPlayer.phantomInvisible = true;
+            eliminatedPlayer.phantomReturnPhase = game.phase; // Return after 1 night/day cycle
+
+            // Notify Phantom Moth
+            try {
+                const user = await client.users.fetch(eliminatedPlayer.id);
+                const embed = new EmbedBuilder()
+                    .setColor('#9370DB')
+                    .setTitle('👤 Phantom Form Activated!')
+                    .setDescription('You have survived being lynched! You are now invisible and will return after 1 night/day cycle. You must survive to the end to win!')
+                    .setTimestamp();
+                await user.send({ embeds: [embed] });
+            } catch (error) {
+                console.error(`Could not notify Phantom Moth:`, error);
+            }
+
+            // Don't actually eliminate them - they'll appear eliminated but stay "alive"
+            eliminatedPlayer = null; // Clear so announcement says no one was eliminated
+        } else if (eliminatedPlayer) {
+            eliminatedPlayer.alive = false;
+            // Send death notification
+            await sendDeathNotification(game, client, {
+                victimId: eliminatedPlayer.id,
+                killers: [{
+                    killerId: null,
+                    attackType: 'voted'
+                }]
+            });
+
+            // Process Killer Wasp succession if Wasp Queen was lynched
+            const { processWaspSuccession } = require('../mafia/game/mafiaActions');
+            await processWaspSuccession(game, [{
+                victimId: eliminatedPlayer.id,
+                killers: [{ killerId: null, attackType: 'voted' }]
+            }], client);
         }
     }
 
