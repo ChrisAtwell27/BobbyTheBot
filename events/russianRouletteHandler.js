@@ -349,6 +349,10 @@ module.exports = (client) => {
 
         if (!message.guild) return; // Skip DMs
 
+        // EARLY RETURN: Skip if not a russian roulette command
+        const content = message.content.toLowerCase();
+        if (!content.startsWith('!russianroulette') && !content.startsWith('!rr')) return;
+
         const args = message.content.split(' ');
         const command = args[0].toLowerCase();
 

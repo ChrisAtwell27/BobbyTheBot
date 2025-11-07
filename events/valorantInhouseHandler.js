@@ -586,6 +586,10 @@ module.exports = (client) => {
             // Only run in target guild
             if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
+            // EARLY RETURN: Skip if not a valorant inhouse command
+            const content = message.content.toLowerCase();
+            if (!content.startsWith('!valinhouse') && !content.startsWith('!inhouse')) return;
+
             // Check if message is the !valinhouse command
             const isInhouseCommand = message.content.toLowerCase() === '!valinhouse';
             

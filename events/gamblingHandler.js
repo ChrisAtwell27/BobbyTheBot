@@ -124,6 +124,15 @@ module.exports = (client) => {
         }
 
         // Handle guild messages
+        // EARLY RETURN: Skip if message doesn't start with gambling commands
+        const isGamblingCommand = command === '!gamble' || command === '!flip' ||
+                                 command === '!roulette' || command === '!dice' ||
+                                 command === '!rps' || command === '!highercard' ||
+                                 command === '!quickdraw' || command === '!numberduel' ||
+                                 command === '!challenges';
+
+        if (!isGamblingCommand) return;
+
         // Reset cooldown
         cooldowns.set(userId, Date.now());
 

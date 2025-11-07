@@ -45,6 +45,10 @@ module.exports = (client) => {
         // Skip DM messages
         if (!message.guild) return;
 
+        // EARLY RETURN: Skip if not a KOTH command
+        const content = message.content.toLowerCase();
+        if (!content.startsWith('!koth')) return;
+
         const args = message.content.split(' ');
         const command = args[0].toLowerCase();
         const userId = message.author.id;

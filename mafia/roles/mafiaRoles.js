@@ -67,6 +67,20 @@ const ROLES = {
         defense: 0,
         selfHealsLeft: 1
     },
+    MUTE_NURSE_BEE: {
+        name: 'Mute Nurse Bee',
+        emoji: '⚕️',
+        team: 'bee',
+        description: 'You are a **Mute Nurse Bee**! You can heal one player each night, protecting them from basic attacks. You are permanently muted and all messages are turned into emojis!',
+        abilities: ['Heal one player each night', 'Prevents them from dying to basic attacks', 'Self-heal once', 'Server muted - all text messages translated to emojis'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'heal',
+        attack: 0,
+        defense: 0,
+        selfHealsLeft: 1,
+        isMuteBee: true
+    },
     GUARD_BEE: {
         name: 'Bodyguard Bee',
         emoji: '🛡️',
@@ -580,6 +594,20 @@ const ROLES = {
         attack: 0,
         defense: 1, // Basic defense
         hasConverted: false
+    },
+    MUTE_WASP_QUEEN: {
+        name: 'Mute Wasp Queen',
+        emoji: '👸',
+        team: 'wasp',
+        description: 'You are the **Mute Wasp Queen**! You are the leader of the Wasps. You choose who to kill each night and cannot be detected by Queen\'s Guard. You are permanently muted and all messages are turned into emojis!',
+        abilities: ['Choose kill target each night', 'Basic attack', 'Basic defense', 'Immune to detection', 'Appear as not suspicious', 'Communicate with Wasps', 'Server muted - all text messages translated to emojis'],
+        winCondition: 'Equal or outnumber all other players',
+        nightAction: true,
+        actionType: 'mafia_kill',
+        attack: 1, // Basic attack
+        defense: 1, // Basic defense
+        immuneToDetection: true,
+        isMuteBee: true
     },
 
     // === NEUTRAL ROLES ===

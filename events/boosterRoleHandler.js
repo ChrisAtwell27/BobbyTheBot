@@ -41,6 +41,12 @@ module.exports = (client) => {
 
         if (!message.guild) return;
 
+        // EARLY RETURN: Skip if not a booster role command
+        const content = message.content.toLowerCase();
+        if (!content.startsWith('!boosterrole') && !content.startsWith('!color') &&
+            !content.startsWith('!recolor') && !content.startsWith('!rename') &&
+            !content.startsWith('!deletecolor')) return;
+
         const args = message.content.split(' ');
 
         // Booster command to trigger booster welcome for testing

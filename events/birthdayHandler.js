@@ -13,6 +13,9 @@ module.exports = (client, announcementsChannelId) => {
         // Only run in target guild
         if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
+        // EARLY RETURN: Skip if not a birthday command
+        if (!message.content.toLowerCase().startsWith('!birthday')) return;
+
         const content = message.content.trim();
 
         // Check for !birthday command

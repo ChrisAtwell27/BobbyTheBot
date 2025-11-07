@@ -53,6 +53,20 @@ async function processNightActions(game, client) {
 
         const role = ROLES[player.role];
 
+        // Check if player is sabotaged - their action fails silently
+        const isSabotaged = game.sabotagedPlayers && game.sabotagedPlayers.has(userId);
+        if (isSabotaged && (action.actionType || role.actionType) !== 'sabotage') {
+            // Skip processing this action - it's been sabotaged
+            // Mark for fake success feedback later
+            game.nightResults.push({
+                type: 'sabotaged_action',
+                playerId: userId,
+                actionType: action.actionType || role.actionType,
+                targetId: action.target
+            });
+            continue;
+        }
+
         // Process based on action type
         switch (action.actionType || role.actionType) {
             case 'heal':
@@ -299,6 +313,12 @@ async function processNightActions(game, client) {
     // Process psychic results
     await processPsychics(game, client);
 
+    // Process hypnotist results (send fake messages to hypnotized players)
+    await processHypnotists(game, client);
+
+    // Process sabotaged actions (send fake success feedback)
+    await processSabotagedFeedback(game, client);
+
     // Update lastRoleblockTarget for Escort Bees (only if their action succeeded)
     for (const result of game.nightResults) {
         if (result.type === 'roleblock') {
@@ -327,6 +347,17 @@ async function processHeal(game, healer, action, healers, protections) {
     // Heal provides protection against basic attacks
     const currentProtection = protections.get(targetId) || 0;
     protections.set(targetId, Math.max(currentProtection, 1));
+
+    // Cure poison if target is poisoned
+    if (game.poisonedPlayers && game.poisonedPlayers.has(targetId)) {
+        game.poisonedPlayers.delete(targetId);
+        // Add flag to notify about poison cure
+        game.nightResults.push({
+            type: 'poison_cured',
+            healerId: healer.id,
+            targetId: targetId
+        });
+    }
 
     game.nightResults.push({
         type: 'heal',
@@ -745,10 +776,16 @@ async function processSheriffInvestigation(game, sheriff, action, client) {
     const target = game.players.find(p => p.id === targetId);
     if (!target) return;
 
-    // Check for disguise - if disguised, use disguised role instead
-    const roleToInvestigate = target.disguisedAs || target.role;
+    // Check for disguise/mimic - use mimicked/disguised role instead
+    // Priority: mimickedRole (Mimic Wasp - active) > disguisedAs (Disguiser Wasp - permanent)
+    const roleToInvestigate = target.mimickedRole || target.disguisedAs || target.role;
     const targetRole = ROLES[roleToInvestigate];
     let isSuspicious = false;
+
+    // Check if sheriff is silenced
+    if (game.silencedPlayers && game.silencedPlayers.has(sheriff.id)) {
+        return; // No result sent
+    }
 
     // Check if target is framed
     if (game.framedPlayers.has(targetId)) {
@@ -789,8 +826,14 @@ async function processInvestigatorInvestigation(game, investigator, action, clie
     const target = game.players.find(p => p.id === targetId);
     if (!target) return;
 
-    // Check for disguise - if disguised, use disguised role instead
-    const roleToInvestigate = target.disguisedAs || target.role;
+    // Check if investigator is silenced
+    if (game.silencedPlayers && game.silencedPlayers.has(investigator.id)) {
+        return; // No result sent
+    }
+
+    // Check for disguise/mimic - use mimicked/disguised role instead
+    // Priority: mimickedRole (Mimic Wasp - active) > disguisedAs (Disguiser Wasp - permanent)
+    const roleToInvestigate = target.mimickedRole || target.disguisedAs || target.role;
     const targetRole = ROLES[roleToInvestigate];
 
     try {
@@ -818,8 +861,14 @@ async function processConsigliereInvestigation(game, consigliere, action, client
     const target = game.players.find(p => p.id === targetId);
     if (!target) return;
 
-    // Check for disguise - if disguised, use disguised role instead
-    const roleToInvestigate = target.disguisedAs || target.role;
+    // Check if consigliere is silenced
+    if (game.silencedPlayers && game.silencedPlayers.has(consigliere.id)) {
+        return; // No result sent
+    }
+
+    // Check for disguise/mimic - use mimicked/disguised role instead
+    // Priority: mimickedRole (Mimic Wasp - active) > disguisedAs (Disguiser Wasp - permanent)
+    const roleToInvestigate = target.mimickedRole || target.disguisedAs || target.role;
     const targetRole = ROLES[roleToInvestigate];
 
     try {
@@ -849,6 +898,11 @@ async function processLookouts(game, client) {
         if (action.actionType === 'lookout' || role.actionType === 'lookout') {
             const targetId = action.target;
             addVisit(game, userId, targetId);
+
+            // Check if lookout is silenced
+            if (game.silencedPlayers && game.silencedPlayers.has(userId)) {
+                continue; // No result sent
+            }
 
             const visitors = getVisitors(game, targetId).filter(v => v !== userId);
             const target = game.players.find(p => p.id === targetId);
@@ -1194,6 +1248,11 @@ async function processTrackers(game, client) {
             const targetId = action.target;
             const target = game.players.find(p => p.id === targetId);
 
+            // Check if tracker is silenced
+            if (game.silencedPlayers && game.silencedPlayers.has(userId)) {
+                continue; // No result sent
+            }
+
             // Find who the target visited
             const targetAction = game.nightActions[targetId];
             let visitedText = 'They did not visit anyone.';
@@ -1269,6 +1328,11 @@ async function processPollinators(game, client) {
             const target = game.players.find(p => p.id === pollination.targetId);
 
             if (!pollinator || !pollinator.alive) continue;
+
+            // Check if pollinator is silenced
+            if (game.silencedPlayers && game.silencedPlayers.has(pollinator.id)) {
+                continue; // No result sent
+            }
 
             // Get historical data from that night
             const historicalNight = game.nightHistory.find(h => h.night === pollination.night);
@@ -1384,6 +1448,34 @@ async function processHypnotize(game, hypnotist, action) {
 }
 
 /**
+ * Process hypnotist results - send fake messages to hypnotized players
+ */
+async function processHypnotists(game, client) {
+    const hypnotistResults = game.nightResults.filter(r => r.type === 'hypnotize');
+
+    for (const result of hypnotistResults) {
+        const target = game.players.find(p => p.id === result.targetId);
+        if (!target || !target.alive) continue;
+
+        try {
+            const user = await client.users.fetch(result.targetId);
+            const { EmbedBuilder } = require('discord.js');
+
+            // Send the fake message as if it were a real night result
+            const fakeEmbed = new EmbedBuilder()
+                .setColor('#FF6347')
+                .setTitle('🌙 Night Result')
+                .setDescription(result.fakeMessage)
+                .setTimestamp();
+
+            await user.send({ embeds: [fakeEmbed] });
+        } catch (error) {
+            console.error(`Could not send fake message to hypnotized player:`, error);
+        }
+    }
+}
+
+/**
  * Process pirate duel action - now handled via game.pirateDuels at dawn
  * This function is called during night processing to handle roleblocking
  */
@@ -1448,6 +1540,11 @@ async function processSpies(game, client) {
     const spies = game.players.filter(p => p.alive && p.role === 'SPY_BEE');
 
     for (const spy of spies) {
+        // Check if spy is silenced
+        if (game.silencedPlayers && game.silencedPlayers.has(spy.id)) {
+            continue; // No result sent
+        }
+
         // Find all Wasp visits
         const waspVisits = [];
         const wasps = game.players.filter(p => ROLES[p.role].team === 'wasp' && p.alive);
@@ -1859,6 +1956,61 @@ async function processSabotage(game, saboteur, action) {
 }
 
 /**
+ * Send fake success feedback to sabotaged players
+ */
+async function processSabotagedFeedback(game, client) {
+    const sabotagedActions = game.nightResults.filter(r => r.type === 'sabotaged_action');
+
+    for (const result of sabotagedActions) {
+        const player = game.players.find(p => p.id === result.playerId);
+        if (!player) continue;
+
+        try {
+            const user = await client.users.fetch(result.playerId);
+            const { EmbedBuilder } = require('discord.js');
+
+            // Send fake success message based on action type
+            let fakeMessage = '';
+            const target = result.targetId ? game.players.find(p => p.id === result.targetId) : null;
+
+            switch (result.actionType) {
+                case 'heal':
+                    fakeMessage = `You healed **${target?.displayName || 'Unknown'}** tonight. 💊`;
+                    break;
+                case 'investigate_suspicious':
+                case 'investigate_exact':
+                case 'consigliere':
+                    fakeMessage = `You investigated **${target?.displayName || 'Unknown'}** tonight. 🔍`;
+                    break;
+                case 'lookout':
+                    fakeMessage = `You watched **${target?.displayName || 'Unknown'}** tonight. 👀`;
+                    break;
+                case 'guard':
+                    fakeMessage = `You guarded **${target?.displayName || 'Unknown'}** tonight. 🛡️`;
+                    break;
+                case 'shoot':
+                    fakeMessage = `You shot **${target?.displayName || 'Unknown'}** tonight. 🔫`;
+                    break;
+                default:
+                    fakeMessage = `Your action was successful tonight. ✓`;
+                    break;
+            }
+
+            const fakeEmbed = new EmbedBuilder()
+                .setColor('#00FF00')
+                .setTitle('✓ Action Complete')
+                .setDescription(fakeMessage)
+                .setFooter({ text: 'Your action appeared to succeed' })
+                .setTimestamp();
+
+            await user.send({ embeds: [fakeEmbed] });
+        } catch (error) {
+            console.error(`Could not send fake feedback to sabotaged player:`, error);
+        }
+    }
+}
+
+/**
  * Process mimic action
  */
 async function processMimic(game, mimic, action) {
@@ -2259,6 +2411,11 @@ async function processPsychic(game, psychic, action) {
 async function processSilencer(game, silencer, action) {
     const targetId = action.target;
     addVisit(game, silencer.id, targetId);
+
+    // Decrement silences count
+    if (silencer.silences > 0) {
+        silencer.silences--;
+    }
 
     // Initialize silenced players set
     if (!game.silencedPlayers) {

@@ -391,6 +391,11 @@ module.exports = (client) => {
 
         if (!message.guild) return;
 
+        // EARLY RETURN: Skip if not a help command
+        const content = message.content.toLowerCase();
+        if (!content.startsWith('!help') && !content.startsWith('!commands') &&
+            !content.startsWith('!cmdlist') && !content.startsWith('!commandlist')) return;
+
         const args = message.content.split(' ');
         const command = args[0].toLowerCase();
 

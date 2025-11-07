@@ -140,6 +140,28 @@ function clearNightData(game) {
         game.deceivedPlayers.clear();
     }
 
+    // Clear hypnotized players - fake messages only sent once
+    if (game.hypnotizedPlayers) {
+        game.hypnotizedPlayers.clear();
+    }
+
+    // Clear sabotaged players - sabotage only lasts one night
+    if (game.sabotagedPlayers) {
+        game.sabotagedPlayers.clear();
+    }
+
+    // Clear mimicked roles - Mimic Wasp can choose a new role each night
+    game.players.forEach(p => {
+        if (p.mimickedRole) {
+            delete p.mimickedRole;
+        }
+    });
+
+    // Clear silenced players - silencing only lasts one night
+    if (game.silencedPlayers) {
+        game.silencedPlayers.clear();
+    }
+
     // Clear jailed targets so Jailers select new targets at next dusk
     game.players.forEach(p => {
         if (p.jailedTarget) {

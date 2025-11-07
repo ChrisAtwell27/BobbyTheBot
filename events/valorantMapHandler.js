@@ -630,7 +630,11 @@ module.exports = (client) => {
 
             if (!message.guild) return;
 
+            // EARLY RETURN: Skip if not a map command
             const command = message.content.toLowerCase();
+            if (!command.startsWith('!randommap') && !command.startsWith('!valorantmap') &&
+                !command.startsWith('!maplist') && !command.startsWith('!maps') &&
+                !command.startsWith('!convertmaps') && !command.startsWith('!mapstatus')) return;
 
             // Random map command
             if (command === '!randommap' || command === '!valorantmap') {

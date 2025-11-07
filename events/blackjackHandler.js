@@ -51,6 +51,9 @@ module.exports = (client) => {
         // Only run in target guild
         if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
+        // EARLY RETURN: Skip if not a blackjack command
+        if (!message.content.toLowerCase().startsWith('!blackjack')) return;
+
         const args = message.content.split(' ');
 
         // Blackjack game

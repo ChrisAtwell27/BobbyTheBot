@@ -172,8 +172,13 @@ module.exports = (client) => {
         // Only run on target guild
         if (message.guild.id !== TARGET_GUILD_ID) return;
 
+        // EARLY RETURN: Skip if not a member count command
+        const content = message.content.toLowerCase();
+        if (!content.startsWith('!createmembercount') && !content.startsWith('!membercount') &&
+            !content.startsWith('!memberstatus')) return;
+
         const args = message.content.split(' ');
-        
+
         // Command to create member count channel
         if (args[0] === '!createmembercount') {
             // Check if user has administrator permissions

@@ -214,6 +214,19 @@ module.exports = (client) => {
 
         if (!message.guild) return;
 
+        // EARLY RETURN: Skip if message doesn't start with pet commands
+        const content = message.content.toLowerCase();
+        const isPetCommand = content.startsWith('!adopt') || content.startsWith('!pet') ||
+                            content.startsWith('!shop') || content.startsWith('!feed') ||
+                            content.startsWith('!use') || content.startsWith('!train') ||
+                            content.startsWith('!mood') || content.startsWith('!fetch') ||
+                            content.startsWith('!treasure') || content.startsWith('!hunt') ||
+                            content.startsWith('!race') || content.startsWith('!adventure') ||
+                            content.startsWith('!explore') || content.startsWith('!playdate') ||
+                            content.startsWith('!rename');
+
+        if (!isPetCommand) return;
+
         const args = message.content.split(' ');
 
         // Adopt a pet command

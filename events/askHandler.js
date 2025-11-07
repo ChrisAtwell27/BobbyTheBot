@@ -650,6 +650,17 @@ module.exports = (client) => {
 
         const userMessage = message.content;
         const userMessageLower = userMessage.toLowerCase();
+
+        // EARLY RETURN: Skip if message doesn't contain Bobby commands or mentions
+        const isBobbyCommand = userMessageLower.startsWith('!reset') || userMessageLower.startsWith('!clear') ||
+                              userMessageLower.startsWith('!setmemory') || userMessageLower.startsWith('!remember') ||
+                              userMessageLower.startsWith('!mymemory') || userMessageLower.startsWith('!whatdo') ||
+                              userMessageLower.startsWith('!forget') || userMessageLower.startsWith('!ask') ||
+                              userMessageLower.startsWith('!8ball') || userMessageLower.startsWith('!magic') ||
+                              message.mentions.has(client.user.id);
+
+        if (!isBobbyCommand) return;
+
         const args = userMessage.split(' ');
         const command = args[0].toLowerCase();
 

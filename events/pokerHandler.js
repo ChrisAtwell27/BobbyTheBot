@@ -391,6 +391,10 @@ module.exports = (client) => {
 
         if (!message.guild) return;
 
+        // EARLY RETURN: Skip if not a poker command
+        const content = message.content.toLowerCase();
+        if (!content.startsWith('!poker') && !content.startsWith('!holdem')) return;
+
         const args = message.content.split(' ');
         const command = args[0].toLowerCase();
 

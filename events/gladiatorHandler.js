@@ -407,6 +407,10 @@ module.exports = (client) => {
 
         if (!message.guild) return;
 
+        // EARLY RETURN: Skip if not a gladiator command
+        const content = message.content.toLowerCase();
+        if (!content.startsWith('!gladiator') && !content.startsWith('!arena')) return;
+
         const args = message.content.split(' ');
         const command = args[0].toLowerCase();
 

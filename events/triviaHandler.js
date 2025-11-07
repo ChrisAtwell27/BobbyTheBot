@@ -333,7 +333,9 @@ module.exports = (client) => {
         // Only run in target guild
         if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
+        // EARLY RETURN: Skip if not a trivia command
         const command = message.content.toLowerCase();
+        if (!command.startsWith('!trivia')) return;
 
         // Manual trivia post (for testing or manual trigger - Admin only)
         if (command === '!trivia') {

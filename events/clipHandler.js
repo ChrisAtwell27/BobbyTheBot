@@ -20,6 +20,10 @@ module.exports = (client) => {
         // Only run in target guild
         if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
+        // EARLY RETURN: Skip if not a clip command
+        const content = message.content.toLowerCase();
+        if (!content.startsWith('!submitclip') && !content.startsWith('!clipstatus')) return;
+
         const args = message.content.split(' ');
 
         // Command to submit a clip

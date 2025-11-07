@@ -122,23 +122,25 @@ const PRESETS = {
             const roles = [];
 
             // Base roles - all mute variants
-            roles.push('WASP_QUEEN'); // No mute variant, keep normal
+            roles.push('MUTE_WASP_QUEEN'); // Mute Wasp Queen
             roles.push('MUTE_SCOUT_BEE');
             roles.push('MUTE_BEE');
             roles.push('MUTE_BEE');
-            roles.push('NURSE_BEE'); // Keep some non-mute for balance
+            roles.push('MUTE_NURSE_BEE'); // Mute Nurse Bee
             roles.push('MUTE_BUTTERFLY');
 
             if (playerCount >= 7) roles.push('MUTE_SOLDIER_BEE');
             if (playerCount >= 8) roles.push('MUTE_WASP');
             if (playerCount >= 9) roles.push('MUTE_JAILER_BEE');
-            if (playerCount >= 10) roles.push('LOOKOUT_BEE');
+            if (playerCount >= 10) roles.push('MUTE_BEE');
             if (playerCount >= 11) roles.push('MUTE_MURDER_HORNET');
             if (playerCount >= 12) roles.push('MUTE_SPY_WASP');
 
             if (playerCount >= 13) {
                 const remaining = playerCount - roles.length;
-                const muteRoles = ['MUTE_BEE', 'MUTE_SCOUT_BEE', 'MUTE_SOLDIER_BEE', 'MUTE_JAILER_BEE', 'MUTE_WASP', 'MUTE_SPY_WASP'];
+                const muteRoles = ['MUTE_BEE', 'MUTE_SCOUT_BEE', 'MUTE_SOLDIER_BEE', 'MUTE_JAILER_BEE',
+                                   'MUTE_WASP', 'MUTE_SPY_WASP', 'MUTE_NURSE_BEE', 'MUTE_BUTTERFLY',
+                                   'MUTE_MURDER_HORNET', 'MUTE_CLOWN_BEETLE'];
                 roles.push(...getRandomRoles(muteRoles, remaining));
             }
 

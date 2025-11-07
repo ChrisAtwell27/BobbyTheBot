@@ -1062,6 +1062,11 @@ async function startNightPhase(game, client) {
                     case 'frame':
                     case 'clean':
                     case 'disguise':
+                    case 'blackmail':
+                    case 'hypnotize':
+                    case 'deceive':
+                    case 'poison':
+                    case 'sabotage':
                         // Can target anyone except self and team members
                         validTargets = alivePlayers.filter(p => p.id !== bot.id && ROLES[p.role].team !== 'wasp');
                         break;
@@ -1138,6 +1143,24 @@ async function startNightPhase(game, client) {
                             console.log(`[Debug] ${bot.displayName} chose to remember ${target.displayName}'s role`);
                         }
                         return;
+                    case 'mimic':
+                        // Mimic Wasp - choose a Bee role to mimic
+                        if (bot.mimics && bot.mimics > 0) {
+                            const beeRoles = Object.keys(ROLES).filter(r => ROLES[r].team === 'bee');
+                            if (beeRoles.length > 0) {
+                                const randomRole = beeRoles[Math.floor(Math.random() * beeRoles.length)];
+                                game.nightActions[bot.id] = { actionType: 'mimic', roleChoice: randomRole };
+                                console.log(`[Debug] ${bot.displayName} (Mimic Wasp) mimicking ${ROLES[randomRole].name}`);
+                            }
+                        }
+                        return;
+                    case 'silencer':
+                        // Silencer Wasp - silence a player's results
+                        if (bot.silences && bot.silences > 0) {
+                            validTargets = alivePlayers.filter(p => p.id !== bot.id && ROLES[p.role].team !== 'wasp');
+                            break; // Continue to normal target selection
+                        }
+                        return;
                     default:
                         return;
                 }
@@ -1155,6 +1178,14 @@ async function startNightPhase(game, client) {
                             execute: shouldExecute
                         };
                         console.log(`[Debug] ${bot.displayName} (${role.name}) jailed ${target.displayName}${shouldExecute ? ' and will execute' : ''}`);
+                    } else if (role.actionType === 'hypnotize') {
+                        // Special handling for Hypnotist - include fake message
+                        game.nightActions[bot.id] = {
+                            actionType: 'hypnotize',
+                            target: target.id,
+                            fakeMessage: 'You were roleblocked!'
+                        };
+                        console.log(`[Debug] ${bot.displayName} (${role.name}) hypnotizing ${target.displayName}`);
                     } else {
                         game.nightActions[bot.id] = { actionType: role.actionType, target: target.id };
                         console.log(`[Debug] ${bot.displayName} (${role.name}) targeted ${target.displayName}`);
@@ -3710,6 +3741,23 @@ module.exports = (client) => {
 
         // Only run in target guild
         if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+
+        // EARLY RETURN: Skip if message doesn't contain mafia commands or relevant keywords
+        const content = message.content.toLowerCase();
+        const isMafiaCommand = content.startsWith('!createmafia') ||
+                              content.startsWith('!mafia') ||
+                              content.startsWith('!roles') ||
+                              content.startsWith('!presets') ||
+                              content.startsWith('!reveal');
+
+        // Also need to process non-command messages for Keller Bee emoji translation
+        const game = getGameByPlayer(message.author.id);
+        const hasKellerBee = game && game.players.some(p => {
+            const role = ROLES[p.role];
+            return p.userId === message.author.id && role && role.isKellerBee;
+        });
+
+        if (!isMafiaCommand && !hasKellerBee) return;
 
         const args = message.content.split(' ');
         const command = args[0].toLowerCase();

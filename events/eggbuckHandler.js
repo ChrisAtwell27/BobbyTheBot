@@ -34,6 +34,15 @@ module.exports = (client) => {
         // Skip DM messages for this handler since it's for guild-only commands
         if (!message.guild) return;
 
+        // EARLY RETURN: Skip if message doesn't start with economy commands
+        const content = message.content.toLowerCase();
+        const isEconomyCommand = content.startsWith('!balance') || content.startsWith('!baltop') ||
+                                content.startsWith('!award') || content.startsWith('!spend') ||
+                                content.startsWith('!pay') || content.startsWith('!beg') ||
+                                content.startsWith('!economy') || content.startsWith('!clearhoney');
+
+        if (!isEconomyCommand) return;
+
         const args = message.content.split(' ');
         const userRoles = message.member.roles.cache;
 

@@ -402,6 +402,12 @@ module.exports = (client) => {
 
         if (!message.guild) return;
 
+        // EARLY RETURN: Skip if not a moderation command
+        const content = message.content.toLowerCase();
+        if (!content.startsWith('!dead') && !content.startsWith('!undead') &&
+            !content.startsWith('!modstats') && !content.startsWith('!modhelp') &&
+            !content.startsWith('!modconfig')) return;
+
         const args = message.content.split(' ');
 
         // Command to assign dead role and delete user messages

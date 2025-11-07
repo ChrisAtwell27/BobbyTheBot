@@ -1,27 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node:*)",
-      "Bash(npm install:*)",
-      "Bash(dir:*)",
-      "Bash(git add:*)",
-      "Bash(npm start:*)",
-      "Bash(git checkout:*)",
-      "Bash(timeout 5 npm start)",
-      "Bash(taskkill:*)",
-      "Bash(pkill:*)",
-      "Bash(git reset:*)",
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(git log:*)",
-      "Bash(find:*)",
-      "Bash(findstr:*)",
-      "Bash(test:*)",
-      "Bash(del test-monthly-bounds.js)",
-      "Bash(nul)",
-      "Read(//e/**)",
-      "Bash(/tmp/findings.txt)",
-      "Bash(cat:*)"
+      "Bash(del diagnose-cpu.js add-early-returns.js)"
     ],
     "deny": [],
     "ask": []

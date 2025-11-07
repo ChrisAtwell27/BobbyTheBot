@@ -320,6 +320,12 @@ module.exports = (client) => {
         if (message.author.bot) return;
         if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
+        // EARLY RETURN: Skip if not a bounty command
+        const content = message.content.toLowerCase();
+        if (!content.startsWith('!postbounty') && !content.startsWith('!bounties') &&
+            !content.startsWith('!bounty') && !content.startsWith('!claimbounty') &&
+            !content.startsWith('!cancelbounty')) return;
+
         const args = message.content.slice(1).trim().split(/ +/);
         const command = args.shift().toLowerCase();
 
