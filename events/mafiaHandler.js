@@ -1713,6 +1713,20 @@ async function sendNightActionPrompts(game, client) {
                         .setFooter({ text: 'Silence the Bees!' });
                     break;
 
+                case 'deceive':
+                    // Deceiver Wasp - deceive someone
+                    targets = alivePlayers
+                        .filter(p => ROLES[p.role].team !== 'wasp')
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Night Phase - Deceive Someone`)
+                        .setDescription(`Choose a player to deceive. Their messages will be twisted during the next day phase.\n\n${targets}`)
+                        .setFooter({ text: 'Twist their words!' });
+                    break;
+
                 case 'hypnotize':
                     // Hypnotist Wasp - give false feedback
                     targets = alivePlayers
@@ -2420,6 +2434,18 @@ async function processNightAction(userId, message, game, client) {
             }
             break;
 
+        case 'deceive':
+            // Deceiver Wasp - twist someone's messages during next day
+            validTargets = alivePlayers.filter(p => ROLES[p.role].team !== 'wasp');
+            if (choice >= 1 && choice <= validTargets.length) {
+                target = validTargets[choice - 1];
+                game.nightActions[userId] = { actionType: 'deceive', target: target.id };
+                await message.reply(`You are deceiving **${target.displayName}** tonight. Their words will be twisted tomorrow! 🎭`);
+            } else {
+                await sendInvalidChoiceMessage(message, validTargets);
+            }
+            break;
+
         case 'hypnotize':
             // Hypnotist Wasp - give false feedback
             validTargets = alivePlayers.filter(p => ROLES[p.role].team !== 'wasp');
@@ -2463,12 +2489,13 @@ async function processNightAction(userId, message, game, client) {
 
         case 'trap':
             // Trapper Bee - set trap at player's house
-            if (choice >= 1 && choice <= alivePlayers.length) {
-                target = alivePlayers[choice - 1];
+            validTargets = alivePlayers.filter(p => p.id !== userId);
+            if (choice >= 1 && choice <= validTargets.length) {
+                target = validTargets[choice - 1];
                 game.nightActions[userId] = { actionType: 'trap', target: target.id };
                 await message.reply(`You are setting a trap at **${target.displayName}'s** house tonight. 🪤`);
             } else {
-                await sendInvalidChoiceMessage(message, alivePlayers);
+                await sendInvalidChoiceMessage(message, validTargets);
             }
             break;
 
