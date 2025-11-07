@@ -35,6 +35,13 @@ if (OPENAI_API_KEY) {
 }
 
 // Function to translate text to emojis using OpenAI (for Keller Bee)
+// Helper function to check if a player is a mute variant
+function isMutePlayer(player) {
+    if (!player) return false;
+    const role = ROLES[player.role];
+    return role && role.isMuteBee === true;
+}
+
 async function translateToEmojis(text, username) {
     if (!openai) {
         // Fallback: just add some emojis
@@ -59,7 +66,7 @@ async function translateToEmojis(text, username) {
         });
 
         const emojiTranslation = completion.choices[0].message.content.trim();
-        console.log(`🤐 Mute Bee (${username}): "${text}" -> "${emojiTranslation}"`);
+        console.log(`🤐 Mute Player (${username}): "${text}" -> "${emojiTranslation}"`);
         return emojiTranslation;
     } catch (error) {
         console.error('Error translating to emojis:', error);
@@ -1622,10 +1629,17 @@ async function processNightAction(userId, message, game, client) {
     if (role.team === 'wasp' && isNaN(choice)) {
         const wasps = game.players.filter(p => ROLES[p.role].team === 'wasp' && p.alive && p.id !== userId);
 
+        // Check if sender is a mute variant
+        let messageToSend = message.content;
+        if (isMutePlayer(player)) {
+            // Translate to emojis for mute wasps
+            messageToSend = await translateToEmojis(message.content, message.author.username);
+        }
+
         for (const wasp of wasps) {
             try {
                 const user = await client.users.fetch(wasp.id);
-                await user.send(`**${player.displayName}:** ${message.content}`);
+                await user.send(`**${player.displayName}:** ${messageToSend}`);
             } catch (error) {
                 console.error(`Could not relay message to ${wasp.displayName}:`, error);
             }
@@ -3883,7 +3897,8 @@ module.exports = (client) => {
             const player = game.players.find(p => p.id === message.author.id);
 
             // Handle Mute Bee message interception in DMs (day phase messages)
-            if (player && (player.role === 'MUTE_BEE' || player.role === 'KELLER_BEE') &&
+            // Check if player is any mute variant using the helper function
+            if (player && isMutePlayer(player) &&
                 (game.phase === 'day' || game.phase === 'voting') &&
                 !message.content.startsWith('!') && player.alive) {
 
@@ -3967,10 +3982,17 @@ module.exports = (client) => {
                     const targetId = isJailer ? jailSession.jailedId : jailSession.jailerId;
                     const senderName = isJailer ? jailSession.jailerName : jailSession.jailedName;
 
+                    // Check if sender is a mute variant
+                    const senderPlayer = game.players.find(p => p.id === message.author.id);
+                    let messageToSend = message.content;
+                    if (isMutePlayer(senderPlayer)) {
+                        messageToSend = await translateToEmojis(message.content, message.author.username);
+                    }
+
                     try {
                         const targetUser = await client.users.fetch(targetId);
                         const prefix = isJailer ? '⛓️ **Jailer:**' : '🔒 **Prisoner:**';
-                        await targetUser.send(`${prefix} ${message.content}`);
+                        await targetUser.send(`${prefix} ${messageToSend}`);
                     } catch (error) {
                         console.error('Could not relay jail message:', error);
                     }
@@ -3990,10 +4012,17 @@ module.exports = (client) => {
                     const targetId = isMedium ? seance.deadId : seance.mediumId;
                     const senderName = isMedium ? seance.mediumName : seance.deadName;
 
+                    // Check if sender is a mute variant
+                    const senderPlayer = game.players.find(p => p.id === message.author.id);
+                    let messageToSend = message.content;
+                    if (isMutePlayer(senderPlayer)) {
+                        messageToSend = await translateToEmojis(message.content, message.author.username);
+                    }
+
                     try {
                         const targetUser = await client.users.fetch(targetId);
                         const prefix = isMedium ? '👻 **From Medium:**' : '💀 **From the Dead:**';
-                        await targetUser.send(`${prefix} ${message.content}`);
+                        await targetUser.send(`${prefix} ${messageToSend}`);
                     } catch (error) {
                         console.error('Could not relay seance message:', error);
                     }
@@ -4078,13 +4107,13 @@ module.exports = (client) => {
             await processNightAction(message.author.id, message, game, client);
         }
 
-        // Handle Mute Bee (Keller Bee) message interception
-        // Check if user is in an active mafia game and is a Mute Bee
+        // Handle Mute Bee message interception in text channel
+        // Check if user is in an active mafia game and is any mute variant
         const kellerGame = getGameByPlayer(message.author.id);
         if (kellerGame && message.channel.id === MAFIA_TEXT_CHANNEL_ID) {
             const kellerPlayer = kellerGame.players.find(p => p.id === message.author.id);
-            // Check for both MUTE_BEE and KELLER_BEE (alias)
-            if (kellerPlayer && (kellerPlayer.role === 'MUTE_BEE' || kellerPlayer.role === 'KELLER_BEE') && !message.content.startsWith('!')) {
+            // Check if player is any mute variant
+            if (kellerPlayer && isMutePlayer(kellerPlayer) && !message.content.startsWith('!')) {
                 // Store original message before deletion
                 const originalMessage = message.content;
 
