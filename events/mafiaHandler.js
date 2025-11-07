@@ -1646,18 +1646,18 @@ async function processNightAction(userId, message, game, client) {
 
         case 'coroner':
             // Coroner Bee - examine dead player
-            const deadPlayers = game.players.filter(p => !p.alive);
-            if (deadPlayers.length === 0) {
+            const deadForCoroner = game.players.filter(p => !p.alive);
+            if (deadForCoroner.length === 0) {
                 await message.reply('There are no dead players to examine!');
                 return;
             }
 
-            if (choice >= 1 && choice <= deadPlayers.length) {
-                target = deadPlayers[choice - 1];
+            if (choice >= 1 && choice <= deadForCoroner.length) {
+                target = deadForCoroner[choice - 1];
                 game.nightActions[userId] = { actionType: 'coroner', target: target.id };
                 await message.reply(`You are examining **${target.displayName}**'s body tonight. 🔬`);
             } else {
-                await sendInvalidChoiceMessage(message, deadPlayers);
+                await sendInvalidChoiceMessage(message, deadForCoroner);
             }
             break;
 
