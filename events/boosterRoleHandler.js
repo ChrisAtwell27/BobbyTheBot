@@ -40,74 +40,118 @@ module.exports = (client) => {
         if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
         if (!message.guild) return;
-        
-        // Check if message is in booster chat
+
+        const args = message.content.split(' ');
+
+        // Booster command to trigger booster welcome for testing
+        if (args[0] === '!boosterrole') {
+            // Check if user has booster role instead of admin permissions
+            const member = message.guild.members.cache.get(message.author.id);
+            if (!member || !member.roles.cache.some(role => role.name === config.boosterRoleName)) {
+                return message.reply('❌ You need the Server Booster role to use this command.');
+            }
+
+            let targetMember = message.member; // Default to command user
+
+            // If a user is mentioned, use them instead
+            if (args[1]) {
+                const mentionedUser = message.mentions.users.first() || message.guild.members.cache.find(member => member.user.username === args[1])?.user;
+                if (mentionedUser) {
+                    targetMember = message.guild.members.cache.get(mentionedUser.id);
+                }
+            }
+
+            if (!targetMember) {
+                return message.reply('❌ Could not find that member in this server.');
+            }
+
+            // Trigger the new booster handler
+            await handleNewBooster(targetMember);
+
+            // Send confirmation to booster
+            const confirmEmbed = new EmbedBuilder()
+                .setColor(0x00FF00)
+                .setTitle('✅ Booster Welcome Triggered')
+                .setDescription(`Booster welcome message sent for ${targetMember.user.tag}`)
+                .addFields(
+                    { name: '🎯 Target User', value: `${targetMember.user.tag}`, inline: true },
+                    { name: '📍 Channel', value: `#${config.boosterChannelName}`, inline: true },
+                    { name: '🚀 Booster', value: `${message.author.tag}`, inline: true }
+                )
+                .setFooter({ text: 'Testing Command' })
+                .setTimestamp();
+
+            await message.reply({ embeds: [confirmEmbed] });
+
+            console.log(`🧪 Booster ${message.author.tag} triggered booster welcome for ${targetMember.user.tag}`);
+            return;
+        }
+
+        // Check if message is in booster chat for the remaining commands
         if (message.channel.name !== config.boosterChannelName) return;
-        
+
         // Check if user has booster role
         const member = message.guild.members.cache.get(message.author.id);
         if (!member || !member.roles.cache.some(role => role.name === config.boosterRoleName)) {
             return;
         }
-        
-        const args = message.content.split(' ');
-        
+
         // Command to create custom role: !color <name> <hex>
         if (args[0] === '!color') {
             if (args.length < 3) {
                 return message.reply('❌ Usage: `!color <role name> <hex color>`\nExample: `!color My Cool Role #ff5733`');
             }
-            
+
             // Parse role name and hex color
             const hexColor = args[args.length - 1]; // Last argument is hex
             const roleName = args.slice(1, -1).join(' '); // Everything between !color and hex
-            
+
             if (!roleName || roleName.length > config.maxRoleNameLength) {
                 return message.reply(`❌ Role name must be between 1 and ${config.maxRoleNameLength} characters.`);
             }
-            
+
             if (!isValidHexColor(hexColor)) {
                 return message.reply('❌ Invalid hex color. Please use format: `#ff5733` or `#FF5733`');
             }
-            
+
             await createCustomBoosterRole(message, member, roleName, hexColor);
         }
-        
+
         // Command to update existing role color: !recolor <hex>
         if (args[0] === '!recolor') {
             if (args.length !== 2) {
                 return message.reply('❌ Usage: `!recolor <hex color>`\nExample: `!recolor #00ff00`');
             }
-            
+
             const hexColor = args[1];
-            
+
             if (!isValidHexColor(hexColor)) {
                 return message.reply('❌ Invalid hex color. Please use format: `#ff5733` or `#FF5733`');
             }
-            
+
             await updateBoosterRoleColor(message, member, hexColor);
         }
-        
+
         // Command to update role name: !rename <new name>
         if (args[0] === '!rename') {
             if (args.length < 2) {
                 return message.reply('❌ Usage: `!rename <new role name>`\nExample: `!rename My Awesome Role`');
             }
-            
+
             const newName = args.slice(1).join(' ');
-            
+
             if (newName.length > config.maxRoleNameLength) {
                 return message.reply(`❌ Role name must be ${config.maxRoleNameLength} characters or less.`);
             }
-            
+
             await updateBoosterRoleName(message, member, newName);
         }
-        
+
         // Command to delete custom role: !deletecolor
         if (args[0] === '!deletecolor') {
             await deleteCustomBoosterRole(message, member);
         }
-        
+
         // Help command
         if (args[0] === '!colorhelp') {
             const helpEmbed = new EmbedBuilder()
@@ -123,63 +167,8 @@ module.exports = (client) => {
                 )
                 .setFooter({ text: 'Thank you for boosting the server! 💜' })
                 .setTimestamp();
-            
+
             return message.reply({ embeds: [helpEmbed] });
-        }
-    });
-    
-    // Booster command to test booster functionality (changed from admin-only)
-    client.on('messageCreate', async (message) => {
-        if (message.author.bot) return;
-
-        // Only run in target guild
-        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
-
-        if (!message.guild) return;
-        
-        const args = message.content.split(' ');
-        
-        // Booster command to trigger booster welcome for testing
-        if (args[0] === '!boosterrole') {
-            // Check if user has booster role instead of admin permissions
-            const member = message.guild.members.cache.get(message.author.id);
-            if (!member || !member.roles.cache.some(role => role.name === config.boosterRoleName)) {
-                return message.reply('❌ You need the Server Booster role to use this command.');
-            }
-            
-            let targetMember = message.member; // Default to command user
-            
-            // If a user is mentioned, use them instead
-            if (args[1]) {
-                const mentionedUser = message.mentions.users.first() || message.guild.members.cache.find(member => member.user.username === args[1])?.user;
-                if (mentionedUser) {
-                    targetMember = message.guild.members.cache.get(mentionedUser.id);
-                }
-            }
-            
-            if (!targetMember) {
-                return message.reply('❌ Could not find that member in this server.');
-            }
-            
-            // Trigger the new booster handler
-            await handleNewBooster(targetMember);
-            
-            // Send confirmation to booster
-            const confirmEmbed = new EmbedBuilder()
-                .setColor(0x00FF00)
-                .setTitle('✅ Booster Welcome Triggered')
-                .setDescription(`Booster welcome message sent for ${targetMember.user.tag}`)
-                .addFields(
-                    { name: '🎯 Target User', value: `${targetMember.user.tag}`, inline: true },
-                    { name: '📍 Channel', value: `#${config.boosterChannelName}`, inline: true },
-                    { name: '🚀 Booster', value: `${message.author.tag}`, inline: true }
-                )
-                .setFooter({ text: 'Testing Command' })
-                .setTimestamp();
-            
-            await message.reply({ embeds: [confirmEmbed] });
-            
-            console.log(`🧪 Booster ${message.author.tag} triggered booster welcome for ${targetMember.user.tag}`);
         }
     });
     

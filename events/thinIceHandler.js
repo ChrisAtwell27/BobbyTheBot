@@ -56,8 +56,91 @@ module.exports = async (client) => {
         if (!message.member) return;
 
         const messageContent = message.content.toLowerCase();
-        const containsBobby = messageContent.includes('bobby');
 
+        // Handle admin commands first
+        // Command structure: !Reset Thinice @User
+        if (messageContent.startsWith('!reset thinice')) {
+            // Check if the author has the Top Egg role or admin permissions
+            const hasPermission = message.member.roles.cache.has(topEggRoleId) ||
+                                  message.member.permissions.has(PermissionsBitField.Flags.Administrator);
+
+            if (!hasPermission) {
+                return message.reply("❌ You don't have permission to use this command.");
+            }
+
+            // Extract the mentioned user
+            const mentionedUser = message.mentions.users.first();
+            if (!mentionedUser) {
+                return message.reply('❌ Please mention a valid user to reset Thin Ice.');
+            }
+
+            const member = message.guild.members.cache.get(mentionedUser.id);
+            if (!member) {
+                return message.reply('❌ User not found in this server.');
+            }
+
+            const warnings = getUserWarnings(member.id, thinIceFilePath);
+
+            // Remove the Thin Ice role from the mentioned user
+            if (member.roles.cache.has(thinIceRoleId)) {
+                await member.roles.remove(thinIceRoleId);
+
+                const embed = new EmbedBuilder()
+                    .setColor(0x00FF00) // Green
+                    .setTitle('❄️ Thin Ice Reset')
+                    .setDescription(`${member}'s Thin Ice status has been cleared!`)
+                    .addFields(
+                        { name: '👤 User', value: member.user.tag, inline: true },
+                        { name: '🔢 Previous Warnings', value: warnings.toString(), inline: true },
+                        { name: '✅ Action By', value: message.author.tag, inline: true }
+                    )
+                    .setTimestamp()
+                    .setFooter({ text: 'Status reset by moderator' });
+
+                await message.channel.send({ embeds: [embed] });
+                console.log(`❄️ Thin Ice reset for ${member.user.tag} by ${message.author.tag}`);
+            } else {
+                return message.reply(`${member} does not have the Thin Ice role.`);
+            }
+
+            // Clear the warnings for the user in thin_ice.txt
+            clearUserWarnings(member.id, thinIceFilePath);
+            return;
+        }
+
+        // Command to check thin ice status
+        if (messageContent === '!thinice' || messageContent.startsWith('!thinice ')) {
+            const mentionedUser = message.mentions.users.first();
+            const targetUser = mentionedUser || message.author;
+            const member = message.guild.members.cache.get(targetUser.id);
+
+            if (!member) {
+                return message.reply('❌ User not found.');
+            }
+
+            const warnings = getUserWarnings(targetUser.id, thinIceFilePath);
+            const hasThinIce = member.roles.cache.has(thinIceRoleId);
+
+            const embed = new EmbedBuilder()
+                .setColor(hasThinIce ? 0x87CEEB : 0x00FF00)
+                .setTitle(`❄️ Thin Ice Status - ${targetUser.username}`)
+                .addFields(
+                    { name: '🔢 Warning Level', value: warnings.toString(), inline: true },
+                    { name: '❄️ Status', value: hasThinIce ? 'On Thin Ice' : 'Clear', inline: true },
+                    { name: '⏭️ Next Penalty', value: getNextPenalty(warnings), inline: true }
+                )
+                .setTimestamp();
+
+            if (targetUser.displayAvatarURL) {
+                embed.setThumbnail(targetUser.displayAvatarURL());
+            }
+
+            await message.channel.send({ embeds: [embed] });
+            return;
+        }
+
+        // Check if message contains "bobby"
+        const containsBobby = messageContent.includes('bobby');
         if (!containsBobby) return;
 
         // Check for bad words using word boundaries for more accurate detection
@@ -68,7 +151,7 @@ module.exports = async (client) => {
 
         if (foundBadWord) {
             console.log(`❄️ Detected bad word "${foundBadWord}" in message from ${message.author.tag}: "${message.content}"`);
-            
+
             try {
                 const member = message.member;
                 let warnings = getUserWarnings(member.id, thinIceFilePath);
@@ -180,94 +263,6 @@ module.exports = async (client) => {
             } catch (error) {
                 console.error('Failed to reassign Thin Ice role:', error);
             }
-        }
-    });
-
-    client.on('messageCreate', async (message) => {
-        if (message.author.bot) return;
-
-        // Only run in target guild
-        if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
-
-        if (!message.guild) return;
-
-        // Command structure: !Reset Thinice @User
-        if (message.content.toLowerCase().startsWith('!reset thinice')) {
-            // Check if the author has the Top Egg role or admin permissions
-            const hasPermission = message.member.roles.cache.has(topEggRoleId) ||
-                                  message.member.permissions.has(PermissionsBitField.Flags.Administrator);
-
-            if (!hasPermission) {
-                return message.reply("❌ You don't have permission to use this command.");
-            }
-
-            // Extract the mentioned user
-            const mentionedUser = message.mentions.users.first();
-            if (!mentionedUser) {
-                return message.reply('❌ Please mention a valid user to reset Thin Ice.');
-            }
-
-            const member = message.guild.members.cache.get(mentionedUser.id);
-            if (!member) {
-                return message.reply('❌ User not found in this server.');
-            }
-
-            const warnings = getUserWarnings(member.id, thinIceFilePath);
-
-            // Remove the Thin Ice role from the mentioned user
-            if (member.roles.cache.has(thinIceRoleId)) {
-                await member.roles.remove(thinIceRoleId);
-
-                const embed = new EmbedBuilder()
-                    .setColor(0x00FF00) // Green
-                    .setTitle('❄️ Thin Ice Reset')
-                    .setDescription(`${member}'s Thin Ice status has been cleared!`)
-                    .addFields(
-                        { name: '👤 User', value: member.user.tag, inline: true },
-                        { name: '🔢 Previous Warnings', value: warnings.toString(), inline: true },
-                        { name: '✅ Action By', value: message.author.tag, inline: true }
-                    )
-                    .setTimestamp()
-                    .setFooter({ text: 'Status reset by moderator' });
-
-                await message.channel.send({ embeds: [embed] });
-                console.log(`❄️ Thin Ice reset for ${member.user.tag} by ${message.author.tag}`);
-            } else {
-                return message.reply(`${member} does not have the Thin Ice role.`);
-            }
-
-            // Clear the warnings for the user in thin_ice.txt
-            clearUserWarnings(member.id, thinIceFilePath);
-        }
-
-        // Command to check thin ice status
-        if (message.content.toLowerCase() === '!thinice' || message.content.toLowerCase().startsWith('!thinice ')) {
-            const mentionedUser = message.mentions.users.first();
-            const targetUser = mentionedUser || message.author;
-            const member = message.guild.members.cache.get(targetUser.id);
-
-            if (!member) {
-                return message.reply('❌ User not found.');
-            }
-
-            const warnings = getUserWarnings(targetUser.id, thinIceFilePath);
-            const hasThinIce = member.roles.cache.has(thinIceRoleId);
-
-            const embed = new EmbedBuilder()
-                .setColor(hasThinIce ? 0x87CEEB : 0x00FF00)
-                .setTitle(`❄️ Thin Ice Status - ${targetUser.username}`)
-                .addFields(
-                    { name: '🔢 Warning Level', value: warnings.toString(), inline: true },
-                    { name: '❄️ Status', value: hasThinIce ? 'On Thin Ice' : 'Clear', inline: true },
-                    { name: '⏭️ Next Penalty', value: getNextPenalty(warnings), inline: true }
-                )
-                .setTimestamp();
-
-            if (targetUser.displayAvatarURL) {
-                embed.setThumbnail(targetUser.displayAvatarURL());
-            }
-
-            await message.channel.send({ embeds: [embed] });
         }
     });
 
