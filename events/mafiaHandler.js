@@ -3,7 +3,7 @@ const { updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const User = require('../database/models/User');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
 const { ROLES } = require('../mafia/roles/mafiaRoles');
-const { createGame, getGame, getGameByPlayer, deleteGame, getAllGames, addVisit, getVisitors, clearNightData, clearVotes, updateActivity } = require('../mafia/game/mafiaGameState');
+const { createGame, getGame, getGameByPlayer, deleteGame, getAllGames, addVisit, getVisitors, clearNightData, clearDayData, clearVotes, updateActivity } = require('../mafia/game/mafiaGameState');
 const { processNightActions } = require('../mafia/game/mafiaActions');
 const { getPlayerTeam, getRoleDistribution, shuffleArray, getTeamCounts, countVotes, determineWinners, checkWinConditions, initializePlayerRole } = require('../mafia/game/mafiaUtils');
 const OpenAI = require('openai');
@@ -3514,6 +3514,9 @@ async function endVotingPhase(game, client) {
 async function startDuskPhase(game, client) {
     game.phase = 'dusk';
     game.duskActions = {}; // Track who has submitted their dusk action or skipped
+
+    // Clear day phase data (blackmail/deceive effects that lasted through day)
+    clearDayData(game);
 
     // Find all alive players with dusk actions
     const alivePlayers = game.players.filter(p => p.alive);

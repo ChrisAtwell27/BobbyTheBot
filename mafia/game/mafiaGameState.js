@@ -124,7 +124,8 @@ function getVisitors(game, targetId) {
 }
 
 /**
- * Clear nightly data (visits, actions, frames, seances, blackmail, jail communication)
+ * Clear nightly data (visits, actions, frames, seances, jail communication)
+ * NOTE: blackmailedPlayers and deceivedPlayers are NOT cleared here because they need to persist through the day phase
  * @param {Object} game - Game object
  */
 function clearNightData(game) {
@@ -134,16 +135,6 @@ function clearNightData(game) {
     game.framedPlayers.clear();
     game.activeSeances = []; // Clear seance connections
     game.jailCommunication = []; // Clear jail communication sessions
-
-    // Clear blackmail - players can speak again after one day
-    if (game.blackmailedPlayers) {
-        game.blackmailedPlayers.clear();
-    }
-
-    // Clear deception - players speak normally again after one day
-    if (game.deceivedPlayers) {
-        game.deceivedPlayers.clear();
-    }
 
     // Clear hypnotized players - fake messages only sent once
     if (game.hypnotizedPlayers) {
@@ -200,6 +191,22 @@ function clearNightData(game) {
 }
 
 /**
+ * Clear day phase data (blackmail, deception effects that persist through day)
+ * @param {Object} game - Game object
+ */
+function clearDayData(game) {
+    // Clear blackmail - players can speak normally again after day phase ends
+    if (game.blackmailedPlayers) {
+        game.blackmailedPlayers.clear();
+    }
+
+    // Clear deception - players speak normally again after day phase ends
+    if (game.deceivedPlayers) {
+        game.deceivedPlayers.clear();
+    }
+}
+
+/**
  * Clear voting data
  * @param {Object} game - Game object
  */
@@ -224,6 +231,7 @@ module.exports = {
     addVisit,
     getVisitors,
     clearNightData,
+    clearDayData,
     clearVotes,
     updateActivity
 };
