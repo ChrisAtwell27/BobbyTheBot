@@ -4393,6 +4393,7 @@ module.exports = (client) => {
 
         // Handle !mafiaroles command
         if (command === '!mafiaroles' || command === '!roles') {
+            console.log('🎯 !mafiaroles command received from', message.author.username);
             const filter = args[1]?.toLowerCase();
 
             // Validate filter

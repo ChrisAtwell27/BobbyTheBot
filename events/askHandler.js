@@ -657,7 +657,10 @@ module.exports = (client) => {
                               userMessageLower.startsWith('!roles') ||
                               userMessageLower.startsWith('!presets') ||
                               userMessageLower.startsWith('!reveal');
-        if (isMafiaCommand) return;
+        if (isMafiaCommand) {
+            console.log('🔄 askHandler: Skipping mafia command:', userMessage);
+            return;
+        }
 
         // EARLY RETURN: Skip if message doesn't contain Bobby commands or mentions
         const isBobbyCommand = userMessageLower.startsWith('!reset') || userMessageLower.startsWith('!clear') ||
