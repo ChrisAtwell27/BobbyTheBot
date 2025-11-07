@@ -41,6 +41,19 @@ const ROLES = {
         attack: 0,
         defense: 0
     },
+    MUTE_SCOUT_BEE: {
+        name: 'Mute Scout Bee',
+        emoji: '🔍',
+        team: 'bee',
+        description: 'You are a **Mute Scout Bee**! You can investigate one player each night to learn their exact role. You are permanently muted and all messages are turned into emojis!',
+        abilities: ['Investigate one player each night', 'Learn their exact role', 'Server muted - all text messages translated to emojis'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'investigate_exact',
+        attack: 0,
+        defense: 0,
+        isMuteBee: true
+    },
     NURSE_BEE: {
         name: 'Nurse Bee',
         emoji: '⚕️',
@@ -91,6 +104,20 @@ const ROLES = {
         defense: 0,
         bullets: 1
     },
+    MUTE_SOLDIER_BEE: {
+        name: 'Mute Soldier Bee',
+        emoji: '⚔️',
+        team: 'bee',
+        description: 'You are a **Mute Soldier Bee**! You have 1 bullet. You can shoot one player at night. You are permanently muted and all messages are turned into emojis!',
+        abilities: ['Shoot one player each night (1 bullet total)', 'Basic attack', 'If you shoot a Bee, you die from guilt', 'Server muted - all text messages translated to emojis'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        actionType: 'shoot',
+        attack: 1,
+        defense: 0,
+        bullets: 1,
+        isMuteBee: true
+    },
     QUEEN_BEE: {
         name: 'Queen Bee',
         emoji: '👑',
@@ -127,6 +154,21 @@ const ROLES = {
         attack: 3, // Unstoppable execution
         defense: 0,
         executions: 3
+    },
+    MUTE_JAILER_BEE: {
+        name: 'Mute Jailer Bee',
+        emoji: '⛓️',
+        team: 'bee',
+        description: 'You are a **Mute Jailer Bee**! You can jail one player each night, protecting them but preventing their actions. You can execute your jailed target. You are permanently muted and all messages are turned into emojis!',
+        abilities: ['Jail one player each night', 'Target cannot perform actions or be visited', 'Execute jailed target (3 executions max)', 'If you execute a Bee, you lose all executions', 'Server muted - all text messages translated to emojis'],
+        winCondition: 'Eliminate all Wasps and harmful Neutrals',
+        nightAction: true,
+        duskAction: true,
+        actionType: 'jail',
+        attack: 3,
+        defense: 0,
+        executions: 3,
+        isMuteBee: true
     },
     ESCORT_BEE: {
         name: 'Escort Bee',
@@ -352,6 +394,19 @@ const ROLES = {
         attack: 1, // Basic attack
         defense: 0
     },
+    MUTE_WASP: {
+        name: 'Mute Wasp',
+        emoji: '🗡️',
+        team: 'wasp',
+        description: 'You are a **Mute Wasp**! You carry out the kills for the Wasp team. You are perminently muted and all messages are turned into emojis!',
+        abilities: ['Kill target chosen by Wasps', 'Basic attack', 'Become Wasp Queen if Queen dies', 'Communicate with Wasps'],
+        winCondition: 'Equal or outnumber all other players',
+        nightAction: true,
+        actionType: 'mafia_kill',
+        attack: 1, // Basic attack
+        defense: 0,
+        isMuteBee: true // Special flag for message handling
+    },
     DECEIVER_WASP: {
         name: 'Deceiver Wasp',
         emoji: '🎭',
@@ -375,6 +430,19 @@ const ROLES = {
         actionType: 'consigliere',
         attack: 0,
         defense: 0
+    },
+    MUTE_SPY_WASP: {
+        name: 'Mute Spy Wasp',
+        emoji: '🕵️',
+        team: 'wasp',
+        description: 'You are a **Mute Spy Wasp**! You can investigate one player each night to learn their exact role. You are permanently muted and all messages are turned into emojis!',
+        abilities: ['Investigate one player each night', 'Learn their exact role', 'Communicate with Wasps', 'Server muted - all text messages translated to emojis'],
+        winCondition: 'Equal or outnumber all other players',
+        nightAction: true,
+        actionType: 'consigliere',
+        attack: 0,
+        defense: 0,
+        isMuteBee: true
     },
     CONSORT_WASP: {
         name: 'Consort Wasp',
@@ -541,6 +609,20 @@ const ROLES = {
         attack: 1, // Basic attack
         defense: 1 // Basic defense
     },
+    MUTE_MURDER_HORNET: {
+        name: 'Mute Murder Hornet',
+        emoji: '💀',
+        team: 'neutral',
+        subteam: 'killing',
+        description: 'You are a **Mute Murder Hornet**! You must kill everyone who opposes you. You kill anyone who visits you. You are permanently muted and all messages are turned into emojis!',
+        abilities: ['Kill one player each night', 'Basic attack', 'Kill anyone who visits you', 'Basic defense', 'Server muted - all text messages translated to emojis'],
+        winCondition: 'Be the last player alive',
+        nightAction: true,
+        actionType: 'serial_kill',
+        attack: 1,
+        defense: 1,
+        isMuteBee: true
+    },
     FIRE_ANT: {
         name: 'Fire Ant',
         emoji: '🔥',
@@ -565,6 +647,19 @@ const ROLES = {
         nightAction: false,
         attack: 3, // Unstoppable haunt
         defense: 0
+    },
+    MUTE_CLOWN_BEETLE: {
+        name: 'Mute Clown Beetle',
+        emoji: '🤡',
+        team: 'neutral',
+        subteam: 'evil',
+        description: 'You are a **Mute Clown Beetle** (Jester)! Your goal is to be voted out during the day. You are permanently muted and all messages are turned into emojis!',
+        abilities: ['Haunt one guilty voter after being lynched', 'Server muted - all text messages translated to emojis'],
+        winCondition: 'Get yourself lynched during the day',
+        nightAction: false,
+        attack: 3,
+        defense: 0,
+        isMuteBee: true
     },
     BOUNTY_HUNTER: {
         name: 'Bounty Hunter',
@@ -592,6 +687,21 @@ const ROLES = {
         attack: 0,
         defense: 0, // 2 when vested
         vests: 3
+    },
+    MUTE_BUTTERFLY: {
+        name: 'Mute Butterfly',
+        emoji: '🦋',
+        team: 'neutral',
+        subteam: 'benign',
+        description: 'You are a **Mute Butterfly** (Survivor)! You just want to survive until the end. You are permanently muted and all messages are turned into emojis!',
+        abilities: ['Put on a vest 4 times for powerful defense', 'Server muted - all text messages translated to emojis'],
+        winCondition: 'Survive to the end of the game',
+        nightAction: true,
+        actionType: 'vest',
+        attack: 0,
+        defense: 0,
+        vests: 3,
+        isMuteBee: true
     },
     SPIDER: {
         name: 'Spider',
@@ -625,10 +735,11 @@ const ROLES = {
         emoji: '🏴‍☠️',
         team: 'neutral',
         subteam: 'chaos',
-        description: 'You are a **Pirate Beetle**! You must plunder players by dueling them at night. Win 2 duels to achieve victory.',
-        abilities: ['Challenge one player to a duel each night (rock-paper-scissors)', 'Win 2 duels to win the game', 'Basic defense', 'Become Butterfly after winning'],
+        description: 'You are a **Pirate Beetle**! You must plunder players by dueling them. Choose your target at dawn, they respond at night, and results appear at dawn.',
+        abilities: ['Challenge one player to a duel (rock-paper-scissors)', 'Target chooses response during night while roleblocked', 'Win 2 duels to win the game', 'Basic defense', 'Become Butterfly after winning'],
         winCondition: 'Successfully plunder 2 players by winning duels',
-        nightAction: true,
+        nightAction: false, // No night action - target responds at night
+        duskAction: true, // Select target at dusk
         actionType: 'pirate_duel',
         attack: 0,
         defense: 1, // Basic defense

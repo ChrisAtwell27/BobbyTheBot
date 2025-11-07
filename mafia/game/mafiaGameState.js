@@ -116,7 +116,7 @@ function getVisitors(game, targetId) {
 }
 
 /**
- * Clear nightly data (visits, actions, frames, seances, blackmail)
+ * Clear nightly data (visits, actions, frames, seances, blackmail, jail communication)
  * @param {Object} game - Game object
  */
 function clearNightData(game) {
@@ -125,11 +125,19 @@ function clearNightData(game) {
     game.nightResults = [];
     game.framedPlayers.clear();
     game.activeSeances = []; // Clear seance connections
+    game.jailCommunication = []; // Clear jail communication sessions
 
     // Clear blackmail - players can speak again after one day
     if (game.blackmailedPlayers) {
         game.blackmailedPlayers.clear();
     }
+
+    // Clear jailed targets so Jailers select new targets at next dusk
+    game.players.forEach(p => {
+        if (p.jailedTarget) {
+            delete p.jailedTarget;
+        }
+    });
 }
 
 /**

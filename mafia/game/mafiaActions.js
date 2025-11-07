@@ -982,6 +982,14 @@ async function processRemember(game, amnesiac, action, client) {
  * Apply roleblocks - cancel actions of roleblocked/jailed players
  */
 function applyRoleblocks(game, roleblocks, jailedPlayers) {
+    // Add pirate duel targets to roleblock list
+    if (game.pirateDuels && game.pirateDuels.length > 0) {
+        for (const duel of game.pirateDuels) {
+            // Pirate targets are roleblocked
+            roleblocks.set(duel.targetId, duel.pirateId);
+        }
+    }
+
     for (const [userId, action] of Object.entries(game.nightActions)) {
         const player = game.players.find(p => p.id === userId);
         if (!player) continue;
@@ -1220,75 +1228,20 @@ async function processHypnotize(game, hypnotist, action) {
 }
 
 /**
- * Process pirate duel action
+ * Process pirate duel action - now handled via game.pirateDuels at dawn
+ * This function is called during night processing to handle roleblocking
  */
 async function processPirateDuel(game, pirate, action, client) {
-    const targetId = action.target;
-    const pirateChoice = action.choice; // 'rock', 'paper', or 'scissors'
+    // Pirate duels are now resolved at dawn, not during night processing
+    // The duel data is stored in game.pirateDuels and processed separately
+    // This function is kept for compatibility but does minimal work
 
-    addVisit(game, pirate.id, targetId);
-
-    // Generate random choice for target
-    const choices = ['rock', 'paper', 'scissors'];
-    const targetChoice = choices[Math.floor(Math.random() * choices.length)];
-
-    // Determine winner
-    let pirateWon = false;
-    if (
-        (pirateChoice === 'rock' && targetChoice === 'scissors') ||
-        (pirateChoice === 'paper' && targetChoice === 'rock') ||
-        (pirateChoice === 'scissors' && targetChoice === 'paper')
-    ) {
-        pirateWon = true;
-        pirate.duelsWon = (pirate.duelsWon || 0) + 1;
-    }
-
+    // Just mark that pirate duel is in progress (actual processing happens at dawn)
     game.nightResults.push({
-        type: 'pirate_duel',
+        type: 'pirate_duel_processing',
         pirateId: pirate.id,
-        targetId: targetId,
-        pirateChoice: pirateChoice,
-        targetChoice: targetChoice,
-        pirateWon: pirateWon,
-        duelsWon: pirate.duelsWon
+        note: 'Duel results will be revealed at dawn'
     });
-
-    // Notify pirate of results
-    try {
-        const target = game.players.find(p => p.id === targetId);
-        const user = await client.users.fetch(pirate.id);
-
-        const resultEmbed = new EmbedBuilder()
-            .setColor(pirateWon ? '#00FF00' : '#FF0000')
-            .setTitle('🏴‍☠️ Duel Results!')
-            .setDescription(`You challenged **${target.displayName}** to a duel!`)
-            .addFields(
-                { name: 'Your Choice', value: pirateChoice, inline: true },
-                { name: 'Their Choice', value: targetChoice, inline: true },
-                { name: 'Result', value: pirateWon ? '**You won!** ⚔️' : 'You lost.', inline: false },
-                { name: 'Duels Won', value: `${pirate.duelsWon || 0}/${pirate.duelsNeeded || 2}`, inline: false }
-            )
-            .setTimestamp();
-
-        await user.send({ embeds: [resultEmbed] });
-
-        // Check if pirate has won the game
-        if (pirate.duelsWon >= (pirate.duelsNeeded || 2)) {
-            // Convert to Butterfly (Survivor)
-            pirate.role = 'BUTTERFLY';
-            pirate.vests = 3;
-
-            const winEmbed = new EmbedBuilder()
-                .setColor('#FFD700')
-                .setTitle('🏴‍☠️ Victory!')
-                .setDescription('You have successfully plundered 2 players! You have won and now become a **Butterfly** (Survivor). Your goal is now to survive until the end.')
-                .setTimestamp();
-
-            await user.send({ embeds: [winEmbed] });
-        }
-    } catch (error) {
-        console.error(`Could not send pirate duel result:`, error);
-    }
 }
 
 /**

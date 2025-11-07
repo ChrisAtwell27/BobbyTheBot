@@ -629,6 +629,52 @@ async function startNightPhase(game, client) {
     // Send night announcement to all players via DM
     await sendToEveryoneInGame(game, client, nightEmbed);
 
+    // Initialize jail communication tracking
+    game.jailCommunication = [];
+
+    // Notify jailed players and set up communication
+    const jailers = game.players.filter(p => p.alive && p.jailedTarget);
+    for (const jailer of jailers) {
+        const jailedPlayer = game.players.find(p => p.id === jailer.jailedTarget);
+        if (jailedPlayer && jailedPlayer.alive) {
+            // Store jail communication session
+            game.jailCommunication.push({
+                jailerId: jailer.id,
+                jailedId: jailedPlayer.id,
+                jailerName: jailer.displayName,
+                jailedName: jailedPlayer.displayName
+            });
+
+            // Notify jailed player
+            try {
+                const jailedUser = await client.users.fetch(jailedPlayer.id);
+                const jailEmbed = new EmbedBuilder()
+                    .setColor('#808080')
+                    .setTitle('⛓️ You Have Been Jailed!')
+                    .setDescription(`You are being held in jail by a Jailer Bee!\n\n• You cannot perform your night action\n• You cannot be targeted by anyone\n• You can communicate with the Jailer\n• The Jailer may choose to execute you\n\nSend messages here to talk to the Jailer!`)
+                    .setTimestamp();
+                await jailedUser.send({ embeds: [jailEmbed] });
+            } catch (error) {
+                console.error(`Could not notify jailed player ${jailedPlayer.displayName}:`, error);
+            }
+
+            // Notify jailer
+            try {
+                const jailerUser = await client.users.fetch(jailer.id);
+                const role = ROLES[jailer.role];
+                const jailerEmbed = new EmbedBuilder()
+                    .setColor('#FFD700')
+                    .setTitle(`${role.emoji} You Have Jailed ${jailedPlayer.displayName}`)
+                    .setDescription(`You are holding **${jailedPlayer.displayName}** in jail tonight.\n\n• They cannot perform their action\n• They cannot be targeted by anyone\n• You can communicate with them\n• You may choose to execute them\n\nSend messages here to talk to your prisoner!\n\nWhen ready, send **"execute"** to execute them or **"skip"** to release them.`)
+                    .setFooter({ text: `Executions remaining: ${jailer.executions}` })
+                    .setTimestamp();
+                await jailerUser.send({ embeds: [jailerEmbed] });
+            } catch (error) {
+                console.error(`Could not notify jailer ${jailer.displayName}:`, error);
+            }
+        }
+    }
+
     // Send night action prompts
     await sendNightActionPrompts(game, client);
 
@@ -1006,23 +1052,8 @@ async function sendNightActionPrompts(game, client) {
                     break;
 
                 case 'jail':
-                    // Jailer Bee - execute decision (target already selected at dusk)
-                    if (player.jailedTarget) {
-                        const jailedPlayer = game.players.find(p => p.id === player.jailedTarget);
-                        embed = new EmbedBuilder()
-                            .setColor(color)
-                            .setTitle(`${role.emoji} Night Phase - Execute Decision`)
-                            .setDescription(`You have jailed **${jailedPlayer.displayName}**.\n\nSend **"execute"** to execute them (${player.executions} execution${player.executions !== 1 ? 's' : ''} remaining)\nSend **"skip"** to keep them jailed without execution`)
-                            .setFooter({ text: 'Choose wisely!' });
-                    } else {
-                        // No target selected at dusk (shouldn't happen normally)
-                        embed = new EmbedBuilder()
-                            .setColor(color)
-                            .setTitle(`${role.emoji} Night Phase`)
-                            .setDescription(`You did not select anyone to jail at dusk.\n\nSend **"skip"** to continue.`)
-                            .setFooter({ text: 'You can jail someone next time!' });
-                    }
-                    break;
+                    // Jailer Bee - skip prompt (already sent in startNightPhase with jail notification)
+                    continue;
 
                 case 'roleblock':
                     // Escort/Consort - roleblock someone
@@ -1131,23 +1162,6 @@ async function sendNightActionPrompts(game, client) {
                         .setTitle(`${role.emoji} Night Phase - Remember Your Role`)
                         .setDescription(`Choose a dead player. You will become their role and join their team!\n\n${targets}`)
                         .setFooter({ text: 'Choose your destiny!' });
-                    break;
-
-                case 'pirate_duel':
-                    // Pirate Beetle - challenge someone to a duel
-                    targets = alivePlayers
-                        .filter(p => p.id !== player.id)
-                        .map((p, i) => `${i + 1}. ${p.displayName}`)
-                        .join('\n');
-
-                    const duelsWon = player.duelsWon || 0;
-                    const duelsNeeded = player.duelsNeeded || 2;
-
-                    embed = new EmbedBuilder()
-                        .setColor(color)
-                        .setTitle(`${role.emoji} Night Phase - Challenge to a Duel`)
-                        .setDescription(`Choose someone to duel! Send: **[number] [rock/paper/scissors]**\n\nExample: **1 rock**\n\nDuels Won: ${duelsWon}/${duelsNeeded}\n\n${targets}`)
-                        .setFooter({ text: 'Win 2 duels to become a Butterfly!' });
                     break;
 
                 case 'track':
@@ -1544,6 +1558,34 @@ async function sendNightActionPrompts(game, client) {
             console.error(`Could not send night action prompt to ${player.displayName}:`, error);
         }
     }
+
+    // Send prompts to pirate duel targets
+    if (game.pirateDuels && game.pirateDuels.length > 0) {
+        for (const duel of game.pirateDuels) {
+            const target = game.players.find(p => p.id === duel.targetId);
+            if (!target || !target.alive) continue;
+
+            const pirate = game.players.find(p => p.id === duel.pirateId);
+            if (!pirate || !pirate.alive) continue;
+
+            try {
+                const user = await client.users.fetch(duel.targetId);
+                const embed = new EmbedBuilder()
+                    .setColor('#FF6347')
+                    .setTitle('🏴‍☠️ Pirate Duel Challenge!')
+                    .setDescription(`**${pirate.displayName}** the Pirate Beetle has challenged you to a duel!\n\nYou are **roleblocked** tonight and cannot perform your action. You must choose your response:\n\n**Send: rock, paper, or scissors**\n\nIf you don't respond, a random choice will be made for you!`)
+                    .setFooter({ text: 'Choose wisely, matey!' })
+                    .setTimestamp();
+
+                await user.send({ embeds: [embed] });
+            } catch (error) {
+                console.error(`Could not send pirate duel prompt to ${target.displayName}:`, error);
+                // Auto-set random choice if we can't reach them
+                const choices = ['rock', 'paper', 'scissors'];
+                duel.targetChoice = choices[Math.floor(Math.random() * choices.length)];
+            }
+        }
+    }
 }
 
 // Process night action
@@ -1557,6 +1599,24 @@ async function processNightAction(userId, message, game, client) {
     const alivePlayers = game.players.filter(p => p.alive);
     const input = message.content.trim().toLowerCase();
     const choice = parseInt(input);
+
+    // Check if player is a pirate duel target (they should respond with rock/paper/scissors)
+    if (game.pirateDuels && game.pirateDuels.length > 0) {
+        const duel = game.pirateDuels.find(d => d.targetId === userId && !d.targetChoice);
+        if (duel) {
+            // Player is a pirate target and needs to respond
+            if (['rock', 'paper', 'scissors'].includes(input)) {
+                duel.targetChoice = input;
+                await message.reply(`You chose **${input}**! 🏴‍☠️\n\nYou are roleblocked tonight. Results will be revealed at dawn!`);
+                return; // Pirate target only responds to duel, no other action
+            } else if (!isNaN(choice)) {
+                // They're trying to do their regular action but they're dueling
+                await message.reply('You are being challenged by a Pirate! You must respond with **rock**, **paper**, or **scissors** instead of performing your normal action.');
+                return;
+            }
+            // If neither, fall through to normal handling (might be wasp chat, etc.)
+        }
+    }
 
     // Handle Wasp coordination messages (text messages, not numbers)
     if (role.team === 'wasp' && isNaN(choice)) {
@@ -1929,31 +1989,6 @@ async function processNightAction(userId, message, game, client) {
             }
             break;
 
-        case 'pirate_duel':
-            // Pirate Beetle - duel a player (rock-paper-scissors)
-            const duelParts = input.split(' ');
-            const duelChoice = parseInt(duelParts[0]);
-            const rpsChoice = duelParts.length > 1 ? duelParts[1].toLowerCase() : null;
-
-            if (!rpsChoice || !['rock', 'paper', 'scissors'].includes(rpsChoice)) {
-                await message.reply('Send: **number rock/paper/scissors** (e.g., "1 rock")');
-                return;
-            }
-
-            validTargets = alivePlayers.filter(p => p.id !== userId);
-            if (duelChoice >= 1 && duelChoice <= validTargets.length) {
-                target = validTargets[duelChoice - 1];
-                game.nightActions[userId] = {
-                    actionType: 'pirate_duel',
-                    target: target.id,
-                    choice: rpsChoice
-                };
-                await message.reply(`You are challenging **${target.displayName}** to a duel with **${rpsChoice}**! 🏴‍☠️`);
-            } else {
-                await sendInvalidChoiceMessage(message, validTargets, 'Send: number rock/paper/scissors (e.g., "1 rock")');
-            }
-            break;
-
         case 'guardian':
             // Guardian Ant - choose target on night 1, then auto-protect
             if (!player.guardianTarget) {
@@ -2316,7 +2351,91 @@ async function endNightPhase(game, client) {
     // Send dawn announcement to all players via DM
     await sendToEveryoneInGame(game, client, dawnEmbed);
 
-    // Clear night data after processing
+    // Process pirate duels and send results at dawn
+    if (game.pirateDuels && game.pirateDuels.length > 0) {
+        for (const duel of game.pirateDuels) {
+            const pirate = game.players.find(p => p.id === duel.pirateId);
+            const target = game.players.find(p => p.id === duel.targetId);
+
+            if (!pirate || !pirate.alive) continue;
+
+            // If target didn't respond, pick random choice
+            if (!duel.targetChoice) {
+                const choices = ['rock', 'paper', 'scissors'];
+                duel.targetChoice = choices[Math.floor(Math.random() * choices.length)];
+            }
+
+            // Determine winner
+            let pirateWon = false;
+            if (
+                (duel.pirateChoice === 'rock' && duel.targetChoice === 'scissors') ||
+                (duel.pirateChoice === 'paper' && duel.targetChoice === 'rock') ||
+                (duel.pirateChoice === 'scissors' && duel.targetChoice === 'paper')
+            ) {
+                pirateWon = true;
+                pirate.duelsWon = (pirate.duelsWon || 0) + 1;
+            }
+
+            // Send results to pirate
+            try {
+                const pirateUser = await client.users.fetch(duel.pirateId);
+                const pirateEmbed = new EmbedBuilder()
+                    .setColor(pirateWon ? '#00FF00' : '#FF0000')
+                    .setTitle('🏴‍☠️ Duel Results!')
+                    .setDescription(`You challenged **${target.displayName}** to a duel!`)
+                    .addFields(
+                        { name: 'Your Choice', value: duel.pirateChoice, inline: true },
+                        { name: 'Their Choice', value: duel.targetChoice, inline: true },
+                        { name: 'Result', value: pirateWon ? '**You won!** ⚔️' : 'You lost.', inline: false },
+                        { name: 'Duels Won', value: `${pirate.duelsWon || 0}/${pirate.duelsNeeded || 2}`, inline: false }
+                    )
+                    .setTimestamp();
+
+                await pirateUser.send({ embeds: [pirateEmbed] });
+
+                // Check if pirate has won the game
+                if (pirate.duelsWon >= (pirate.duelsNeeded || 2)) {
+                    // Convert to Butterfly (Survivor)
+                    pirate.role = 'BUTTERFLY';
+                    pirate.vests = 3;
+
+                    const winEmbed = new EmbedBuilder()
+                        .setColor('#FFD700')
+                        .setTitle('🏴‍☠️ Victory!')
+                        .setDescription('You have successfully plundered 2 players! You have won and now become a **Butterfly** (Survivor). Your goal is now to survive until the end.')
+                        .setTimestamp();
+
+                    await pirateUser.send({ embeds: [winEmbed] });
+                }
+            } catch (error) {
+                console.error(`Could not send pirate duel result to pirate:`, error);
+            }
+
+            // Send results to target
+            if (target && target.alive) {
+                try {
+                    const targetUser = await client.users.fetch(duel.targetId);
+                    const targetEmbed = new EmbedBuilder()
+                        .setColor(pirateWon ? '#FF0000' : '#00FF00')
+                        .setTitle('🏴‍☠️ Duel Results!')
+                        .setDescription(`**${pirate.displayName}** the Pirate challenged you to a duel!`)
+                        .addFields(
+                            { name: 'Your Choice', value: duel.targetChoice, inline: true },
+                            { name: 'Their Choice', value: duel.pirateChoice, inline: true },
+                            { name: 'Result', value: pirateWon ? 'The Pirate won.' : '**You won!** ⚔️', inline: false }
+                        )
+                        .setTimestamp();
+
+                    await targetUser.send({ embeds: [targetEmbed] });
+                } catch (error) {
+                    console.error(`Could not send pirate duel result to target:`, error);
+                }
+            }
+        }
+    }
+
+    // Clear night data after processing (including pirate duels)
+    game.pirateDuels = [];
     clearNightData(game);
 
     // Check win condition
@@ -2745,6 +2864,23 @@ async function startDuskPhase(game, client) {
                         .setFooter({ text: 'Everyone is waiting for you!' });
                     break;
 
+                case 'pirate_duel':
+                    // Pirate Beetle - select target and your choice at dusk
+                    const pirateTargets = alivePlayers
+                        .filter(p => p.id !== player.id)
+                        .map((p, i) => `${i + 1}. ${p.displayName}`)
+                        .join('\n');
+
+                    const duelsWon = player.duelsWon || 0;
+                    const duelsNeeded = player.duelsNeeded || 2;
+
+                    embed = new EmbedBuilder()
+                        .setColor(color)
+                        .setTitle(`${role.emoji} Dusk Phase - Challenge to a Duel`)
+                        .setDescription(`Choose someone to duel! Send: **[number] [rock/paper/scissors]**\n\nExample: **1 rock**\n\nYour target will be roleblocked during the night and must choose their response. Results appear at dawn!\n\nDuels Won: ${duelsWon}/${duelsNeeded}\n\n${pirateTargets}`)
+                        .setFooter({ text: 'Everyone is waiting for you!' });
+                    break;
+
                 default:
                     continue;
             }
@@ -2852,6 +2988,45 @@ async function processDuskAction(userId, message, game, client) {
                 }
             } else {
                 await message.reply(`Please send two numbers separated by a space (e.g., "1 3") or **"skip"**.`);
+            }
+            break;
+
+        case 'pirate_duel':
+            // Pirate Beetle - select target and choice at dusk
+            const duelParts = input.split(' ');
+            const duelChoice = parseInt(duelParts[0]);
+            const pirateChoice = duelParts.length > 1 ? duelParts[1].toLowerCase() : null;
+
+            if (!pirateChoice || !['rock', 'paper', 'scissors'].includes(pirateChoice)) {
+                await message.reply('Send: **number rock/paper/scissors** (e.g., "1 rock")');
+                return;
+            }
+
+            const pirateValidTargets = alivePlayers.filter(p => p.id !== userId);
+            if (duelChoice >= 1 && duelChoice <= pirateValidTargets.length) {
+                const target = pirateValidTargets[duelChoice - 1];
+
+                game.duskActions[userId] = {
+                    actionType: 'pirate_duel_select',
+                    target: target.id,
+                    pirateChoice: pirateChoice
+                };
+
+                // Store pirate duel data for the night
+                if (!game.pirateDuels) {
+                    game.pirateDuels = [];
+                }
+                game.pirateDuels.push({
+                    pirateId: userId,
+                    targetId: target.id,
+                    pirateChoice: pirateChoice,
+                    targetChoice: null // Will be set during night when target responds
+                });
+
+                await message.reply(`You are challenging **${target.displayName}** to a duel with **${pirateChoice}**! 🏴‍☠️\n\nThey will be roleblocked tonight and must respond with their choice. Results will appear at dawn!`);
+                await checkDuskComplete(game, client);
+            } else {
+                await message.reply(`Invalid choice. Please send a valid number (1-${pirateValidTargets.length}) followed by rock/paper/scissors, or **"skip"**.`);
             }
             break;
 
@@ -3778,6 +3953,29 @@ module.exports = (client) => {
                     await message.reply(`Invalid choice! Please send a number between 1 and ${validTargets.length}.`);
                 }
                 return;
+            }
+
+            // Check for jail communication (during night phase)
+            if (game.phase === 'night' && game.jailCommunication && game.jailCommunication.length > 0) {
+                const jailSession = game.jailCommunication.find(j =>
+                    j.jailerId === message.author.id || j.jailedId === message.author.id
+                );
+
+                // If in a jail session and message is not a command, relay it
+                if (jailSession && !['execute', 'skip'].includes(message.content.trim().toLowerCase()) && isNaN(message.content.trim())) {
+                    const isJailer = jailSession.jailerId === message.author.id;
+                    const targetId = isJailer ? jailSession.jailedId : jailSession.jailerId;
+                    const senderName = isJailer ? jailSession.jailerName : jailSession.jailedName;
+
+                    try {
+                        const targetUser = await client.users.fetch(targetId);
+                        const prefix = isJailer ? '⛓️ **Jailer:**' : '🔒 **Prisoner:**';
+                        await targetUser.send(`${prefix} ${message.content}`);
+                    } catch (error) {
+                        console.error('Could not relay jail message:', error);
+                    }
+                    return;
+                }
             }
 
             // Check for active seance communication (during night phase)
