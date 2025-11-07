@@ -6,6 +6,24 @@
 const { ROLES } = require('../roles/mafiaRoles');
 
 /**
+ * Get a player's actual team (respecting conversions)
+ * @param {Object} player - Player object
+ * @returns {string} Team name ('bee', 'wasp', or 'neutral')
+ */
+function getPlayerTeam(player) {
+    // Check if player was converted (Yakuza conversion overrides role team)
+    if (player.originalTeam) {
+        return player.originalTeam;
+    }
+    // Check if Mercenary with assigned team
+    if (player.role === 'MERCENARY' && player.mercenaryTeam) {
+        return player.mercenaryTeam;
+    }
+    // Otherwise use the role's default team
+    return ROLES[player.role].team;
+}
+
+/**
  * Get role distribution based on player count
  * @param {number} playerCount - Number of players
  * @param {boolean} randomMode - If true, uses fully random distribution (only wasp count and queen guaranteed)
@@ -126,11 +144,11 @@ function shuffleArray(array) {
  */
 function getTeamCounts(game) {
     const alive = game.players.filter(p => p.alive);
-    const wasps = alive.filter(p => ROLES[p.role].team === 'wasp').length;
-    const bees = alive.filter(p => ROLES[p.role].team === 'bee').length;
-    const neutralKilling = alive.filter(p => ROLES[p.role].team === 'neutral' && ROLES[p.role].subteam === 'killing').length;
-    const neutralEvil = alive.filter(p => ROLES[p.role].team === 'neutral' && ROLES[p.role].subteam === 'evil').length;
-    const neutralBenign = alive.filter(p => ROLES[p.role].team === 'neutral' && ROLES[p.role].subteam === 'benign').length;
+    const wasps = alive.filter(p => getPlayerTeam(p) === 'wasp').length;
+    const bees = alive.filter(p => getPlayerTeam(p) === 'bee').length;
+    const neutralKilling = alive.filter(p => getPlayerTeam(p) === 'neutral' && ROLES[p.role].subteam === 'killing').length;
+    const neutralEvil = alive.filter(p => getPlayerTeam(p) === 'neutral' && ROLES[p.role].subteam === 'evil').length;
+    const neutralBenign = alive.filter(p => getPlayerTeam(p) === 'neutral' && ROLES[p.role].subteam === 'benign').length;
 
     return {
         wasps,
@@ -169,10 +187,13 @@ function determineWinners(game, winnerType, specificWinner = null) {
 
     game.players.forEach(player => {
         const role = ROLES[player.role];
+        const team = getPlayerTeam(player);
 
-        if (winnerType === 'bees' && role.team === 'bee') {
+        if (winnerType === 'bees' && team === 'bee') {
             winners.push(player);
-        } else if (winnerType === 'wasps' && role.team === 'wasp') {
+        } else if (winnerType === 'wasps' && team === 'wasp') {
+            winners.push(player);
+        } else if (winnerType === 'cult' && (player.role === 'CULTIST' || player.convertedToCult)) {
             winners.push(player);
         } else if (winnerType === 'neutral_killer' && player.id === specificWinner?.id) {
             winners.push(player);
@@ -183,15 +204,70 @@ function determineWinners(game, winnerType, specificWinner = null) {
         }
 
         // Survivors win with anyone (if alive)
-        if (player.alive && player.role === 'BUTTERFLY') {
+        if (player.alive && (player.role === 'BUTTERFLY' || player.role === 'MUTE_BUTTERFLY')) {
             if (!winners.includes(player)) {
                 winners.push(player);
             }
         }
 
+        // Gossip Beetle wins with anyone (if alive)
+        if (player.alive && player.role === 'GOSSIP_BEETLE') {
+            if (!winners.includes(player)) {
+                winners.push(player);
+            }
+        }
+
+        // Oracle wins with anyone (if alive)
+        if (player.alive && player.role === 'ORACLE') {
+            if (!winners.includes(player)) {
+                winners.push(player);
+            }
+        }
+
+        // Wildcard wins with anyone (if alive)
+        if (player.alive && player.role === 'WILDCARD') {
+            if (!winners.includes(player)) {
+                winners.push(player);
+            }
+        }
+
+        // Judge wins if alive, used ability, and changed outcome
+        if (player.alive && player.role === 'JUDGE' && player.hasUsedRevote && player.changedOutcome) {
+            if (!winners.includes(player)) {
+                winners.push(player);
+            }
+        }
+
+        // Phantom Moth wins if alive and has been lynched before
+        if (player.alive && player.role === 'PHANTOM_MOTH' && player.hasBeenLynched) {
+            if (!winners.includes(player)) {
+                winners.push(player);
+            }
+        }
+
+        // Guardian Ant wins if alive and their target wins
+        if (player.alive && player.role === 'GUARDIAN_ANT' && player.guardianTarget) {
+            const target = game.players.find(p => p.id === player.guardianTarget);
+            if (target && winners.includes(target)) {
+                if (!winners.includes(player)) {
+                    winners.push(player);
+                }
+            }
+        }
+
+        // Matchmaker Beetle wins if alive and their linked partner wins
+        if (player.alive && player.role === 'MATCHMAKER_BEETLE' && player.linkedPartner) {
+            const partner = game.players.find(p => p.id === player.linkedPartner);
+            if (partner && winners.includes(partner)) {
+                if (!winners.includes(player)) {
+                    winners.push(player);
+                }
+            }
+        }
+
         // Spider wins if they're alive and sees bees or wasps lose
         if (player.alive && player.role === 'SPIDER') {
-            if (winnerType === 'neutral_killer' || (winnerType === 'wasps' && role.team !== 'bee') || (winnerType === 'bees' && role.team !== 'wasp')) {
+            if (winnerType === 'neutral_killer' || (winnerType === 'wasps' && team !== 'bee') || (winnerType === 'bees' && team !== 'wasp')) {
                 if (!winners.includes(player)) {
                     winners.push(player);
                 }
@@ -209,6 +285,14 @@ function determineWinners(game, winnerType, specificWinner = null) {
  */
 function checkWinConditions(game) {
     const { wasps, bees, neutralKilling, neutralEvil, total } = getTeamCounts(game);
+
+    // Check for Cult win (all alive players are cult members)
+    const alivePlayers = game.players.filter(p => p.alive);
+    const cultMembers = alivePlayers.filter(p => p.role === 'CULTIST' || p.convertedToCult);
+    if (cultMembers.length > 0 && cultMembers.length === alivePlayers.length) {
+        const cultLeader = game.players.find(p => p.role === 'CULTIST') || cultMembers[0];
+        return { type: 'cult', winner: cultLeader };
+    }
 
     // Check for Neutral Killer solo win (only they remain)
     if (total === 1 && neutralKilling === 1) {
@@ -281,6 +365,7 @@ function initializePlayerRole(player, roleKey) {
 }
 
 module.exports = {
+    getPlayerTeam,
     getRoleDistribution,
     shuffleArray,
     getTeamCounts,

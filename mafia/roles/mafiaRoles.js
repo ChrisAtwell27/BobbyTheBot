@@ -894,10 +894,10 @@ const ROLES = {
         team: 'neutral',
         subteam: 'evil',
         description: 'You are a **Cultist**! Convert players to your cult and win together.',
-        abilities: ['Convert one player each night', 'Converted players join the Cult', 'Win after converting 3 players', 'Fails on Wasps and Neutral Killing roles', 'Basic defense'],
-        winCondition: 'Convert 3 players and have all cult members alive',
+        abilities: ['All cult members vote each night for who to convert', 'Most voted player gets converted', 'Converted players join the Cult and can vote', 'Fails on Wasps and Neutral Killing roles', 'Basic defense'],
+        winCondition: 'Convert all alive players to the Cult',
         nightAction: true,
-        actionType: 'cultist',
+        actionType: 'cult_vote',
         attack: 0,
         defense: 1, // Basic defense
         conversions: 0

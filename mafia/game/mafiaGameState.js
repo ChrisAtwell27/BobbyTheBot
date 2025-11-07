@@ -100,6 +100,11 @@ function getAllGames() {
  * @param {string} targetId - ID of target player
  */
 function addVisit(game, visitorId, targetId) {
+    // Block visits to kidnapped players
+    if (game.kidnappedPlayers && game.kidnappedPlayers.has(targetId)) {
+        return; // Cannot visit kidnapped players
+    }
+
     if (!game.visits[targetId]) {
         game.visits[targetId] = [];
     }
@@ -182,6 +187,15 @@ function clearNightData(game) {
     // Clear transports - only last one night
     if (game.transports) {
         game.transports = [];
+    }
+
+    // Clean up expired kidnappings (release at start of new night)
+    if (game.kidnappedPlayers) {
+        for (const [playerId, kidnapInfo] of game.kidnappedPlayers.entries()) {
+            if (kidnapInfo.releaseNight <= game.nightNumber) {
+                game.kidnappedPlayers.delete(playerId);
+            }
+        }
     }
 }
 

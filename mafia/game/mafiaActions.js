@@ -9,6 +9,7 @@
 
 const { ROLES } = require('../roles/mafiaRoles');
 const { addVisit, getVisitors } = require('./mafiaGameState');
+const { getPlayerTeam } = require('./mafiaUtils');
 const { EmbedBuilder } = require('discord.js');
 
 /**
@@ -52,6 +53,13 @@ async function processNightActions(game, client) {
         if (!player || (!player.alive && !isRevived)) continue;
 
         const role = ROLES[player.role];
+
+        // Check if player is kidnapped - they cannot act
+        const isKidnapped = game.kidnappedPlayers && game.kidnappedPlayers.has(userId);
+        if (isKidnapped) {
+            // Skip processing - kidnapped players cannot act
+            continue;
+        }
 
         // Check if player is sabotaged - their action fails silently
         const isSabotaged = game.sabotagedPlayers && game.sabotagedPlayers.has(userId);
@@ -189,14 +197,17 @@ async function processNightActions(game, client) {
             case 'yakuza':
                 await processYakuza(game, player, action, client);
                 break;
-            case 'cultist':
-                await processCultist(game, player, action, client);
+            case 'cult_vote':
+                // Cult votes are processed together after all votes are collected
                 break;
             case 'wildcard':
-                await processWildcard(game, player, action, client);
+                await processWildcard(game, player, action, client, protections, attacks);
                 break;
         }
     }
+
+    // Process cult votes (tally and convert most voted target)
+    await processCultVotes(game, client);
 
     // Process trap results (must happen before roleblocks and attack resolution)
     await processTrapResults(game, client, attacks);
@@ -276,8 +287,18 @@ async function processNightActions(game, client) {
     // Process lookout
     await processLookouts(game, client);
 
+    // Process wildcard visitor results
+    await processWildcardVisitors(game, client);
+    await processWildcardRandomVisitors(game, client);
+
     // Process tracker
     await processTrackers(game, client);
+
+    // Process arsonist (Fire Ant)
+    await processArsonists(game, client);
+
+    // Process vest (Butterfly/Survivor)
+    await processVests(game, client);
 
     // Process pollinator
     await processPollinators(game, client);
@@ -472,6 +493,7 @@ async function processSerialKill(game, sk, action, attacks) {
 async function processArsonist(game, arsonist, action, attacks) {
     if (action.ignite) {
         // Ignite all doused players
+        const dousedCount = game.dousedPlayers.size;
         for (const targetId of game.dousedPlayers) {
             const target = game.players.find(p => p.id === targetId);
             if (target && target.alive) {
@@ -489,18 +511,26 @@ async function processArsonist(game, arsonist, action, attacks) {
 
         game.nightResults.push({
             type: 'ignite',
-            arsonistId: arsonist.id
+            arsonistId: arsonist.id,
+            dousedCount: dousedCount
         });
     } else {
         // Douse target
         const targetId = action.target;
+        const target = game.players.find(p => p.id === targetId);
+
         addVisit(game, arsonist.id, targetId);
-        game.dousedPlayers.add(targetId);
+
+        // Don't douse Fire Ants (immune to fire) or self
+        if (target && target.role !== 'FIRE_ANT') {
+            game.dousedPlayers.add(targetId);
+        }
 
         game.nightResults.push({
             type: 'douse',
             arsonistId: arsonist.id,
-            targetId: targetId
+            targetId: targetId,
+            successful: target && target.role !== 'FIRE_ANT'
         });
     }
 }
@@ -593,7 +623,7 @@ function applyTransports(game, attacks, protections, healers) {
  * Serial Killer kills all visitors
  */
 function processSerialKillerCounterattacks(game, attacks) {
-    const serialKillers = game.players.filter(p => p.alive && p.role === 'MURDER_HORNET');
+    const serialKillers = game.players.filter(p => p.alive && (p.role === 'MURDER_HORNET' || p.role === 'MUTE_MURDER_HORNET'));
 
     for (const sk of serialKillers) {
         const visitors = getVisitors(game, sk.id);
@@ -644,11 +674,17 @@ function resolveAttacks(game, attacks, protections, healers) {
             continue; // Skip this target - they're protected by Beekeeper
         }
 
+        // Fire Ant is immune to arson attacks
+        const isFirAnt = target.role === 'FIRE_ANT';
+        const filteredAttacks = isFirAnt
+            ? attackArray.filter(attack => attack.attackType !== 'arson')
+            : attackArray;
+
         const killingAttacks = []; // Track all attacks that would kill
         let usedCoin = false;
 
         // Check each attack
-        for (const attack of attackArray) {
+        for (const attack of filteredAttacks) {
             if (attack.attackLevel >= defense) {
                 // Check if target is Gambler Beetle with lucky coins (only once)
                 if (!usedCoin && target.role === 'GAMBLER_BEETLE' && target.luckyCoins > 0) {
@@ -940,6 +976,96 @@ async function processLookouts(game, client) {
 }
 
 /**
+ * Process wildcard visitor results
+ */
+async function processWildcardVisitors(game, client) {
+    const wildcardResults = game.nightResults.filter(r => r.type === 'wildcard_visitors');
+
+    for (const result of wildcardResults) {
+        const wildcard = game.players.find(p => p.id === result.wildcardId);
+        if (!wildcard || !wildcard.alive) continue;
+
+        const visitors = getVisitors(game, wildcard.id);
+
+        let visitorsText = 'No one visited you.';
+        if (visitors.length > 0) {
+            const visitorNames = visitors.map(vid => {
+                const visitor = game.players.find(p => p.id === vid);
+                return visitor ? visitor.displayName : 'Unknown';
+            });
+            visitorsText = visitorNames.join(', ');
+        }
+
+        try {
+            const user = await client.users.fetch(wildcard.id);
+            const hasVisitors = visitors.length > 0;
+            const resultEmbed = createImportantEmbed(
+                '🎲 WILDCARD: SEE VISITORS',
+                'Your random ability tonight was to see who visited you!',
+                hasVisitors ? '#FFD700' : '#808080'
+            )
+                .addFields({
+                    name: hasVisitors ? '👥 Visitors Detected!' : '👥 No Visitors',
+                    value: `>>> ${visitorsText}`,
+                    inline: false
+                })
+                .setFooter({ text: 'Wildcard - Visitor Detection' });
+
+            await user.send({ embeds: [resultEmbed] });
+        } catch (error) {
+            console.error(`Could not send wildcard visitor result:`, error);
+        }
+    }
+}
+
+/**
+ * Process wildcard random visitor ability results (dawn phase)
+ */
+async function processWildcardRandomVisitors(game, client) {
+    const wildcardResults = game.nightResults.filter(r => r.type === 'wildcard_random_visitors');
+
+    for (const result of wildcardResults) {
+        const wildcard = game.players.find(p => p.id === result.wildcardId);
+        if (!wildcard || !wildcard.alive) continue;
+
+        const targetId = result.targetId;
+        const target = game.players.find(p => p.id === targetId);
+        if (!target) continue;
+
+        const visitors = getVisitors(game, targetId);
+
+        let visitorsText = 'No one visited them.';
+        if (visitors.length > 0) {
+            const visitorNames = visitors.map(vid => {
+                const visitor = game.players.find(p => p.id === vid);
+                return visitor ? visitor.displayName : 'Unknown';
+            });
+            visitorsText = visitorNames.join(', ');
+        }
+
+        try {
+            const user = await client.users.fetch(wildcard.id);
+            const hasVisitors = visitors.length > 0;
+            const resultEmbed = createImportantEmbed(
+                '🎲 WILDCARD: SEE RANDOM VISITORS',
+                `Your random ability tonight was to see who visited **${target.displayName}**!`,
+                hasVisitors ? '#FFD700' : '#808080'
+            )
+                .addFields({
+                    name: hasVisitors ? '👥 Visitors Detected!' : '👥 No Visitors',
+                    value: `>>> ${visitorsText}`,
+                    inline: false
+                })
+                .setFooter({ text: 'Wildcard - Random Visitor Detection' });
+
+            await user.send({ embeds: [resultEmbed] });
+        } catch (error) {
+            console.error(`Could not send wildcard random visitor result:`, error);
+        }
+    }
+}
+
+/**
  * Process jail action
  */
 async function processJail(game, jailer, action, jailedPlayers, protections, attacks) {
@@ -968,7 +1094,7 @@ async function processJail(game, jailer, action, jailedPlayers, protections, att
 
             // Check if target is a bee - lose all executions
             const target = game.players.find(p => p.id === targetId);
-            if (target && ROLES[target.role].team === 'bee') {
+            if (target && getPlayerTeam(target) === 'bee') {
                 jailer.executions = 0;
             }
         }
@@ -1190,6 +1316,12 @@ function applyRoleblocks(game, roleblocks, jailedPlayers) {
             continue;
         }
 
+        // Wildcard with roleblock immunity cannot be roleblocked
+        if (player.roleblockImmune && isRoleblocked) {
+            player.roleblockImmune = false; // Reset after use
+            continue;
+        }
+
         // Cancel action if roleblocked or jailed
         if (isRoleblocked || isJailed) {
             delete game.nightActions[userId];
@@ -1283,6 +1415,113 @@ async function processTrackers(game, client) {
             } catch (error) {
                 console.error(`Could not send tracker result:`, error);
             }
+        }
+    }
+}
+
+/**
+ * Process arsonist (Fire Ant) results - send douse/ignite feedback
+ */
+async function processArsonists(game, client) {
+    for (const [userId, action] of Object.entries(game.nightActions)) {
+        const player = game.players.find(p => p.id === userId);
+        if (!player || !player.alive) continue;
+
+        const role = ROLES[player.role];
+
+        if (action.actionType === 'arsonist' || role.actionType === 'arsonist') {
+            // Check if arsonist is silenced
+            if (game.silencedPlayers && game.silencedPlayers.has(userId)) {
+                continue; // No result sent
+            }
+
+            try {
+                const user = await client.users.fetch(userId);
+
+                if (action.ignite) {
+                    // Ignite feedback - get count from nightResults
+                    const igniteResult = game.nightResults.find(r =>
+                        r.type === 'ignite' && r.arsonistId === userId
+                    );
+                    const dousedCount = igniteResult ? igniteResult.dousedCount : 0;
+
+                    const resultEmbed = createImportantEmbed(
+                        '🔥 IGNITION REPORT',
+                        `You ignited all doused players!`,
+                        '#FF4500'
+                    )
+                        .addFields({
+                            name: '💥 Targets Ignited',
+                            value: `>>> You set fire to **${dousedCount}** player${dousedCount !== 1 ? 's' : ''}!`,
+                            inline: false
+                        })
+                        .setFooter({ text: 'Fire Ant - Ignition Complete' });
+
+                    await user.send({ embeds: [resultEmbed] });
+                } else {
+                    // Douse feedback
+                    const targetId = action.target;
+                    const target = game.players.find(p => p.id === targetId);
+                    const currentDousedCount = game.dousedPlayers ? game.dousedPlayers.size : 0;
+
+                    // Check if douse was successful from nightResults
+                    const douseResult = game.nightResults.find(r =>
+                        r.type === 'douse' && r.arsonistId === userId && r.targetId === targetId
+                    );
+                    const successful = douseResult ? douseResult.successful : true;
+
+                    const resultEmbed = createImportantEmbed(
+                        successful ? '🔥 DOUSE REPORT' : '🔥 DOUSE FAILED',
+                        successful
+                            ? `You doused **${target.displayName}** in gasoline!`
+                            : `Your douse on **${target.displayName}** failed - they are immune to fire!`,
+                        successful ? '#FFA500' : '#808080'
+                    )
+                        .addFields({
+                            name: successful ? '🛢️ Doused Players' : '❌ Target Immune',
+                            value: successful
+                                ? `>>> You currently have **${currentDousedCount}** player${currentDousedCount !== 1 ? 's' : ''} doused.\nSend "ignite" during the night to burn them all!`
+                                : `>>> **${target.displayName}** is immune to fire and cannot be doused.\n\nDoused players: **${currentDousedCount}**`,
+                            inline: false
+                        })
+                        .setFooter({ text: successful ? 'Fire Ant - Douse Successful' : 'Fire Ant - Target Immune' });
+
+                    await user.send({ embeds: [resultEmbed] });
+                }
+            } catch (error) {
+                console.error(`Could not send arsonist result:`, error);
+            }
+        }
+    }
+}
+
+/**
+ * Process vest (Butterfly/Survivor) results - send vest feedback
+ */
+async function processVests(game, client) {
+    for (const result of game.nightResults.filter(r => r.type === 'vest')) {
+        const player = game.players.find(p => p.id === result.userId);
+        if (!player) continue;
+
+        try {
+            const user = await client.users.fetch(result.userId);
+            const vestsRemaining = player.vests || 0;
+
+            const resultEmbed = createImportantEmbed(
+                '🦋 VEST REPORT',
+                `You put on your bulletproof vest tonight!`,
+                '#00CED1'
+            )
+                .addFields({
+                    name: '🛡️ Protected',
+                    value: `>>> You have **powerful defense** tonight!\n\nVests remaining: **${vestsRemaining}**`,
+                    inline: false
+                })
+                .setFooter({ text: 'Butterfly - Vest Active' });
+
+            await user.send({ embeds: [resultEmbed] });
+        } catch (error) {
+            console.error(`Could not send vest result:`, error);
         }
     }
 }
@@ -1547,7 +1786,7 @@ async function processSpies(game, client) {
 
         // Find all Wasp visits
         const waspVisits = [];
-        const wasps = game.players.filter(p => ROLES[p.role].team === 'wasp' && p.alive);
+        const wasps = game.players.filter(p => getPlayerTeam(p) === 'wasp' && p.alive);
 
         for (const wasp of wasps) {
             const action = game.nightActions[wasp.id];
@@ -1756,7 +1995,7 @@ async function processRetribution(game, retributionist, action, client) {
             if (['investigate_suspicious', 'investigate_exact', 'consigliere', 'lookout', 'track', 'roleblock', 'shoot', 'serial_kill'].includes(targetRole.actionType)) {
                 targets = alivePlayers.filter(p => p.id !== targetId);
             } else if (['frame', 'clean', 'disguise'].includes(targetRole.actionType)) {
-                targets = alivePlayers.filter(p => p.id !== targetId && ROLES[p.role].team !== 'wasp');
+                targets = alivePlayers.filter(p => p.id !== targetId && getPlayerTeam(p) !== 'wasp');
             }
 
             const targetsList = targets.map((p, i) => `${i + 1}. ${p.displayName}`).join('\n');
@@ -1923,7 +2162,7 @@ async function processBeekeepers(game, client, attacks) {
                 beekeeper.hasProtected = true;
             } else if (result.actionChoice === 'inspect') {
                 // Count Wasps alive
-                const waspsAlive = game.players.filter(p => p.alive && ROLES[p.role].team === 'wasp').length;
+                const waspsAlive = game.players.filter(p => p.alive && getPlayerTeam(p) === 'wasp').length;
                 embed.setDescription(`You inspected the honey stores tonight.\n\n**Result:** There ${waspsAlive === 1 ? 'is' : 'are'} **${waspsAlive}** Wasp${waspsAlive === 1 ? '' : 's'} alive.`);
             }
 
@@ -2185,9 +2424,9 @@ async function processOracle(game, oracle, action, client) {
  */
 function generateOracleHints(game, oracle) {
     const hints = [];
-    const wasps = game.players.filter(p => p.alive && ROLES[p.role].team === 'wasp');
-    const bees = game.players.filter(p => p.alive && ROLES[p.role].team === 'bee');
-    const neutrals = game.players.filter(p => p.alive && ROLES[p.role].team === 'neutral');
+    const wasps = game.players.filter(p => p.alive && getPlayerTeam(p) === 'wasp');
+    const bees = game.players.filter(p => p.alive && getPlayerTeam(p) === 'bee');
+    const neutrals = game.players.filter(p => p.alive && getPlayerTeam(p) === 'neutral');
 
     // Team count hints
     hints.push(`${wasps.length} ${wasps.length === 1 ? 'shadow lurks' : 'shadows lurk'} among the hive`);
@@ -2217,7 +2456,7 @@ function generateOracleHints(game, oracle) {
     }
 
     // Role hints
-    if (game.players.some(p => p.alive && p.role === 'MURDER_HORNET')) {
+    if (game.players.some(p => p.alive && (p.role === 'MURDER_HORNET' || p.role === 'MUTE_MURDER_HORNET'))) {
         hints.push('A solitary killer stalks the night');
     }
 
@@ -2475,16 +2714,22 @@ async function processMole(game, mole, action, client) {
 async function processKidnap(game, kidnapper, action) {
     const targetId = action.target;
 
+    // Mark kidnapper as having used their ability
+    kidnapper.hasKidnapped = true;
+
+    // Don't visit the target (kidnapper doesn't "visit" them in the traditional sense)
+    // This prevents counterattacks from Veterans, etc.
+
     // Initialize kidnapped players map
     if (!game.kidnappedPlayers) {
         game.kidnappedPlayers = new Map();
     }
 
-    // Kidnap lasts for 1 day/night cycle
+    // Kidnap lasts for 1 day/night cycle (released at the start of next night)
     game.kidnappedPlayers.set(targetId, {
         kidnapperId: kidnapper.id,
-        kidnappedPhase: game.phase,
-        releasePhase: game.phase + 2 // Released after 2 phase transitions
+        kidnappedNight: game.nightNumber,
+        releaseNight: game.nightNumber + 1 // Released at the start of next night
     });
 
     game.nightResults.push({
@@ -2516,11 +2761,10 @@ async function processYakuza(game, yakuza, action, client) {
         return;
     }
 
-    // Convert to Wasp (Soldier Bee role, but on Wasp team)
+    // Convert to Wasp (Killer Wasp role)
     const oldRole = target.role;
-    target.role = 'SOLDIER_BEE';
+    target.role = 'KILLER_WASP';
     target.convertedByYakuza = true;
-    target.originalTeam = 'wasp'; // Override team
 
     yakuza.hasConverted = true;
 
@@ -2534,10 +2778,11 @@ async function processYakuza(game, yakuza, action, client) {
     // Notify converted player
     try {
         const user = await client.users.fetch(targetId);
+        const newRole = ROLES['KILLER_WASP'];
         const embed = new EmbedBuilder()
             .setColor('#8B0000')
             .setTitle('⚡ You Have Been Converted!')
-            .setDescription('The Yakuza Wasp has converted you to the Wasp team!\n\nYou are now a **Soldier Bee** working for the Wasps. Your new goal is to eliminate all Bees and harmful Neutrals!')
+            .setDescription(`The Yakuza Wasp has converted you to the Wasp team!\n\n**Your New Role:** ${newRole.emoji} ${newRole.name}\n\n${newRole.description}\n\n**Win Condition:** ${newRole.winCondition}`)
             .setTimestamp();
 
         await user.send({ embeds: [embed] });
@@ -2549,37 +2794,91 @@ async function processYakuza(game, yakuza, action, client) {
 /**
  * Process cultist action - convert to cult
  */
-async function processCultist(game, cultist, action, client) {
-    const targetId = action.target;
+/**
+ * Process cult votes - tally all cult member votes and convert most voted target
+ */
+async function processCultVotes(game, client) {
+    // Get all cult members (original cultist + converted)
+    const cultMembers = game.players.filter(p => p.alive && (p.role === 'CULTIST' || p.convertedToCult));
+
+    if (cultMembers.length === 0) return;
+
+    // Tally votes from all cult members
+    const voteCount = {};
+    let totalVotes = 0;
+
+    for (const cultMember of cultMembers) {
+        const action = game.nightActions[cultMember.id];
+        if (action && action.actionType === 'cult_vote' && action.target) {
+            voteCount[action.target] = (voteCount[action.target] || 0) + 1;
+            totalVotes++;
+        }
+    }
+
+    // No votes cast
+    if (totalVotes === 0) return;
+
+    // Find most voted target
+    let maxVotes = 0;
+    let topTargets = [];
+
+    for (const [targetId, votes] of Object.entries(voteCount)) {
+        if (votes > maxVotes) {
+            maxVotes = votes;
+            topTargets = [targetId];
+        } else if (votes === maxVotes) {
+            topTargets.push(targetId);
+        }
+    }
+
+    // Random selection if tie
+    const targetId = topTargets[Math.floor(Math.random() * topTargets.length)];
     const target = game.players.find(p => p.id === targetId);
+
     if (!target || !target.alive) return;
 
     const targetRole = ROLES[target.role];
+    const cultLeader = game.players.find(p => p.role === 'CULTIST');
 
     // Cannot convert Wasps or Neutral Killing roles
     if (targetRole.team === 'wasp' || (targetRole.team === 'neutral' && targetRole.subteam === 'killing')) {
         game.nightResults.push({
-            type: 'cultist_failed',
-            cultistId: cultist.id,
-            targetId: targetId
+            type: 'cult_convert_failed',
+            targetId: targetId,
+            votes: maxVotes
         });
+
+        // Notify cult members of failure
+        for (const cultMember of cultMembers) {
+            try {
+                const user = await client.users.fetch(cultMember.id);
+                const embed = new EmbedBuilder()
+                    .setColor('#8B0000')
+                    .setTitle('🕯️ Conversion Failed!')
+                    .setDescription(`The cult's conversion of **${target.displayName}** failed! They cannot be converted.`)
+                    .setTimestamp();
+                await user.send({ embeds: [embed] });
+            } catch (error) {
+                console.error(`Could not notify cult member:`, error);
+            }
+        }
         return;
     }
 
     // Convert to cult
-    const oldRole = target.role;
     target.convertedToCult = true;
-    target.cultLeader = cultist.id;
+    target.cultLeader = cultLeader ? cultLeader.id : cultMembers[0].id;
 
     // Track conversions
-    cultist.conversions = (cultist.conversions || 0) + 1;
+    if (cultLeader) {
+        cultLeader.conversions = (cultLeader.conversions || 0) + 1;
+    }
 
     game.nightResults.push({
-        type: 'cultist',
-        cultistId: cultist.id,
+        type: 'cult_convert_success',
         targetId: targetId,
-        oldRole: oldRole,
-        totalConversions: cultist.conversions
+        votes: maxVotes,
+        totalCultMembers: cultMembers.length + 1
     });
 
     // Notify converted player
@@ -2588,66 +2887,257 @@ async function processCultist(game, cultist, action, client) {
         const embed = new EmbedBuilder()
             .setColor('#4B0082')
             .setTitle('🕯️ You Have Joined the Cult!')
-            .setDescription('The Cultist has converted you!\n\nYou are now part of the Cult. You must help the Cultist achieve victory. If the Cultist has 3 converted members alive, you all win together!')
+            .setDescription('The Cultists have converted you!\n\nYou are now part of the Cult. You must help the Cult achieve victory. If all alive players become Cultists, you all win together!\n\nStarting next night, you can vote with other cult members on who to convert.')
             .setTimestamp();
-
         await user.send({ embeds: [embed] });
     } catch (error) {
         console.error(`Could not notify converted player:`, error);
     }
+
+    // Notify cult members of success
+    for (const cultMember of cultMembers) {
+        try {
+            const user = await client.users.fetch(cultMember.id);
+            const totalAlive = game.players.filter(p => p.alive).length;
+            const totalCult = cultMembers.length + 1; // +1 for newly converted
+
+            const embed = new EmbedBuilder()
+                .setColor('#4B0082')
+                .setTitle('🕯️ Conversion Successful!')
+                .setDescription(`**${target.displayName}** has joined the cult!\n\n**Cult Progress:** ${totalCult}/${totalAlive} players`)
+                .setTimestamp();
+            await user.send({ embeds: [embed] });
+        } catch (error) {
+            console.error(`Could not notify cult member:`, error);
+        }
+    }
 }
 
 /**
- * Process wildcard action - random ability
+ * Process wildcard action - random passive ability
  */
-async function processWildcard(game, wildcard, action, client) {
-    // Generate random ability
+async function processWildcard(game, wildcard, action, client, protections, attacks) {
+    // Generate random ability (expanded list with more variety)
     const abilities = [
-        'investigate',
-        'protect',
-        'attack',
-        'roleblock',
-        'heal'
+        'basic_defense', 'powerful_defense', 'invincible_defense',
+        'random_investigation', 'random_suspicious_check',
+        'see_visitors', 'see_random_visitors',
+        'roleblock_immunity',
+        'basic_attack', 'powerful_attack',
+        'random_heal', 'detect_killer', 'detect_evil',
+        'copy_defense', 'become_silent', 'double_vote',
+        'nothing', 'nothing', 'nothing' // More weight on nothing
     ];
 
     const randomAbility = abilities[Math.floor(Math.random() * abilities.length)];
-    const targetId = action.target;
 
-    game.nightResults.push({
-        type: 'wildcard',
-        wildcardId: wildcard.id,
-        targetId: targetId,
-        ability: randomAbility
-    });
+    // Apply the ability
+    let abilityDescription = '';
+    let abilityName = '';
 
-    // Notify wildcard of their ability
+    switch (randomAbility) {
+        case 'basic_defense':
+            abilityName = 'Basic Defense';
+            abilityDescription = '🛡️ You have **Basic Defense** tonight! You can survive one basic attack.';
+            protections.set(wildcard.id, 1);
+            break;
+
+        case 'powerful_defense':
+            abilityName = 'Powerful Defense';
+            abilityDescription = '🛡️🛡️ You have **Powerful Defense** tonight! You can survive basic AND powerful attacks!';
+            protections.set(wildcard.id, 2);
+            break;
+
+        case 'invincible_defense':
+            abilityName = 'Invincible Defense';
+            abilityDescription = '🛡️🛡️🛡️ You have **INVINCIBLE DEFENSE** tonight! Nothing can kill you!';
+            protections.set(wildcard.id, 3);
+            break;
+
+        case 'random_investigation':
+            abilityName = 'Random Investigation';
+            const alivePlayers = game.players.filter(p => p.alive && p.id !== wildcard.id);
+            if (alivePlayers.length > 0) {
+                const randomTarget = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+                const targetRole = ROLES[randomTarget.role];
+                abilityDescription = `🔍 You randomly investigated **${randomTarget.displayName}**!\n\nTheir role is: **${targetRole.name}** ${targetRole.emoji}`;
+            } else {
+                abilityDescription = '🔍 You tried to investigate someone, but there is no one else alive!';
+            }
+            break;
+
+        case 'random_suspicious_check':
+            abilityName = 'Suspicious Check';
+            const checkPlayers = game.players.filter(p => p.alive && p.id !== wildcard.id);
+            if (checkPlayers.length > 0) {
+                const randomTarget = checkPlayers[Math.floor(Math.random() * checkPlayers.length)];
+                const targetRole = ROLES[randomTarget.role];
+                const isSuspicious = targetRole.team === 'wasp' || (targetRole.team === 'neutral' && targetRole.subteam === 'evil');
+                abilityDescription = `🔍 You checked **${randomTarget.displayName}**!\n\nResult: ${isSuspicious ? '**SUSPICIOUS!** 🚨' : 'Not Suspicious ✅'}`;
+            } else {
+                abilityDescription = '🔍 You tried to check someone, but there is no one else alive!';
+            }
+            break;
+
+        case 'see_visitors':
+            abilityName = 'See Your Visitors';
+            abilityDescription = '👁️ You can see who visited **you** tonight! Results will arrive at dawn.';
+            game.nightResults.push({
+                type: 'wildcard_visitors',
+                wildcardId: wildcard.id
+            });
+            break;
+
+        case 'see_random_visitors':
+            abilityName = 'See Random Visitors';
+            const lookPlayers = game.players.filter(p => p.alive && p.id !== wildcard.id);
+            if (lookPlayers.length > 0) {
+                const randomLookTarget = lookPlayers[Math.floor(Math.random() * lookPlayers.length)];
+                abilityDescription = `👁️ You can see who visited **${randomLookTarget.displayName}** tonight! Results will arrive at dawn.`;
+                game.nightResults.push({
+                    type: 'wildcard_random_visitors',
+                    wildcardId: wildcard.id,
+                    targetId: randomLookTarget.id
+                });
+            } else {
+                abilityDescription = '👁️ You tried to watch someone, but there is no one else alive!';
+            }
+            break;
+
+        case 'roleblock_immunity':
+            abilityName = 'Roleblock Immunity';
+            abilityDescription = '💫 You are **immune to roleblocks** tonight! No one can stop your actions.';
+            wildcard.roleblockImmune = true;
+            break;
+
+        case 'basic_attack':
+            abilityName = 'Basic Attack';
+            const attackTargets = game.players.filter(p => p.alive && p.id !== wildcard.id);
+            if (attackTargets.length > 0) {
+                const randomAttackTarget = attackTargets[Math.floor(Math.random() * attackTargets.length)];
+                abilityDescription = `⚔️ You are attacking **${randomAttackTarget.displayName}** with a **Basic Attack** tonight!`;
+                if (!attacks.has(randomAttackTarget.id)) {
+                    attacks.set(randomAttackTarget.id, []);
+                }
+                attacks.get(randomAttackTarget.id).push({
+                    attackerId: wildcard.id,
+                    attackLevel: 1,
+                    attackType: 'wildcard'
+                });
+                addVisit(game, wildcard.id, randomAttackTarget.id);
+            } else {
+                abilityDescription = '⚔️ You tried to attack someone, but there is no one else alive!';
+            }
+            break;
+
+        case 'powerful_attack':
+            abilityName = 'Powerful Attack';
+            const powerTargets = game.players.filter(p => p.alive && p.id !== wildcard.id);
+            if (powerTargets.length > 0) {
+                const randomPowerTarget = powerTargets[Math.floor(Math.random() * powerTargets.length)];
+                abilityDescription = `⚔️⚔️ You are attacking **${randomPowerTarget.displayName}** with a **Powerful Attack** tonight!`;
+                if (!attacks.has(randomPowerTarget.id)) {
+                    attacks.set(randomPowerTarget.id, []);
+                }
+                attacks.get(randomPowerTarget.id).push({
+                    attackerId: wildcard.id,
+                    attackLevel: 2,
+                    attackType: 'wildcard'
+                });
+                addVisit(game, wildcard.id, randomPowerTarget.id);
+            } else {
+                abilityDescription = '⚔️⚔️ You tried to attack someone, but there is no one else alive!';
+            }
+            break;
+
+        case 'random_heal':
+            abilityName = 'Random Heal';
+            const healTargets = game.players.filter(p => p.alive);
+            if (healTargets.length > 0) {
+                const randomHealTarget = healTargets[Math.floor(Math.random() * healTargets.length)];
+                const isSelf = randomHealTarget.id === wildcard.id;
+                abilityDescription = `⚕️ You are healing **${isSelf ? 'yourself' : randomHealTarget.displayName}** tonight!`;
+                protections.set(randomHealTarget.id, Math.max(protections.get(randomHealTarget.id) || 0, 1));
+                if (!isSelf) {
+                    addVisit(game, wildcard.id, randomHealTarget.id);
+                }
+            }
+            break;
+
+        case 'detect_killer':
+            abilityName = 'Detect Killer';
+            const detPlayers = game.players.filter(p => p.alive && p.id !== wildcard.id);
+            if (detPlayers.length > 0) {
+                const randomDetTarget = detPlayers[Math.floor(Math.random() * detPlayers.length)];
+                const targetRole = ROLES[randomDetTarget.role];
+                const hasKilling = targetRole.attack > 0 || targetRole.subteam === 'killing';
+                abilityDescription = `🔎 You checked if **${randomDetTarget.displayName}** can kill!\n\nResult: ${hasKilling ? '**CAN KILL!** 💀' : 'Cannot Kill ✅'}`;
+            } else {
+                abilityDescription = '🔎 You tried to detect a killer, but there is no one else alive!';
+            }
+            break;
+
+        case 'detect_evil':
+            abilityName = 'Detect Evil';
+            const evilPlayers = game.players.filter(p => p.alive && p.id !== wildcard.id);
+            if (evilPlayers.length > 0) {
+                const randomEvilTarget = evilPlayers[Math.floor(Math.random() * evilPlayers.length)];
+                const targetRole = ROLES[randomEvilTarget.role];
+                const isEvil = targetRole.team === 'wasp' || targetRole.subteam === 'evil' || targetRole.subteam === 'killing';
+                abilityDescription = `🔎 You checked if **${randomEvilTarget.displayName}** is evil!\n\nResult: ${isEvil ? '**EVIL!** 👿' : 'Not Evil 😇'}`;
+            } else {
+                abilityDescription = '🔎 You tried to detect evil, but there is no one else alive!';
+            }
+            break;
+
+        case 'copy_defense':
+            abilityName = 'Copy Defense';
+            const defPlayers = game.players.filter(p => p.alive && p.id !== wildcard.id);
+            if (defPlayers.length > 0) {
+                const randomDefTarget = defPlayers[Math.floor(Math.random() * defPlayers.length)];
+                const targetRole = ROLES[randomDefTarget.role];
+                const copiedDefense = targetRole.defense || 0;
+                if (copiedDefense > 0) {
+                    protections.set(wildcard.id, copiedDefense);
+                    abilityDescription = `🔄 You copied **${randomDefTarget.displayName}'s** defense!\n\nYou now have **${['None', 'Basic', 'Powerful', 'Invincible'][copiedDefense]} Defense** tonight!`;
+                } else {
+                    abilityDescription = `🔄 You tried to copy **${randomDefTarget.displayName}'s** defense, but they have no defense!`;
+                }
+            } else {
+                abilityDescription = '🔄 You tried to copy someone\'s defense, but there is no one else alive!';
+            }
+            break;
+
+        case 'become_silent':
+            abilityName = 'Silenced';
+            abilityDescription = '🤐 You have been **silenced**! You cannot speak in voice chat tomorrow during the day phase.';
+            if (!game.silencedPlayers) {
+                game.silencedPlayers = new Set();
+            }
+            game.silencedPlayers.add(wildcard.id);
+            wildcard.wildcardSilenced = true;
+            break;
+
+        case 'double_vote':
+            abilityName = 'Double Vote';
+            abilityDescription = '🗳️🗳️ Your vote counts **TWICE** in the next voting phase!';
+            wildcard.doubleVote = true;
+            break;
+
+        case 'nothing':
+            abilityName = 'Nothing';
+            abilityDescription = '❌ You received... **nothing**. Better luck tomorrow!';
+            break;
+    }
+
+    // Notify wildcard of their ability immediately
     try {
         const user = await client.users.fetch(wildcard.id);
-        const target = game.players.find(p => p.id === targetId);
-
-        let abilityDescription = '';
-        switch (randomAbility) {
-            case 'investigate':
-                abilityDescription = 'You investigated their role!';
-                break;
-            case 'protect':
-                abilityDescription = 'You protected them from attacks!';
-                break;
-            case 'attack':
-                abilityDescription = 'You attacked them!';
-                break;
-            case 'roleblock':
-                abilityDescription = 'You roleblocked them!';
-                break;
-            case 'heal':
-                abilityDescription = 'You healed them!';
-                break;
-        }
-
         const embed = new EmbedBuilder()
             .setColor('#FF1493')
-            .setTitle('🎲 Wildcard Ability!')
-            .setDescription(`Tonight, you randomly gained: **${randomAbility.toUpperCase()}**\n\n${abilityDescription}\n\nTarget: **${target.displayName}**`)
+            .setTitle(`🎲 Wildcard Ability Activated!`)
+            .setDescription(`**Tonight's Random Ability:** ${abilityName}\n\n${abilityDescription}`)
+            .setFooter({ text: 'Wildcard - Random Chaos' })
             .setTimestamp();
 
         await user.send({ embeds: [embed] });

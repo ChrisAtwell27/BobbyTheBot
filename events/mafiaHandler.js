@@ -5,7 +5,7 @@ const { TARGET_GUILD_ID } = require('../config/guildConfig');
 const { ROLES } = require('../mafia/roles/mafiaRoles');
 const { createGame, getGame, getGameByPlayer, deleteGame, getAllGames, addVisit, getVisitors, clearNightData, clearVotes, updateActivity } = require('../mafia/game/mafiaGameState');
 const { processNightActions } = require('../mafia/game/mafiaActions');
-const { getRoleDistribution, shuffleArray, getTeamCounts, countVotes, determineWinners, checkWinConditions, initializePlayerRole } = require('../mafia/game/mafiaUtils');
+const { getPlayerTeam, getRoleDistribution, shuffleArray, getTeamCounts, countVotes, determineWinners, checkWinConditions, initializePlayerRole } = require('../mafia/game/mafiaUtils');
 const OpenAI = require('openai');
 
 // Constants
@@ -528,9 +528,9 @@ async function sendRoleDMs(game, client) {
                 .setFooter({ text: '🤫 Keep this secret!' });
 
             // Add teammate info for Wasps
-            if (role.team === 'wasp') {
+            if (getPlayerTeam(player) === 'wasp') {
                 const teammates = game.players
-                    .filter(p => ROLES[p.role].team === 'wasp' && p.id !== player.id)
+                    .filter(p => getPlayerTeam(p) === 'wasp' && p.id !== player.id)
                     .map(p => `${p.displayName} (${ROLES[p.role].name})`)
                     .join('\n');
 
@@ -587,7 +587,7 @@ async function sendRoleDMs(game, client) {
             await user.send({ embeds: [roleEmbed] });
 
             // Send night instructions for Wasps
-            if (role.team === 'wasp') {
+            if (getPlayerTeam(player) === 'wasp') {
                 await user.send('During night phase, you can send messages to coordinate with your team. Just send me a DM during the night!');
             }
         } catch (error) {
@@ -1047,7 +1047,7 @@ async function startNightPhase(game, client) {
                 switch (role.actionType) {
                     case 'mafia_kill':
                         // Wasps target non-wasps
-                        validTargets = alivePlayers.filter(p => ROLES[p.role].team !== 'wasp');
+                        validTargets = alivePlayers.filter(p => getPlayerTeam(p) !== 'wasp');
                         break;
                     case 'investigate_suspicious':
                     case 'investigate_exact':
@@ -1057,7 +1057,7 @@ async function startNightPhase(game, client) {
                         break;
                     case 'consigliere':
                         // Spy Wasp - can target anyone except self and other Wasps
-                        validTargets = alivePlayers.filter(p => p.id !== bot.id && ROLES[p.role].team !== 'wasp');
+                        validTargets = alivePlayers.filter(p => p.id !== bot.id && getPlayerTeam(p) !== 'wasp');
                         break;
                     case 'frame':
                     case 'clean':
@@ -1068,7 +1068,7 @@ async function startNightPhase(game, client) {
                     case 'poison':
                     case 'sabotage':
                         // Can target anyone except self and team members
-                        validTargets = alivePlayers.filter(p => p.id !== bot.id && ROLES[p.role].team !== 'wasp');
+                        validTargets = alivePlayers.filter(p => p.id !== bot.id && getPlayerTeam(p) !== 'wasp');
                         break;
                     case 'witch':
                         // Spider needs to control someone and redirect them to a new target
@@ -1161,6 +1161,28 @@ async function startNightPhase(game, client) {
                             break; // Continue to normal target selection
                         }
                         return;
+                    case 'mole':
+                        // Mole Wasp - automatically learn Bee role (no target needed)
+                        game.nightActions[bot.id] = { actionType: 'mole' };
+                        console.log(`[Debug] ${bot.displayName} (Mole Wasp) infiltrating the hive`);
+                        return;
+                    case 'kidnap':
+                        // Kidnapper Wasp - kidnap a player (once per game)
+                        if (!bot.hasKidnapped) {
+                            validTargets = alivePlayers.filter(p => p.id !== bot.id && getPlayerTeam(p) !== 'wasp');
+                            break; // Continue to normal target selection
+                        }
+                        return;
+                    case 'yakuza':
+                        // Yakuza Wasp - convert neutral to Wasp (once per game)
+                        if (!bot.hasConverted) {
+                            validTargets = alivePlayers.filter(p => {
+                                const role = ROLES[p.role];
+                                return p.id !== bot.id && role.team === 'neutral' && role.subteam !== 'killing';
+                            });
+                            break; // Continue to normal target selection
+                        }
+                        return;
                     default:
                         return;
                 }
@@ -1217,11 +1239,15 @@ async function sendNightActionPrompts(game, client) {
             const user = await client.users.fetch(player.id);
             const role = ROLES[player.role];
 
+            // Converted cult members get cult voting action
+            const isCultMember = player.convertedToCult;
+            const hasNightAction = role.nightAction || isCultMember;
+
             // Skip if no night action
-            if (!role.nightAction) continue;
+            if (!hasNightAction) continue;
 
             let targets, embed;
-            const actionType = role.actionType;
+            const actionType = isCultMember ? 'cult_vote' : role.actionType;
 
             // Determine color based on team
             let color;
@@ -1233,7 +1259,7 @@ async function sendNightActionPrompts(game, client) {
                 case 'mafia_kill':
                     // Wasps - can target anyone except other wasps
                     targets = alivePlayers
-                        .filter(p => ROLES[p.role].team !== 'wasp')
+                        .filter(p => getPlayerTeam(p) !== 'wasp')
                         .map((p, i) => `${i + 1}. ${p.displayName}`)
                         .join('\n');
 
@@ -1760,7 +1786,7 @@ async function sendNightActionPrompts(game, client) {
                     }
 
                     targets = alivePlayers
-                        .filter(p => ROLES[p.role].team !== 'wasp')
+                        .filter(p => getPlayerTeam(p) !== 'wasp')
                         .map((p, i) => `${i + 1}. ${p.displayName}`)
                         .join('\n');
 
@@ -1873,20 +1899,21 @@ async function sendNightActionPrompts(game, client) {
                     game.nightActions[player.id] = { actionType: 'oracle' };
                     break;
 
-                case 'cultist':
-                    // Cultist - convert someone
+                case 'cult_vote':
+                    // Cultist/Cult member - vote for conversion
                     targets = alivePlayers
-                        .filter(p => p.id !== player.id)
+                        .filter(p => p.id !== player.id && !p.convertedToCult && p.role !== 'CULTIST')
                         .map((p, i) => `${i + 1}. ${p.displayName}`)
                         .join('\n');
 
-                    const conversions = player.conversions || 0;
+                    const cultMembers = game.players.filter(p => p.alive && (p.role === 'CULTIST' || p.convertedToCult)).length;
+                    const totalPlayers = game.players.filter(p => p.alive).length;
 
                     embed = new EmbedBuilder()
-                        .setColor(color)
-                        .setTitle(`${role.emoji} Night Phase - Convert Someone`)
-                        .setDescription(`Choose a player to convert to your cult.\n\nConversions: ${conversions}/3\n\n${targets}`)
-                        .setFooter({ text: 'Join us!' });
+                        .setColor('#4B0082')
+                        .setTitle(`🕯️ Night Phase - Vote to Convert`)
+                        .setDescription(`Vote for a player to convert to the cult. The most voted player will be converted.\n\n**Cult Progress:** ${cultMembers}/${totalPlayers} players\n\n${targets || 'No valid targets available'}`)
+                        .setFooter({ text: 'The cult grows stronger!' });
                     break;
 
                 case 'wildcard':
@@ -1978,8 +2005,10 @@ async function processNightAction(userId, message, game, client) {
     }
 
     // Handle Wasp coordination messages (text messages, not numbers)
-    if (role.team === 'wasp' && isNaN(choice)) {
-        const wasps = game.players.filter(p => ROLES[p.role].team === 'wasp' && p.alive && p.id !== userId);
+    // Also allow kidnapped players to send messages to Wasps
+    const isKidnapped = game.kidnappedPlayers && game.kidnappedPlayers.has(userId);
+    if ((getPlayerTeam(player) === 'wasp' || isKidnapped) && isNaN(choice)) {
+        const wasps = game.players.filter(p => getPlayerTeam(p) === 'wasp' && p.alive && p.id !== userId);
 
         // Check if sender is a mute variant
         let messageToSend = message.content;
@@ -1997,14 +2026,30 @@ async function processNightAction(userId, message, game, client) {
             }
         }
 
-        // Also send to Spy Bees (they can intercept Wasp communications)
+        // Also send to Spy Bees (they can intercept Wasp communications - but don't see names)
         const spies = game.players.filter(p => p.role === 'SPY_BEE' && p.alive);
         for (const spy of spies) {
             try {
                 const user = await client.users.fetch(spy.id);
-                await user.send(`🕵️ **[INTERCEPTED WASP COMMUNICATION]**\n**${player.displayName}:** ${messageToSend}`);
+                await user.send(`🕵️ **[INTERCEPTED WASP COMMUNICATION]**\n${messageToSend}`);
             } catch (error) {
                 console.error(`Could not relay intercepted message to spy ${spy.displayName}:`, error);
+            }
+        }
+
+        // Also send to kidnapped players (they can see Wasp chat - but don't see names)
+        if (game.kidnappedPlayers) {
+            for (const kidnappedId of game.kidnappedPlayers.keys()) {
+                if (kidnappedId === userId) continue; // Don't send to self
+                const kidnappedPlayer = game.players.find(p => p.id === kidnappedId);
+                if (kidnappedPlayer) {
+                    try {
+                        const user = await client.users.fetch(kidnappedId);
+                        await user.send(`🎒 **[WASP COMMUNICATION]**\n${messageToSend}`);
+                    } catch (error) {
+                        console.error(`Could not relay message to kidnapped player ${kidnappedPlayer.displayName}:`, error);
+                    }
+                }
             }
         }
 
@@ -2017,7 +2062,7 @@ async function processNightAction(userId, message, game, client) {
     switch (actionType) {
         case 'mafia_kill':
             // Wasp kill vote
-            validTargets = alivePlayers.filter(p => ROLES[p.role].team !== 'wasp');
+            validTargets = alivePlayers.filter(p => getPlayerTeam(p) !== 'wasp');
             if (choice >= 1 && choice <= validTargets.length) {
                 target = validTargets[choice - 1];
                 game.nightActions[userId] = { actionType: 'mafia_kill', target: target.id };
@@ -2598,7 +2643,7 @@ async function processNightAction(userId, message, game, client) {
 
         case 'kidnap':
             // Kidnapper Wasp - kidnap a player for a cycle
-            validTargets = alivePlayers.filter(p => ROLES[p.role].team !== 'wasp');
+            validTargets = alivePlayers.filter(p => getPlayerTeam(p) !== 'wasp');
             if (choice >= 1 && choice <= validTargets.length) {
                 target = validTargets[choice - 1];
                 game.nightActions[userId] = { actionType: 'kidnap', target: target.id };
@@ -2634,11 +2679,12 @@ async function processNightAction(userId, message, game, client) {
             }
             break;
 
-        case 'cultist':
-            // Cultist - convert to cult
+        case 'cult_vote':
+            // Cultist/Cult member - vote for conversion
             validTargets = alivePlayers.filter(p => {
                 const targetRole = ROLES[p.role];
                 return p.id !== userId &&
+                    p.role !== 'CULTIST' &&
                     !p.convertedToCult &&
                     targetRole.team !== 'wasp' &&
                     !(targetRole.team === 'neutral' && targetRole.subteam === 'killing');
@@ -2651,8 +2697,8 @@ async function processNightAction(userId, message, game, client) {
 
             if (choice >= 1 && choice <= validTargets.length) {
                 target = validTargets[choice - 1];
-                game.nightActions[userId] = { actionType: 'cultist', target: target.id };
-                await message.reply(`You are converting **${target.displayName}** to your cult tonight! 🕯️`);
+                game.nightActions[userId] = { actionType: 'cult_vote', target: target.id };
+                await message.reply(`You voted to convert **${target.displayName}** tonight! 🕯️`);
             } else {
                 await sendInvalidChoiceMessage(message, validTargets);
             }
@@ -2700,6 +2746,66 @@ async function endNightPhase(game, client) {
     // Send death notifications to killed players
     for (const death of deaths) {
         await sendDeathNotification(game, client, death);
+    }
+
+    // Check if any Bounty Hunter's target died - convert them to Clown Beetle
+    for (const death of deaths) {
+        const bountyHunters = game.players.filter(p =>
+            p.alive && p.role === 'BOUNTY_HUNTER' && p.target === death.victimId
+        );
+
+        for (const hunter of bountyHunters) {
+            // Convert to Clown Beetle
+            hunter.role = 'CLOWN_BEETLE';
+            delete hunter.target; // Remove target reference
+
+            try {
+                const user = await client.users.fetch(hunter.id);
+                const conversionEmbed = new EmbedBuilder()
+                    .setColor('#FF1493')
+                    .setTitle('🎯 Target Lost!')
+                    .setDescription(`Your target, **${game.players.find(p => p.id === death.victimId).displayName}**, has died at night!\n\nYou have become a **Clown Beetle** (Jester)!\n\n**New Win Condition:** Get yourself lynched during the day phase!`)
+                    .setFooter({ text: 'Role Changed: Bounty Hunter → Clown Beetle' })
+                    .setTimestamp();
+
+                await user.send({ embeds: [conversionEmbed] });
+            } catch (error) {
+                console.error('Could not send Bounty Hunter conversion DM:', error);
+            }
+        }
+
+        // Check if any Guardian Ant's target died - convert them to Butterfly
+        const guardianAnts = game.players.filter(p =>
+            p.alive && p.role === 'GUARDIAN_ANT' && p.guardianTarget === death.victimId
+        );
+
+        for (const guardian of guardianAnts) {
+            // Convert to Butterfly
+            guardian.role = 'BUTTERFLY';
+            guardian.vests = 3;
+            delete guardian.guardianTarget; // Remove target reference
+
+            try {
+                const user = await client.users.fetch(guardian.id);
+                const conversionEmbed = new EmbedBuilder()
+                    .setColor('#00CED1')
+                    .setTitle('🐜 Ward Lost!')
+                    .setDescription(`Your ward, **${game.players.find(p => p.id === death.victimId).displayName}**, has died!\n\nYou have become a **Butterfly** (Survivor)!\n\n**New Win Condition:** Survive to the end of the game!\n\nYou have **3 bulletproof vests** to use.`)
+                    .setFooter({ text: 'Role Changed: Guardian Ant → Butterfly' })
+                    .setTimestamp();
+
+                await user.send({ embeds: [conversionEmbed] });
+            } catch (error) {
+                console.error('Could not send Guardian Ant conversion DM:', error);
+            }
+        }
+    }
+
+    // Check if any Gambler Beetle has won (collected 3 lucky coins)
+    const gamblerWinner = game.players.find(p => p.alive && p.role === 'GAMBLER_BEETLE' && p.luckyCoins >= 3);
+    if (gamblerWinner) {
+        endGame(game, client, 'neutral_killer', gamblerWinner);
+        return;
     }
 
     // Announce results to all players via DM
@@ -3120,6 +3226,33 @@ async function endVotingPhase(game, client) {
         }
     }
 
+    // Check if Judge changed the outcome with their revote
+    if (game.judgeOriginalTarget !== undefined) {
+        const judge = game.players.find(p => p.role === 'JUDGE' && p.hasUsedRevote);
+        if (judge) {
+            const finalTarget = eliminatedPlayer ? eliminatedPlayer.id : null;
+            // Outcome changed if eliminated player is different from original target (or if no one eliminated when someone was leading)
+            if (finalTarget !== game.judgeOriginalTarget) {
+                judge.changedOutcome = true;
+
+                // Notify the Judge
+                try {
+                    const user = await client.users.fetch(judge.id);
+                    const embed = new EmbedBuilder()
+                        .setColor('#00FF00')
+                        .setTitle('⚖️ Outcome Changed!')
+                        .setDescription('Your revote successfully changed the outcome! If you survive to the end, you will win!')
+                        .setTimestamp();
+                    await user.send({ embeds: [embed] });
+                } catch (error) {
+                    console.error('Could not notify Judge about outcome change:', error);
+                }
+            }
+        }
+        // Clear the stored target
+        delete game.judgeOriginalTarget;
+    }
+
     // Announce results to all players via DM
     const resultsEmbed = new EmbedBuilder()
         .setColor('#FF4500')
@@ -3154,7 +3287,7 @@ async function endVotingPhase(game, client) {
     await sendToEveryoneInGame(game, client, resultsEmbed);
 
     // Handle Clown Beetle (Jester) haunt if they were lynched
-    if (eliminatedPlayer && eliminatedPlayer.role === 'CLOWN_BEETLE') {
+    if (eliminatedPlayer && (eliminatedPlayer.role === 'CLOWN_BEETLE' || eliminatedPlayer.role === 'MUTE_CLOWN_BEETLE')) {
         // Get all players who voted for the Clown Beetle
         const guiltyVoters = Object.entries(game.votes)
             .filter(([voterId, targetId]) => targetId === eliminatedPlayer.id)
@@ -3239,6 +3372,25 @@ async function endVotingPhase(game, client) {
                 .setTimestamp();
             await sendToEveryoneInGame(game, client, jesterWinEmbed3);
             endGame(game, client, 'jester', eliminatedPlayer);
+            return;
+        }
+    }
+
+    // Check if Bounty Hunter (Executioner) won - their target was lynched
+    if (eliminatedPlayer) {
+        const bountyHunters = game.players.filter(p => p.alive && p.role === 'BOUNTY_HUNTER' && p.target === eliminatedPlayer.id);
+
+        for (const hunter of bountyHunters) {
+            // Bounty Hunter wins!
+            const hunterWinEmbed = new EmbedBuilder()
+                .setColor('#FFD700')
+                .setTitle('🎯 Bounty Hunter Wins!')
+                .setDescription(`**${hunter.displayName}** was the Bounty Hunter (Executioner)! Their target, **${eliminatedPlayer.displayName}**, was lynched! They win!`)
+                .setTimestamp();
+            await sendToEveryoneInGame(game, client, hunterWinEmbed);
+
+            // End game for this Bounty Hunter
+            endGame(game, client, 'executioner', hunter);
             return;
         }
     }
@@ -3532,6 +3684,10 @@ async function endGame(game, client, winnerType, specificWinner = null) {
         title = '🐝 Wasps Win! 🐝';
         description = 'The Wasps have taken over! The hive has fallen!';
         color = '#8B0000';
+    } else if (winnerType === 'cult') {
+        title = '🕯️ Cult Wins! 🕯️';
+        description = 'The Cult has converted everyone! All hail the Cult Leader!';
+        color = '#4B0082';
     } else if (winnerType === 'neutral_killer') {
         title = `💀 ${specificWinner ? ROLES[specificWinner.role].name : 'Neutral'} Wins! 💀`;
         description = 'All opposition has been eliminated! Victory through chaos!';
@@ -3742,7 +3898,10 @@ module.exports = (client) => {
         // Only run in target guild
         if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
-        // EARLY RETURN: Skip if message doesn't contain mafia commands or relevant keywords
+        // Check if player is in an active game FIRST
+        const game = getGameByPlayer(message.author.id);
+
+        // EARLY RETURN: Skip if message doesn't contain mafia commands AND player is not in an active game
         const content = message.content.toLowerCase();
         const isMafiaCommand = content.startsWith('!createmafia') ||
                               content.startsWith('!mafia') ||
@@ -3750,14 +3909,9 @@ module.exports = (client) => {
                               content.startsWith('!presets') ||
                               content.startsWith('!reveal');
 
-        // Also need to process non-command messages for Keller Bee emoji translation
-        const game = getGameByPlayer(message.author.id);
-        const hasKellerBee = game && game.players.some(p => {
-            const role = ROLES[p.role];
-            return p.userId === message.author.id && role && role.isKellerBee;
-        });
-
-        if (!isMafiaCommand && !hasKellerBee) return;
+        // If player is in an active game, allow all their messages through (for voting, role actions, etc.)
+        // If not in game, only allow mafia commands through
+        if (!game && !isMafiaCommand) return;
 
         const args = message.content.split(' ');
         const command = args[0].toLowerCase();
@@ -4654,6 +4808,26 @@ module.exports = (client) => {
                         await message.reply('❌ You have already forced a revote this game!');
                         return;
                     }
+
+                    // Store the current vote leader before revote
+                    const voteCounts = {};
+                    Object.values(game.votes).forEach(targetId => {
+                        if (targetId !== 'skip') {
+                            voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+                        }
+                    });
+
+                    let maxVotes = 0;
+                    let voteLeader = null;
+                    for (const [targetId, count] of Object.entries(voteCounts)) {
+                        if (count > maxVotes) {
+                            maxVotes = count;
+                            voteLeader = targetId;
+                        }
+                    }
+
+                    // Store original target for comparison later
+                    game.judgeOriginalTarget = voteLeader;
 
                     player.hasUsedRevote = true;
                     game.votes = {}; // Clear all votes
