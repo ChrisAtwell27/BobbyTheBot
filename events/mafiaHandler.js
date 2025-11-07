@@ -4394,161 +4394,201 @@ module.exports = (client) => {
         // Handle !mafiaroles command
         if (command === '!mafiaroles' || command === '!roles') {
             console.log('🎯 !mafiaroles command received from', message.author.username);
-            const filter = args[1]?.toLowerCase();
 
-            // Validate filter
-            if (filter && !['bee', 'wasp', 'neutral', 'all'].includes(filter)) {
-                return message.reply('Invalid filter! Use: `!mafiaroles [bee|wasp|neutral|all]`');
-            }
+            try {
+                const filter = args[1]?.toLowerCase();
 
-            const showBee = !filter || filter === 'bee' || filter === 'all';
-            const showWasp = !filter || filter === 'wasp' || filter === 'all';
-            const showNeutral = !filter || filter === 'neutral' || filter === 'all';
-
-            // BEE ROLES EMBED
-            if (showBee) {
-                const beeRoles = Object.entries(ROLES).filter(([key, role]) => role.team === 'bee');
-                const beeEmbed = new EmbedBuilder()
-                    .setColor('#FFD700')
-                    .setTitle('🐝 BEE ROLES (Town)')
-                    .setDescription('**Win Condition:** Eliminate all Wasps and harmful Neutrals\n\n🌙 = Has night action | 🛡️ = Has defense')
-                    .setTimestamp();
-
-                beeRoles.forEach(([key, role]) => {
-                    const nightActionText = role.nightAction ? ' 🌙' : '';
-                    const defenseText = role.defense > 0 ? ' 🛡️' : '';
-
-                    // Create a more detailed description
-                    let description = role.description.split('!')[1].trim(); // Get description after "You are a..."
-
-                    // Add key abilities (limit to 3 most important)
-                    const keyAbilities = role.abilities.slice(0, 3).map(ability => `• ${ability}`).join('\n');
-
-                    beeEmbed.addFields({
-                        name: `${role.emoji} ${role.name}${nightActionText}${defenseText}`,
-                        value: `${description}\n\n**Key Abilities:**\n${keyAbilities}`,
-                        inline: false
-                    });
-                });
-
-                await message.reply({ embeds: [beeEmbed] });
-            }
-
-            // WASP ROLES EMBED
-            if (showWasp) {
-                const waspRoles = Object.entries(ROLES).filter(([key, role]) => role.team === 'wasp');
-                const waspEmbed = new EmbedBuilder()
-                    .setColor('#8B0000')
-                    .setTitle('🐝 WASP ROLES (Mafia)')
-                    .setDescription('**Win Condition:** Equal or outnumber all other players\n\n🌙 = Has night action | 🛡️ = Has defense | 💬 = Can communicate with Wasps')
-                    .setTimestamp();
-
-                waspRoles.forEach(([key, role]) => {
-                    const nightActionText = role.nightAction ? ' 🌙' : '';
-                    const defenseText = role.defense > 0 ? ' 🛡️' : '';
-
-                    // Create a more detailed description
-                    let description = role.description.split('!')[1].trim();
-
-                    // Add key abilities (limit to 3 most important)
-                    const keyAbilities = role.abilities.slice(0, 3).map(ability => `• ${ability}`).join('\n');
-
-                    waspEmbed.addFields({
-                        name: `${role.emoji} ${role.name}${nightActionText}${defenseText}`,
-                        value: `${description}\n\n**Key Abilities:**\n${keyAbilities}`,
-                        inline: false
-                    });
-                });
-
-                await message.reply({ embeds: [waspEmbed] });
-            }
-
-            // NEUTRAL ROLES EMBED
-            if (showNeutral) {
-                const neutralRoles = Object.entries(ROLES).filter(([key, role]) => role.team === 'neutral');
-
-                // Group by subteam
-                const killingRoles = neutralRoles.filter(([, role]) => role.subteam === 'killing');
-                const evilRoles = neutralRoles.filter(([, role]) => role.subteam === 'evil');
-                const benignRoles = neutralRoles.filter(([, role]) => role.subteam === 'benign');
-                const chaosRoles = neutralRoles.filter(([, role]) => role.subteam === 'chaos');
-
-                const neutralEmbed = new EmbedBuilder()
-                    .setColor('#808080')
-                    .setTitle('🦋 NEUTRAL ROLES')
-                    .setDescription('Each neutral role has unique win conditions!\n\n🌙 = Has night action | 🛡️ = Has defense')
-                    .setTimestamp();
-
-                // Neutral Killing
-                if (killingRoles.length > 0) {
-                    const killingDesc = killingRoles.map(([, role]) => {
-                        const nightActionText = role.nightAction ? ' 🌙' : '';
-                        const defenseText = role.defense > 0 ? ' 🛡️' : '';
-                        const description = role.description.split('!')[1].trim();
-                        return `${role.emoji} **${role.name}${nightActionText}${defenseText}**\n${description}\n**Win:** ${role.winCondition}`;
-                    }).join('\n\n');
-
-                    neutralEmbed.addFields({
-                        name: '💀 Neutral Killing - Kill everyone!',
-                        value: killingDesc,
-                        inline: false
-                    });
+                // Validate filter
+                if (filter && !['bee', 'wasp', 'neutral', 'all'].includes(filter)) {
+                    return message.reply('Invalid filter! Use: `!mafiaroles [bee|wasp|neutral|all]`');
                 }
 
-                // Neutral Evil
-                if (evilRoles.length > 0) {
-                    const evilDesc = evilRoles.map(([, role]) => {
-                        const nightActionText = role.nightAction ? ' 🌙' : '';
-                        const defenseText = role.defense > 0 ? ' 🛡️' : '';
-                        const description = role.description.split('!')[1].trim();
-                        return `${role.emoji} **${role.name}${nightActionText}${defenseText}**\n${description}\n**Win:** ${role.winCondition}`;
-                    }).join('\n\n');
+                const showBee = !filter || filter === 'bee' || filter === 'all';
+                const showWasp = !filter || filter === 'wasp' || filter === 'all';
+                const showNeutral = !filter || filter === 'neutral' || filter === 'all';
 
-                    neutralEmbed.addFields({
-                        name: '😈 Neutral Evil - Chaos and deception',
-                        value: evilDesc,
-                        inline: false
-                    });
+                console.log('📋 Showing roles - Bee:', showBee, 'Wasp:', showWasp, 'Neutral:', showNeutral);
+
+                // BEE ROLES EMBED
+                if (showBee) {
+                    console.log('🐝 Building bee roles embed...');
+
+                    const beeRoles = Object.entries(ROLES).filter(([key, role]) => role.team === 'bee');
+                    console.log(`🐝 Found ${beeRoles.length} bee roles`);
+
+                    // Discord embeds have a max of 25 fields, so split into multiple embeds if needed
+                    const maxFieldsPerEmbed = 25;
+                    for (let i = 0; i < beeRoles.length; i += maxFieldsPerEmbed) {
+                        const chunk = beeRoles.slice(i, i + maxFieldsPerEmbed);
+                        const isFirstEmbed = i === 0;
+                        const embedTitle = isFirstEmbed
+                            ? '🐝 BEE ROLES (Town)'
+                            : `🐝 BEE ROLES (Town) - Part ${Math.floor(i / maxFieldsPerEmbed) + 1}`;
+
+                        const beeEmbed = new EmbedBuilder()
+                            .setColor('#FFD700')
+                            .setTitle(embedTitle)
+                            .setDescription(isFirstEmbed ? '**Win Condition:** Eliminate all Wasps and harmful Neutrals\n\n🌙 = Has night action | 🛡️ = Has defense' : '')
+                            .setTimestamp();
+
+                        chunk.forEach(([key, role]) => {
+                            const nightActionText = role.nightAction ? ' 🌙' : '';
+                            const defenseText = role.defense > 0 ? ' 🛡️' : '';
+
+                            // Create a more detailed description
+                            let description = role.description.split('!')[1].trim(); // Get description after "You are a..."
+
+                            // Add key abilities (limit to 3 most important)
+                            const keyAbilities = role.abilities.slice(0, 3).map(ability => `• ${ability}`).join('\n');
+
+                            beeEmbed.addFields({
+                                name: `${role.emoji} ${role.name}${nightActionText}${defenseText}`,
+                                value: `${description}\n\n**Key Abilities:**\n${keyAbilities}`,
+                                inline: false
+                            });
+                        });
+
+                        console.log(`🐝 Sending bee embed with ${chunk.length} roles`);
+                        await message.reply({ embeds: [beeEmbed] });
+                    }
                 }
 
-                // Neutral Benign
-                if (benignRoles.length > 0) {
-                    const benignDesc = benignRoles.map(([, role]) => {
-                        const nightActionText = role.nightAction ? ' 🌙' : '';
-                        const defenseText = role.defense > 0 ? ' 🛡️' : '';
-                        const description = role.description.split('!')[1].trim();
-                        return `${role.emoji} **${role.name}${nightActionText}${defenseText}**\n${description}\n**Win:** ${role.winCondition}`;
-                    }).join('\n\n');
+                // WASP ROLES EMBED
+                if (showWasp) {
+                    console.log('🐝 Building wasp roles embed...');
+                    const waspRoles = Object.entries(ROLES).filter(([key, role]) => role.team === 'wasp');
+                    console.log(`🐝 Found ${waspRoles.length} wasp roles`);
 
-                    neutralEmbed.addFields({
-                        name: '🕊️ Neutral Benign - Just survive',
-                        value: benignDesc,
-                        inline: false
-                    });
+                    // Discord embeds have a max of 25 fields, so split into multiple embeds if needed
+                    const maxFieldsPerEmbed = 25;
+                    for (let i = 0; i < waspRoles.length; i += maxFieldsPerEmbed) {
+                        const chunk = waspRoles.slice(i, i + maxFieldsPerEmbed);
+                        const isFirstEmbed = i === 0;
+                        const embedTitle = isFirstEmbed
+                            ? '🐝 WASP ROLES (Mafia)'
+                            : `🐝 WASP ROLES (Mafia) - Part ${Math.floor(i / maxFieldsPerEmbed) + 1}`;
+
+                        const waspEmbed = new EmbedBuilder()
+                            .setColor('#8B0000')
+                            .setTitle(embedTitle)
+                            .setDescription(isFirstEmbed ? '**Win Condition:** Equal or outnumber all other players\n\n🌙 = Has night action | 🛡️ = Has defense | 💬 = Can communicate with Wasps' : '')
+                            .setTimestamp();
+
+                        chunk.forEach(([key, role]) => {
+                            const nightActionText = role.nightAction ? ' 🌙' : '';
+                            const defenseText = role.defense > 0 ? ' 🛡️' : '';
+
+                            // Create a more detailed description
+                            let description = role.description.split('!')[1].trim();
+
+                            // Add key abilities (limit to 3 most important)
+                            const keyAbilities = role.abilities.slice(0, 3).map(ability => `• ${ability}`).join('\n');
+
+                            waspEmbed.addFields({
+                                name: `${role.emoji} ${role.name}${nightActionText}${defenseText}`,
+                                value: `${description}\n\n**Key Abilities:**\n${keyAbilities}`,
+                                inline: false
+                            });
+                        });
+
+                        console.log(`🐝 Sending wasp embed with ${chunk.length} roles`);
+                        await message.reply({ embeds: [waspEmbed] });
+                    }
                 }
 
-                // Neutral Chaos
-                if (chaosRoles.length > 0) {
-                    const chaosDesc = chaosRoles.map(([, role]) => {
-                        const nightActionText = role.nightAction ? ' 🌙' : '';
-                        const defenseText = role.defense > 0 ? ' 🛡️' : '';
-                        const description = role.description.split('!')[1].trim();
-                        return `${role.emoji} **${role.name}${nightActionText}${defenseText}**\n${description}\n**Win:** ${role.winCondition}`;
-                    }).join('\n\n');
+                // NEUTRAL ROLES EMBED
+                if (showNeutral) {
+                    console.log('🦋 Building neutral roles embed...');
+                    const neutralRoles = Object.entries(ROLES).filter(([key, role]) => role.team === 'neutral');
+                    console.log(`🦋 Found ${neutralRoles.length} neutral roles`);
 
-                    neutralEmbed.addFields({
-                        name: '🎲 Neutral Chaos - Unique objectives',
-                        value: chaosDesc,
-                        inline: false
-                    });
+                    // Group by subteam
+                    const killingRoles = neutralRoles.filter(([, role]) => role.subteam === 'killing');
+                    const evilRoles = neutralRoles.filter(([, role]) => role.subteam === 'evil');
+                    const benignRoles = neutralRoles.filter(([, role]) => role.subteam === 'benign');
+                    const chaosRoles = neutralRoles.filter(([, role]) => role.subteam === 'chaos');
+
+                    const neutralEmbed = new EmbedBuilder()
+                        .setColor('#808080')
+                        .setTitle('🦋 NEUTRAL ROLES')
+                        .setDescription('Each neutral role has unique win conditions!\n\n🌙 = Has night action | 🛡️ = Has defense')
+                        .setTimestamp();
+
+                    // Neutral Killing
+                    if (killingRoles.length > 0) {
+                        const killingDesc = killingRoles.map(([, role]) => {
+                            const nightActionText = role.nightAction ? ' 🌙' : '';
+                            const defenseText = role.defense > 0 ? ' 🛡️' : '';
+                            const description = role.description.split('!')[1].trim();
+                            return `${role.emoji} **${role.name}${nightActionText}${defenseText}**\n${description}\n**Win:** ${role.winCondition}`;
+                        }).join('\n\n');
+
+                        neutralEmbed.addFields({
+                            name: '💀 Neutral Killing - Kill everyone!',
+                            value: killingDesc,
+                            inline: false
+                        });
+                    }
+
+                    // Neutral Evil
+                    if (evilRoles.length > 0) {
+                        const evilDesc = evilRoles.map(([, role]) => {
+                            const nightActionText = role.nightAction ? ' 🌙' : '';
+                            const defenseText = role.defense > 0 ? ' 🛡️' : '';
+                            const description = role.description.split('!')[1].trim();
+                            return `${role.emoji} **${role.name}${nightActionText}${defenseText}**\n${description}\n**Win:** ${role.winCondition}`;
+                        }).join('\n\n');
+
+                        neutralEmbed.addFields({
+                            name: '😈 Neutral Evil - Chaos and deception',
+                            value: evilDesc,
+                            inline: false
+                        });
+                    }
+
+                    // Neutral Benign
+                    if (benignRoles.length > 0) {
+                        const benignDesc = benignRoles.map(([, role]) => {
+                            const nightActionText = role.nightAction ? ' 🌙' : '';
+                            const defenseText = role.defense > 0 ? ' 🛡️' : '';
+                            const description = role.description.split('!')[1].trim();
+                            return `${role.emoji} **${role.name}${nightActionText}${defenseText}**\n${description}\n**Win:** ${role.winCondition}`;
+                        }).join('\n\n');
+
+                        neutralEmbed.addFields({
+                            name: '🕊️ Neutral Benign - Just survive',
+                            value: benignDesc,
+                            inline: false
+                        });
+                    }
+
+                    // Neutral Chaos
+                    if (chaosRoles.length > 0) {
+                        const chaosDesc = chaosRoles.map(([, role]) => {
+                            const nightActionText = role.nightAction ? ' 🌙' : '';
+                            const defenseText = role.defense > 0 ? ' 🛡️' : '';
+                            const description = role.description.split('!')[1].trim();
+                            return `${role.emoji} **${role.name}${nightActionText}${defenseText}**\n${description}\n**Win:** ${role.winCondition}`;
+                        }).join('\n\n');
+
+                        neutralEmbed.addFields({
+                            name: '🎲 Neutral Chaos - Unique objectives',
+                            value: chaosDesc,
+                            inline: false
+                        });
+                    }
+
+                    console.log(`🦋 Sending neutral embed`);
+                    await message.reply({ embeds: [neutralEmbed] });
                 }
 
-                await message.reply({ embeds: [neutralEmbed] });
-            }
-
-            // Footer message
-            if (!filter || filter === 'all') {
-                await message.channel.send('💡 **Tip:** Use `!mafiaroles [bee|wasp|neutral]` to view specific factions\n\n**Role Categories:**\n🐝 **Bees** - Town roles that investigate, protect, and eliminate threats\n🐝 **Wasps** - Mafia roles that work together to eliminate others\n💀 **Neutral Killing** - Solo killers who must eliminate everyone\n😈 **Neutral Evil** - Chaos roles with unique objectives\n🕊️ **Neutral Benign** - Peaceful roles that just want to survive\n🎲 **Neutral Chaos** - Wild cards with unpredictable goals');
+                // Footer message
+                if (!filter || filter === 'all') {
+                    await message.channel.send('💡 **Tip:** Use `!mafiaroles [bee|wasp|neutral]` to view specific factions\n\n**Role Categories:**\n🐝 **Bees** - Town roles that investigate, protect, and eliminate threats\n🐝 **Wasps** - Mafia roles that work together to eliminate others\n💀 **Neutral Killing** - Solo killers who must eliminate everyone\n😈 **Neutral Evil** - Chaos roles with unique objectives\n🕊️ **Neutral Benign** - Peaceful roles that just want to survive\n🎲 **Neutral Chaos** - Wild cards with unpredictable goals');
+                }
+            } catch (error) {
+                console.error('❌ Error in !mafiaroles command:', error);
+                await message.reply(`❌ An error occurred while displaying roles: ${error.message}`);
             }
         }
 
