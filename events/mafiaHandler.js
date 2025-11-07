@@ -4428,8 +4428,11 @@ module.exports = (client) => {
                         const beeEmbed = new EmbedBuilder()
                             .setColor('#FFD700')
                             .setTitle(embedTitle)
-                            .setDescription(isFirstEmbed ? '**Win Condition:** Eliminate all Wasps and harmful Neutrals\n\n🌙 = Has night action | 🛡️ = Has defense' : '')
                             .setTimestamp();
+
+                        if (isFirstEmbed) {
+                            beeEmbed.setDescription('**Win Condition:** Eliminate all Wasps and harmful Neutrals\n\n🌙 = Has night action | 🛡️ = Has defense');
+                        }
 
                         chunk.forEach(([key, role]) => {
                             const nightActionText = role.nightAction ? ' 🌙' : '';
@@ -4471,8 +4474,11 @@ module.exports = (client) => {
                         const waspEmbed = new EmbedBuilder()
                             .setColor('#8B0000')
                             .setTitle(embedTitle)
-                            .setDescription(isFirstEmbed ? '**Win Condition:** Equal or outnumber all other players\n\n🌙 = Has night action | 🛡️ = Has defense | 💬 = Can communicate with Wasps' : '')
                             .setTimestamp();
+
+                        if (isFirstEmbed) {
+                            waspEmbed.setDescription('**Win Condition:** Equal or outnumber all other players\n\n🌙 = Has night action | 🛡️ = Has defense | 💬 = Can communicate with Wasps');
+                        }
 
                         chunk.forEach(([key, role]) => {
                             const nightActionText = role.nightAction ? ' 🌙' : '';
