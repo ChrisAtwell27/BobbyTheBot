@@ -392,8 +392,112 @@ headers: {
                         <td><span class="http-method method-post">POST</span></td>
                         <td>Perform multiple operations</td>
                     </tr>
+                    <tr style="background: #e7f3ff;">
+                        <td><code>/api/voice/channel/mute</code></td>
+                        <td><span class="http-method method-post">POST</span></td>
+                        <td><strong>Mute entire voice channel</strong></td>
+                    </tr>
+                    <tr style="background: #e7f3ff;">
+                        <td><code>/api/voice/channel/unmute</code></td>
+                        <td><span class="http-method method-post">POST</span></td>
+                        <td><strong>Unmute entire voice channel</strong></td>
+                    </tr>
                 </tbody>
             </table>
+        </section>
+
+        <section class="section">
+            <h2>🎯 NEW: Voice Channel Control</h2>
+
+            <div class="success-box">
+                <h4>⚡ Mute/Unmute Everyone at Once!</h4>
+                <p>Perfect for game phase transitions - control the entire voice channel with one request.</p>
+            </div>
+
+            <div class="endpoint-card">
+                <h3>
+                    <span class="http-method method-post">POST</span>
+                    <span class="endpoint-path">/api/voice/channel/mute</span>
+                </h3>
+
+                <p><strong>Use Case:</strong> Mute all players in the voice channel at once (e.g., night phase)</p>
+
+                <p><strong>Request Body:</strong></p>
+                <div class="code-block">
+{
+  <span class="string">"guildId"</span>: <span class="string">"701308904877064193"</span>,
+  <span class="string">"channelId"</span>: <span class="string">"1434633691455426600"</span>,  <span class="comment">// Optional, defaults to mafia VC</span>
+  <span class="string">"reason"</span>: <span class="string">"Night phase started"</span>
+}
+                </div>
+
+                <p><strong>JavaScript Example:</strong></p>
+                <div class="code-block">
+<span class="keyword">const</span> API_URL = <span class="string">'https://bobby-the-bot-i76i6.ondigitalocean.app'</span>;
+<span class="keyword">const</span> WEBHOOK_SECRET = <span class="string">'your_webhook_secret_here'</span>;
+<span class="keyword">const</span> GUILD_ID = <span class="string">'701308904877064193'</span>;
+
+<span class="comment">// Mute everyone in voice channel (night phase)</span>
+<span class="keyword">async function</span> startNightPhase() {
+  <span class="keyword">const</span> response = <span class="keyword">await</span> <span class="keyword">fetch</span>(<span class="string">`${API_URL}/api/voice/channel/mute`</span>, {
+    method: <span class="string">'POST'</span>,
+    headers: {
+      <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span>,
+      <span class="string">'Authorization'</span>: <span class="string">`Bearer ${WEBHOOK_SECRET}`</span>
+    },
+    body: <span class="keyword">JSON</span>.stringify({
+      guildId: GUILD_ID,
+      reason: <span class="string">'Night phase - discussion locked'</span>
+    })
+  });
+
+  <span class="keyword">return await</span> response.json();
+}
+
+<span class="comment">// Unmute everyone (day phase)</span>
+<span class="keyword">async function</span> startDayPhase() {
+  <span class="keyword">const</span> response = <span class="keyword">await</span> <span class="keyword">fetch</span>(<span class="string">`${API_URL}/api/voice/channel/unmute`</span>, {
+    method: <span class="string">'POST'</span>,
+    headers: {
+      <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span>,
+      <span class="string">'Authorization'</span>: <span class="string">`Bearer ${WEBHOOK_SECRET}`</span>
+    },
+    body: <span class="keyword">JSON</span>.stringify({
+      guildId: GUILD_ID,
+      reason: <span class="string">'Day phase - discussion open'</span>
+    })
+  });
+
+  <span class="keyword">return await</span> response.json();
+}
+                </div>
+
+                <p><strong>Success Response:</strong></p>
+                <div class="code-block">
+{
+  <span class="string">"success"</span>: <span class="keyword">true</span>,
+  <span class="string">"message"</span>: <span class="string">"Muted 8 of 8 members in voice channel"</span>,
+  <span class="string">"channelId"</span>: <span class="string">"1434633691455426600"</span>,
+  <span class="string">"results"</span>: [
+    {
+      <span class="string">"userId"</span>: <span class="string">"123456789"</span>,
+      <span class="string">"username"</span>: <span class="string">"Player1"</span>,
+      <span class="string">"success"</span>: <span class="keyword">true</span>,
+      <span class="string">"muted"</span>: <span class="keyword">true</span>
+    },
+    <span class="comment">// ... more players</span>
+  ]
+}
+                </div>
+
+                <div class="info-box">
+                    <h4>💡 When to Use</h4>
+                    <ul>
+                        <li><strong>VC Channel Endpoints:</strong> Mute/unmute <strong>everyone</strong> at once (phase transitions)</li>
+                        <li><strong>Individual Endpoints:</strong> Control <strong>specific players</strong> (dead players, role effects)</li>
+                    </ul>
+                </div>
+            </div>
         </section>
 
         <section class="section">

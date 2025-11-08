@@ -127,6 +127,63 @@ Get the current game state for a guild.
 
 ---
 
+### Mute Entire Voice Channel
+
+```http
+POST /api/voice/channel/mute
+```
+
+**NEW!** Mute all members in a voice channel at once. Perfect for game phase transitions.
+
+**Request Body:**
+```json
+{
+  "guildId": "123456789",
+  "channelId": "1434633691455426600",  // Optional, defaults to mafia VC
+  "reason": "Night phase started"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Muted 8 of 8 members in voice channel",
+  "channelId": "1434633691455426600",
+  "results": [
+    {
+      "userId": "987654321",
+      "username": "PlayerName",
+      "success": true,
+      "muted": true
+    }
+  ]
+}
+```
+
+---
+
+### Unmute Entire Voice Channel
+
+```http
+POST /api/voice/channel/unmute
+```
+
+**NEW!** Unmute all members in a voice channel at once. Perfect for game phase transitions.
+
+**Request Body:**
+```json
+{
+  "guildId": "123456789",
+  "channelId": "1434633691455426600",  // Optional, defaults to mafia VC
+  "reason": "Day phase started"
+}
+```
+
+**Response:** Same format as mute endpoint, with `"muted": false`
+
+---
+
 ### Get Voice Channel Members
 
 ```http
