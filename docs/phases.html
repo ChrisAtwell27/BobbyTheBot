@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Phases - BobbyTheBot Mafia</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1 class="nav-title">🐝 BobbyTheBot Mafia</h1>
+            <ul class="nav-links">
+                <li><a href="index.html">Overview</a></li>
+                <li><a href="roles.html">Roles</a></li>
+                <li><a href="mechanics.html">Game Mechanics</a></li>
+                <li><a href="phases.html">Game Phases</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section class="section">
+            <h2>Game Phases</h2>
+            <p class="intro-text">
+                Understanding the game flow is crucial to winning. Each phase has specific actions and time limits.
+            </p>
+
+            <div class="phase-timeline">
+                <div class="phase-item">
+                    <div class="phase-header">🎲 Setup Phase (30 seconds)</div>
+                    <div class="phase-content">
+                        <p><strong>What happens:</strong></p>
+                        <ul>
+                            <li>Game begins with player role distribution based on preset</li>
+                            <li>Roles are randomly shuffled and assigned to players</li>
+                            <li>Players receive a DM with their role card and abilities</li>
+                            <li>Game state is initialized</li>
+                        </ul>
+                        <p class="mt-2"><strong>Player Actions:</strong></p>
+                        <ul>
+                            <li>Read your role card carefully</li>
+                            <li>Understand your abilities and win condition</li>
+                            <li>Note if you have night actions or special abilities</li>
+                            <li>Prepare your strategy</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="phase-item">
+                    <div class="phase-header">🌙 Night Phase (60 seconds)</div>
+                    <div class="phase-content">
+                        <p><strong>What happens:</strong></p>
+                        <ul>
+                            <li>All players are muted in voice chat</li>
+                            <li>Players with night abilities receive action prompts via DM</li>
+                            <li>Wasps can communicate in their team chat</li>
+                            <li>Medium Bee can communicate with dead players</li>
+                            <li>Actions are processed simultaneously at the end of the night phase</li>
+                        </ul>
+                        <p class="mt-2"><strong>Player Actions:</strong></p>
+                        <ul>
+                            <li>Check your DMs for action prompts</li>
+                            <li>Select targets using buttons if you have a night action</li>
+                            <li>Wasps vote on who to kill</li>
+                            <li>Wait for night results</li>
+                        </ul>
+                        <p class="mt-2"><strong>Examples of Night Actions:</strong></p>
+                        <ul>
+                            <li>Investigators learn information about players</li>
+                            <li>Killers choose targets</li>
+                            <li>Protectors choose who to guard or heal</li>
+                            <li>Roleblockers choose who to block</li>
+                            <li>Watchers/Trackers observe player movements</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="phase-item">
+                    <div class="phase-header">🌆 Dusk Phase (60 seconds, optional)</div>
+                    <div class="phase-content">
+                        <p><strong>What happens:</strong></p>
+                        <ul>
+                            <li>Occurs after night, before day</li>
+                            <li>ONLY for roles with dusk actions</li>
+                            <li>Auto-skips if no players have dusk actions</li>
+                            <li>Auto-skips remaining players after timeout</li>
+                        </ul>
+                        <p class="mt-2"><strong>Roles with Dusk Actions:</strong></p>
+                        <ul>
+                            <li><strong>Jailer Bee:</strong> Selects who to jail tonight and decides whether to execute</li>
+                            <li><strong>Transporter Bee:</strong> Selects two players to swap</li>
+                            <li><strong>Pirate Beetle:</strong> Selects duel target and rock/paper/scissors choice</li>
+                        </ul>
+                        <p class="mt-2"><strong>Special Rules:</strong></p>
+                        <ul>
+                            <li>Debug mode: 30 seconds instead of 60</li>
+                            <li>Bot players auto-complete after 2 seconds</li>
+                            <li>If phase is skipped, players proceed to day immediately</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="phase-item">
+                    <div class="phase-header">☀️ Day Phase (180 seconds)</div>
+                    <div class="phase-content">
+                        <p><strong>What happens:</strong></p>
+                        <ul>
+                            <li>Muting is lifted for alive players (except special cases)</li>
+                            <li>Night results are announced</li>
+                            <li>Players can discuss and share information</li>
+                            <li>Players can claim roles or accuse others</li>
+                        </ul>
+                        <p class="mt-2"><strong>Voice Chat Rules:</strong></p>
+                        <ul>
+                            <li><strong>Dead players:</strong> Remain muted</li>
+                            <li><strong>Blackmailed players:</strong> Voice muted, text transformed</li>
+                            <li><strong>Deceived players:</strong> Voice muted, text twisted to sound incriminating</li>
+                            <li><strong>Mute Bee variants:</strong> Always muted, messages converted to emojis</li>
+                            <li><strong>Deaf Bees:</strong> Always deafened (cannot hear voice)</li>
+                        </ul>
+                        <p class="mt-2"><strong>Strategy Tips:</strong></p>
+                        <ul>
+                            <li>Share investigation results (if you're an investigator)</li>
+                            <li>Listen carefully to what others say</li>
+                            <li>Look for contradictions in claims</li>
+                            <li>Watch for suspicious behavior</li>
+                            <li>Coordinate with your team</li>
+                        </ul>
+                        <p class="mt-2"><strong>Special Day Actions:</strong></p>
+                        <ul>
+                            <li><strong>Queen Bee:</strong> Can reveal for 3 extra votes (4 total)</li>
+                            <li><strong>Marshal Bee:</strong> Can choose one player to protect from lynching</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="phase-item">
+                    <div class="phase-header">🗳️ Voting Phase (120 seconds)</div>
+                    <div class="phase-content">
+                        <p><strong>What happens:</strong></p>
+                        <ul>
+                            <li>Players vote for who to eliminate</li>
+                            <li>Votes are displayed in real-time</li>
+                            <li>Players can change their vote before time expires</li>
+                            <li>Vote tally is calculated at the end</li>
+                        </ul>
+                        <p class="mt-2"><strong>Voting Mechanics:</strong></p>
+                        <ul>
+                            <li>Each player gets <strong>1 vote</strong></li>
+                            <li><strong>Queen Bee (revealed)</strong> gets 4 votes</li>
+                            <li>Minimum <strong>2 votes</strong> needed to eliminate (1 in debug mode)</li>
+                            <li>Players can vote "Skip" to abstain</li>
+                        </ul>
+                        <p class="mt-2"><strong>Tied Vote Resolution:</strong></p>
+                        <ol>
+                            <li>First tie detected → <strong>Revote triggered</strong></li>
+                            <li>All votes cleared, 60-second revote begins</li>
+                            <li>Only tied players can be voted on</li>
+                            <li>If still tied after revote → <strong>Random player</strong> from tied group is eliminated</li>
+                            <li>Results announced in text channel</li>
+                        </ol>
+                        <p class="mt-2"><strong>Special Voting Mechanics:</strong></p>
+                        <ul>
+                            <li><strong>Judge:</strong> Can force a revote once per game to change outcome</li>
+                            <li><strong>Marshal Bee:</strong> If protected Bee is voted out:
+                                <ul>
+                                    <li>Marshal reveals themselves</li>
+                                    <li>Save succeeds, Bee survives</li>
+                                    <li>Fails if target is Wasp/Evil Neutral</li>
+                                </ul>
+                            </li>
+                            <li><strong>Phantom Moth:</strong> First lynch doesn't kill them, becomes invisible for 1 cycle</li>
+                        </ul>
+                        <p class="mt-2"><strong>Post-Elimination:</strong></p>
+                        <ul>
+                            <li>Eliminated player dies and becomes "dead player"</li>
+                            <li>Dead players muted in voice chat</li>
+                            <li>Dead players can communicate with Medium Bee and other dead</li>
+                            <li><strong>Clown Beetle (Jester):</strong> Can haunt one guilty voter after being lynched</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="phase-item">
+                    <div class="phase-header">🏆 Win Check</div>
+                    <div class="phase-content">
+                        <p><strong>After each voting phase, the game checks for win conditions:</strong></p>
+                        <ul>
+                            <li><strong>Bee Team Wins:</strong> All Wasps are dead AND all harmful Neutrals are dead</li>
+                            <li><strong>Wasp Team Wins:</strong> Wasps ≥ (Bees + harmful Neutrals)</li>
+                            <li><strong>Cult Wins:</strong> All alive players are Cultists or converted</li>
+                            <li><strong>Neutral Killer Solo Win:</strong> Only one player remains and they're Neutral Killing</li>
+                            <li><strong>Specific Neutral Wins:</strong> Various conditions depending on role</li>
+                        </ul>
+                        <p class="mt-2"><strong>If no win condition is met:</strong></p>
+                        <ul>
+                            <li>Game continues to next night phase</li>
+                            <li>Cycle repeats until a team wins</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Phase Flow Diagram</h2>
+            <div class="mechanic-card">
+                <pre style="font-size: 1.1rem; line-height: 2; text-align: center; background: #f8f9fa; padding: 2rem; border-radius: 8px;">
+    🎲 SETUP (30s)
+         ↓
+    🌙 NIGHT (60s)
+         ↓
+    🌆 DUSK (60s) [Optional - only for specific roles]
+         ↓
+    ☀️ DAY (180s)
+         ↓
+    🗳️ VOTING (120s)
+         ↓
+    🏆 WIN CHECK
+         ↓
+    [If no winner] → Loop back to NIGHT
+    [If winner] → GAME OVER
+                </pre>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Phase Durations Summary</h2>
+            <table class="mechanic-table">
+                <thead>
+                    <tr>
+                        <th>Phase</th>
+                        <th>Duration</th>
+                        <th>Debug Duration</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Setup</td>
+                        <td>30 seconds</td>
+                        <td>30 seconds</td>
+                        <td>Role assignment</td>
+                    </tr>
+                    <tr>
+                        <td>Night</td>
+                        <td>60 seconds</td>
+                        <td>60 seconds</td>
+                        <td>All players muted</td>
+                    </tr>
+                    <tr>
+                        <td>Dusk</td>
+                        <td>60 seconds</td>
+                        <td>30 seconds</td>
+                        <td>Optional, only for specific roles</td>
+                    </tr>
+                    <tr>
+                        <td>Day</td>
+                        <td>180 seconds</td>
+                        <td>180 seconds</td>
+                        <td>Discussion phase</td>
+                    </tr>
+                    <tr>
+                        <td>Voting</td>
+                        <td>120 seconds</td>
+                        <td>120 seconds</td>
+                        <td>Vote for elimination</td>
+                    </tr>
+                    <tr>
+                        <td>Revote</td>
+                        <td>60 seconds</td>
+                        <td>60 seconds</td>
+                        <td>Only if tied vote</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="section">
+            <h2>Tips for Each Phase</h2>
+
+            <div class="feature-list">
+                <div class="feature-item">
+                    <h3>🌙 Night Phase Tips</h3>
+                    <ul>
+                        <li>Always submit your action before time runs out</li>
+                        <li>Wasps: Coordinate who to kill in team chat</li>
+                        <li>Investigators: Target suspicious players</li>
+                        <li>Protectors: Protect confirmed town members or yourself</li>
+                        <li>Don't forget you have a night action!</li>
+                    </ul>
+                </div>
+
+                <div class="feature-item">
+                    <h3>☀️ Day Phase Tips</h3>
+                    <ul>
+                        <li>Share your investigation results (but be careful not to reveal too much)</li>
+                        <li>Pay attention to who is silent or defensive</li>
+                        <li>Watch for contradictions in role claims</li>
+                        <li>Build alliances with confirmed Bees</li>
+                        <li>Wasps: Blend in and spread doubt</li>
+                    </ul>
+                </div>
+
+                <div class="feature-item">
+                    <h3>🗳️ Voting Phase Tips</h3>
+                    <ul>
+                        <li>Vote based on evidence, not just suspicion</li>
+                        <li>Watch the vote count - don't accidentally vote a Bee</li>
+                        <li>Coordinate with other Bees to secure majority</li>
+                        <li>Remember you can change your vote before time expires</li>
+                        <li>Wasps: Try to control the vote or blend in</li>
+                    </ul>
+                </div>
+
+                <div class="feature-item">
+                    <h3>🌆 Dusk Phase Tips</h3>
+                    <ul>
+                        <li><strong>Jailer:</strong> Jail suspicious players or confirmed threats</li>
+                        <li><strong>Transporter:</strong> Swap to protect key players or disrupt Wasp kills</li>
+                        <li><strong>Pirate:</strong> Choose your RPS move wisely based on psychology</li>
+                        <li>Submit quickly - phase auto-skips after all actions are in</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2024 BobbyTheBot Mafia | Bee-themed social deduction game</p>
+            <p>Inspired by Town of Salem and classic Mafia</p>
+        </div>
+    </footer>
+</body>
+</html>

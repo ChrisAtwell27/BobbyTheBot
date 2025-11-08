@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Roles - BobbyTheBot Mafia</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1 class="nav-title">🐝 BobbyTheBot Mafia</h1>
+            <ul class="nav-links">
+                <li><a href="index.html">Overview</a></li>
+                <li><a href="roles.html">Roles</a></li>
+                <li><a href="mechanics.html">Game Mechanics</a></li>
+                <li><a href="phases.html">Game Phases</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section class="section">
+            <h2>All Roles</h2>
+            <p class="intro-text">
+                Explore all available roles in BobbyTheBot Mafia. Filter by team to find specific roles.
+            </p>
+
+            <div class="filter-container">
+                <button class="filter-btn active" data-filter="all">All Roles</button>
+                <button class="filter-btn" data-filter="bee">🐝 Bee Team</button>
+                <button class="filter-btn" data-filter="wasp">🐝‍⬛ Wasp Team</button>
+                <button class="filter-btn" data-filter="neutral">🦋 Neutral</button>
+            </div>
+
+            <!-- BEE ROLES -->
+            <h3 class="text-center mb-3 mt-3" style="font-size: 2rem; color: #FFD700; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">🐝 Bee Team Roles</h3>
+            <div class="role-grid">
+                <!-- Queen's Guard -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">👮</span>
+                        <span class="role-name">Queen's Guard</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can investigate one player each night to see if they are suspicious (Wasp/Neutral Evil).
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Investigate one player each night</li>
+                            <li>Learn if they are suspicious or not</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <!-- Scout Bee -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">🔍</span>
+                        <span class="role-name">Scout Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can investigate one player each night to learn their exact role.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Investigate one player each night</li>
+                            <li>Learn their exact role</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <!-- Nurse Bee -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">⚕️</span>
+                        <span class="role-name">Nurse Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can heal one player each night, protecting them from basic attacks.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Heal one player each night</li>
+                            <li>Prevents them from dying to basic attacks</li>
+                            <li>Self-heal once</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None (Basic when healing self)</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <!-- Bodyguard Bee -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">🛡️</span>
+                        <span class="role-name">Bodyguard Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can protect one player each night. If they are attacked, you will die instead fighting the attacker.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Protect one player each night</li>
+                            <li>Die in their place if attacked</li>
+                            <li>Kill one attacker</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">Powerful (when protecting)</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <!-- Lookout Bee -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">👁️</span>
+                        <span class="role-name">Lookout Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can watch one player each night to see who visits them.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Watch one player each night</li>
+                            <li>See everyone who visits them</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <!-- Soldier Bee -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">⚔️</span>
+                        <span class="role-name">Soldier Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You have 1 bullet. You can shoot one player at night.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Shoot one player each night (1 bullet total)</li>
+                            <li>Basic attack</li>
+                            <li>If you shoot a Bee, you die from guilt</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">Basic</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <!-- Queen Bee -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">👑</span>
+                        <span class="role-name">Queen Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can reveal yourself during the day to gain 3 extra votes.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Reveal during day phase for 3 extra votes</li>
+                            <li>Get 4 total votes when revealed</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <!-- Worker Bee -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">🐝</span>
+                        <span class="role-name">Worker Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You have no special abilities, but you can help identify threats through discussion and voting.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Vote during the day phase</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <!-- Jailer Bee -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">⛓️</span>
+                        <span class="role-name">Jailer Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can jail one player each night, protecting them but preventing their actions. You can execute your jailed target.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Jail one player each night</li>
+                            <li>Target cannot perform actions or be visited</li>
+                            <li>Execute jailed target (3 executions max)</li>
+                            <li>If you execute a Bee, you lose all executions</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">Unstoppable (execution)</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <!-- Escort Bee -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">💃</span>
+                        <span class="role-name">Escort Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can distract one player each night, preventing them from performing their action.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Roleblock one player each night</li>
+                            <li>Prevent their night action</li>
+                            <li>Cannot roleblock the same person twice in a row</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <!-- Medium Bee -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">👻</span>
+                        <span class="role-name">Medium Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can speak with ALL dead players at night and they can speak back.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Speak with all dead players during night phase</li>
+                            <li>Dead players can send messages visible to you and other dead players</li>
+                            <li>You can reply and all dead players will see your messages</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <!-- Veteran Bee -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">🎖️</span>
+                        <span class="role-name">Veteran Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can go on alert at night, killing anyone who visits you.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Go on alert 3 times</li>
+                            <li>Kill all visitors with powerful attack</li>
+                            <li>Cannot be roleblocked while on alert</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">Powerful</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None (Powerful when on alert)</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <!-- Additional Bee roles continue... -->
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">🗺️</span>
+                        <span class="role-name">Tracker Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can follow one player each night to see who they visit.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Follow one player each night</li>
+                            <li>See who they visit</li>
+                            <li>Does not see what action they perform</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">🌸</span>
+                        <span class="role-name">Pollinator Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can pollinate a player each night. The next night, you will see everyone who visited them and everyone they visited.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Pollinate one player each night</li>
+                            <li>Receive results from 2 nights ago</li>
+                            <li>See all visitors to target and all players target visited</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">🕵️</span>
+                        <span class="role-name">Spy Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can see who the Wasps visit each night and read all their communications.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>See all Wasp visits each night</li>
+                            <li>Read all Wasp chat messages</li>
+                            <li>Identify Wasp targets and plans</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">🪤</span>
+                        <span class="role-name">Trapper Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can set a trap at one player's house. If an attacker visits, they are roleblocked and revealed to you.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Set a trap at one player's house each night</li>
+                            <li>Attackers visiting are roleblocked</li>
+                            <li>Learn the identity of trapped attackers</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">🍯</span>
+                        <span class="role-name">Beekeeper</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can choose to protect the hive or inspect honey stores each night.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Protect the hive: Learn if Wasps tried to kill tonight (once per game)</li>
+                            <li>Inspect stores: Learn how many Wasps are alive</li>
+                            <li>Choose your action each night</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">🔄</span>
+                        <span class="role-name">Transporter Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You can swap two players each night, redirecting all actions targeting them.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Choose two players each night</li>
+                            <li>All actions targeting them are swapped</li>
+                            <li>Can cause chaos or save people</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">🤐</span>
+                        <span class="role-name">Mute Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You are mute and cannot speak in voice, but when you communicate in text, it's translated to emojis!
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Server muted for entire game</li>
+                            <li>All text messages are translated to emojis</li>
+                            <li>Can hear voice chat normally</li>
+                            <li>Unique emoji communication style</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+
+                <div class="role-card bee" data-team="bee">
+                    <div class="role-header">
+                        <span class="role-emoji">🦻</span>
+                        <span class="role-name">Deaf Bee</span>
+                    </div>
+                    <span class="role-team bee">Bee Team</span>
+                    <p class="role-description">
+                        You are deafened and cannot hear voice chat, but you can read text and speak normally!
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Server deafened for entire game</li>
+                            <li>Cannot hear voice communications</li>
+                            <li>Can speak in voice and text normally</li>
+                            <li>Rely on text chat for information</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals
+                    </div>
+                </div>
+            </div>
+
+            <!-- WASP ROLES -->
+            <h3 class="text-center mb-3 mt-3" style="font-size: 2rem; color: #DC143C; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">🐝‍⬛ Wasp Team Roles</h3>
+            <div class="role-grid">
+                <div class="role-card wasp" data-team="wasp">
+                    <div class="role-header">
+                        <span class="role-emoji">👸</span>
+                        <span class="role-name">Wasp Queen</span>
+                    </div>
+                    <span class="role-team wasp">Wasp Team</span>
+                    <p class="role-description">
+                        You are the leader of the Wasps. You choose who to kill each night and cannot be detected by Queen's Guard.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Choose kill target each night</li>
+                            <li>Basic attack</li>
+                            <li>Basic defense</li>
+                            <li>Immune to detection</li>
+                            <li>Appear as not suspicious</li>
+                            <li>Communicate with Wasps</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">Basic</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">Basic</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Equal or outnumber all other players
+                    </div>
+                </div>
+
+                <div class="role-card wasp" data-team="wasp">
+                    <div class="role-header">
+                        <span class="role-emoji">🗡️</span>
+                        <span class="role-name">Killer Wasp</span>
+                    </div>
+                    <span class="role-team wasp">Wasp Team</span>
+                    <p class="role-description">
+                        You carry out the kills for the Wasp team.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Kill target chosen by Wasps</li>
+                            <li>Basic attack</li>
+                            <li>Become Wasp Queen if Queen dies</li>
+                            <li>Communicate with Wasps</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">Basic</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Equal or outnumber all other players
+                    </div>
+                </div>
+
+                <div class="role-card wasp" data-team="wasp">
+                    <div class="role-header">
+                        <span class="role-emoji">🎭</span>
+                        <span class="role-name">Deceiver Wasp</span>
+                    </div>
+                    <span class="role-team wasp">Wasp Team</span>
+                    <p class="role-description">
+                        You can deceive one player each night, twisting their words during the next day phase to make them sound suspicious and incriminating.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Deceive one player each night</li>
+                            <li>All their messages during the next day will be twisted to sound incriminating</li>
+                            <li>Messages are transformed to flip meanings, change accusations, or claim evil roles</li>
+                            <li>Target is NOT notified</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Equal or outnumber all other players
+                    </div>
+                </div>
+
+                <div class="role-card wasp" data-team="wasp">
+                    <div class="role-header">
+                        <span class="role-emoji">🕵️</span>
+                        <span class="role-name">Spy Wasp</span>
+                    </div>
+                    <span class="role-team wasp">Wasp Team</span>
+                    <p class="role-description">
+                        You can investigate one player each night to learn their exact role.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Investigate one player each night</li>
+                            <li>Learn their exact role</li>
+                            <li>Communicate with Wasps</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Equal or outnumber all other players
+                    </div>
+                </div>
+
+                <div class="role-card wasp" data-team="wasp">
+                    <div class="role-header">
+                        <span class="role-emoji">💋</span>
+                        <span class="role-name">Consort Wasp</span>
+                    </div>
+                    <span class="role-team wasp">Wasp Team</span>
+                    <p class="role-description">
+                        You can distract one player each night, preventing them from performing their action.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Roleblock one player each night</li>
+                            <li>Prevent their night action</li>
+                            <li>Communicate with Wasps</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Equal or outnumber all other players
+                    </div>
+                </div>
+
+                <div class="role-card wasp" data-team="wasp">
+                    <div class="role-header">
+                        <span class="role-emoji">🧹</span>
+                        <span class="role-name">Janitor Wasp</span>
+                    </div>
+                    <span class="role-team wasp">Wasp Team</span>
+                    <p class="role-description">
+                        You can clean up a dead body, hiding their role and last will.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Clean one dead body (3 uses)</li>
+                            <li>Hide their role from investigators</li>
+                            <li>Learn the cleaned role yourself</li>
+                            <li>Communicate with Wasps</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Equal or outnumber all other players
+                    </div>
+                </div>
+
+                <div class="role-card wasp" data-team="wasp">
+                    <div class="role-header">
+                        <span class="role-emoji">🤐</span>
+                        <span class="role-name">Blackmailer Wasp</span>
+                    </div>
+                    <span class="role-team wasp">Wasp Team</span>
+                    <p class="role-description">
+                        You can blackmail one player each night, transforming all their messages during the next day phase to sound casual, positive, and deflecting.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Blackmail one player each night</li>
+                            <li>Target is server muted (cannot speak in voice)</li>
+                            <li>All their text messages are transformed to positive/deflecting context</li>
+                            <li>Makes them sound chill and unbothered</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Equal or outnumber all other players
+                    </div>
+                </div>
+
+                <div class="role-card wasp" data-team="wasp">
+                    <div class="role-header">
+                        <span class="role-emoji">🧪</span>
+                        <span class="role-name">Poisoner Wasp</span>
+                    </div>
+                    <span class="role-team wasp">Wasp Team</span>
+                    <p class="role-description">
+                        You can poison one player each night. They will die in 2 nights unless healed.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Poison one player each night</li>
+                            <li>Victim dies in 2 nights</li>
+                            <li>Poison can be cured by healing</li>
+                            <li>Poison is undetectable until death</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Equal or outnumber all other players
+                    </div>
+                </div>
+
+                <div class="role-card wasp" data-team="wasp">
+                    <div class="role-header">
+                        <span class="role-emoji">🎒</span>
+                        <span class="role-name">Kidnapper Wasp</span>
+                    </div>
+                    <span class="role-team wasp">Wasp Team</span>
+                    <p class="role-description">
+                        Once per game, you can kidnap someone for an entire cycle.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Once per game, kidnap one player</li>
+                            <li>They cannot act, vote, or be visited for 1 night/day cycle</li>
+                            <li>They can see and talk in Wasp chat during kidnapping</li>
+                            <li>They return next night</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Equal or outnumber all other players
+                    </div>
+                </div>
+            </div>
+
+            <!-- NEUTRAL ROLES -->
+            <h3 class="text-center mb-3 mt-3" style="font-size: 2rem; color: #9370DB; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">🦋 Neutral Roles</h3>
+            <div class="role-grid">
+                <div class="role-card neutral" data-team="neutral">
+                    <div class="role-header">
+                        <span class="role-emoji">💀</span>
+                        <span class="role-name">Murder Hornet</span>
+                    </div>
+                    <span class="role-team neutral">Neutral Killing</span>
+                    <p class="role-description">
+                        You must kill everyone who opposes you. You kill anyone who visits you.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Kill one player each night</li>
+                            <li>Basic attack</li>
+                            <li>Kill anyone who visits you</li>
+                            <li>Basic defense</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">Basic</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">Basic</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Be the last player alive
+                    </div>
+                </div>
+
+                <div class="role-card neutral" data-team="neutral">
+                    <div class="role-header">
+                        <span class="role-emoji">🔥</span>
+                        <span class="role-name">Fire Ant</span>
+                    </div>
+                    <span class="role-team neutral">Neutral Killing</span>
+                    <p class="role-description">
+                        You can douse players in gasoline and ignite them all at once.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Douse one player each night OR ignite all doused</li>
+                            <li>Unstoppable attack when igniting</li>
+                            <li>Basic defense</li>
+                            <li>Immune to fire</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">Unstoppable (when igniting)</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">Basic</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Be the last player alive
+                    </div>
+                </div>
+
+                <div class="role-card neutral" data-team="neutral">
+                    <div class="role-header">
+                        <span class="role-emoji">🤡</span>
+                        <span class="role-name">Clown Beetle</span>
+                    </div>
+                    <span class="role-team neutral">Neutral Evil</span>
+                    <p class="role-description">
+                        Your goal is to be voted out during the day.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Haunt one guilty voter after being lynched</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Attack:</span>
+                            <span class="stat-value">Unstoppable (haunt)</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Get yourself lynched during the day
+                    </div>
+                </div>
+
+                <div class="role-card neutral" data-team="neutral">
+                    <div class="role-header">
+                        <span class="role-emoji">🎯</span>
+                        <span class="role-name">Bounty Hunter</span>
+                    </div>
+                    <span class="role-team neutral">Neutral Evil</span>
+                    <p class="role-description">
+                        You have a target that you must get lynched.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Get your target lynched during the day</li>
+                            <li>Become Clown Beetle if target dies at night</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">Basic</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> See your target lynched
+                    </div>
+                </div>
+
+                <div class="role-card neutral" data-team="neutral">
+                    <div class="role-header">
+                        <span class="role-emoji">🦋</span>
+                        <span class="role-name">Butterfly</span>
+                    </div>
+                    <span class="role-team neutral">Neutral Benign</span>
+                    <p class="role-description">
+                        You just want to survive until the end.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Put on a vest 3 times for powerful defense</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">None (Powerful when vested)</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Survive to the end of the game
+                    </div>
+                </div>
+
+                <div class="role-card neutral" data-team="neutral">
+                    <div class="role-header">
+                        <span class="role-emoji">🕷️</span>
+                        <span class="role-name">Spider</span>
+                    </div>
+                    <span class="role-team neutral">Neutral Evil</span>
+                    <p class="role-description">
+                        You can control one player each night, forcing them to target another.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Control one player to visit another</li>
+                            <li>Basic defense</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">Basic</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Survive to see Bees or Wasps lose
+                    </div>
+                </div>
+
+                <div class="role-card neutral" data-team="neutral">
+                    <div class="role-header">
+                        <span class="role-emoji">🏴‍☠️</span>
+                        <span class="role-name">Pirate Beetle</span>
+                    </div>
+                    <span class="role-team neutral">Neutral Chaos</span>
+                    <p class="role-description">
+                        You must plunder players by dueling them.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Challenge one player to a duel (rock-paper-scissors)</li>
+                            <li>Win 2 duels to win the game</li>
+                            <li>Basic defense</li>
+                            <li>Become Butterfly after winning</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">Basic</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Successfully plunder 2 players by winning duels
+                    </div>
+                </div>
+
+                <div class="role-card neutral" data-team="neutral">
+                    <div class="role-header">
+                        <span class="role-emoji">🎰</span>
+                        <span class="role-name">Gambler Beetle</span>
+                    </div>
+                    <span class="role-team neutral">Neutral Chaos</span>
+                    <p class="role-description">
+                        Bet on who will die each night. Collect 3 coins to win!
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Bet on one player each night</li>
+                            <li>Gain a lucky coin if they die</li>
+                            <li>Win at 3 coins</li>
+                            <li>Spend 1 coin to survive an attack</li>
+                        </ul>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Collect 3 lucky coins by correctly predicting deaths
+                    </div>
+                </div>
+
+                <div class="role-card neutral" data-team="neutral">
+                    <div class="role-header">
+                        <span class="role-emoji">👤</span>
+                        <span class="role-name">Phantom Moth</span>
+                    </div>
+                    <span class="role-team neutral">Neutral Evil</span>
+                    <p class="role-description">
+                        If you get lynched during the day, you become invisible and return after 1 cycle.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>Survive being lynched once</li>
+                            <li>Become invisible for 1 night/day cycle</li>
+                            <li>Return to the game after</li>
+                            <li>Must survive to the end after returning</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">Basic</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Get lynched, then survive to the end
+                    </div>
+                </div>
+
+                <div class="role-card neutral" data-team="neutral">
+                    <div class="role-header">
+                        <span class="role-emoji">🕯️</span>
+                        <span class="role-name">Cultist</span>
+                    </div>
+                    <span class="role-team neutral">Neutral Evil</span>
+                    <p class="role-description">
+                        Convert players to your cult and win together.
+                    </p>
+                    <div class="role-abilities">
+                        <h4>Abilities:</h4>
+                        <ul>
+                            <li>All cult members vote each night for who to convert</li>
+                            <li>Most voted player gets converted</li>
+                            <li>Converted players join the Cult and can vote</li>
+                            <li>Fails on Wasps and Neutral Killing roles</li>
+                        </ul>
+                    </div>
+                    <div class="role-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Defense:</span>
+                            <span class="stat-value">Basic</span>
+                        </div>
+                    </div>
+                    <div class="role-win">
+                        <strong>Win Condition:</strong> Convert all alive players to the Cult
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2024 BobbyTheBot Mafia | Bee-themed social deduction game</p>
+            <p>Inspired by Town of Salem and classic Mafia</p>
+        </div>
+    </footer>
+
+    <script>
+        // Filter functionality
+        const filterBtns = document.querySelectorAll('.filter-btn');
+        const roleCards = document.querySelectorAll('.role-card');
+
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const filter = btn.getAttribute('data-filter');
+
+                // Update active button
+                filterBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Filter roles
+                roleCards.forEach(card => {
+                    if (filter === 'all' || card.getAttribute('data-team') === filter) {
+                        card.style.display = 'block';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

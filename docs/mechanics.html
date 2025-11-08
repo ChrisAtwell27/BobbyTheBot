@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Mechanics - BobbyTheBot Mafia</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1 class="nav-title">🐝 BobbyTheBot Mafia</h1>
+            <ul class="nav-links">
+                <li><a href="index.html">Overview</a></li>
+                <li><a href="roles.html">Roles</a></li>
+                <li><a href="mechanics.html">Game Mechanics</a></li>
+                <li><a href="phases.html">Game Phases</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section class="section">
+            <h2>Attack & Defense System</h2>
+            <p class="intro-text">
+                The core combat system in BobbyTheBot Mafia is based on attack and defense levels.
+            </p>
+
+            <div class="mechanic-card">
+                <h3>⚔️ Attack Levels</h3>
+                <table class="mechanic-table">
+                    <thead>
+                        <tr>
+                            <th>Level</th>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Example Roles</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>0</td>
+                            <td>None</td>
+                            <td>Cannot kill</td>
+                            <td>Most investigative roles</td>
+                        </tr>
+                        <tr>
+                            <td>1</td>
+                            <td>Basic</td>
+                            <td>Standard attack, blocked by basic defense or healing</td>
+                            <td>Wasp Queen, Killer Wasp, Murder Hornet, Soldier Bee</td>
+                        </tr>
+                        <tr>
+                            <td>2</td>
+                            <td>Powerful</td>
+                            <td>Requires powerful defense to block</td>
+                            <td>Bodyguard Bee (counter), Veteran Bee (alert)</td>
+                        </tr>
+                        <tr>
+                            <td>3</td>
+                            <td>Unstoppable</td>
+                            <td>Cannot be blocked except by invincible defense</td>
+                            <td>Jailer Bee (execute), Fire Ant (ignite), Clown Beetle (haunt)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🛡️ Defense Levels</h3>
+                <table class="mechanic-table">
+                    <thead>
+                        <tr>
+                            <th>Level</th>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Example Roles</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>0</td>
+                            <td>None</td>
+                            <td>Vulnerable to all attacks</td>
+                            <td>Most roles</td>
+                        </tr>
+                        <tr>
+                            <td>1</td>
+                            <td>Basic</td>
+                            <td>Blocks basic attacks only</td>
+                            <td>Wasp Queen, Murder Hornet, Bounty Hunter, healing</td>
+                        </tr>
+                        <tr>
+                            <td>2</td>
+                            <td>Powerful</td>
+                            <td>Blocks basic and powerful attacks</td>
+                            <td>Butterfly (vest), Veteran Bee (alert), Nurse Bee (self-heal)</td>
+                        </tr>
+                        <tr>
+                            <td>3</td>
+                            <td>Invincible</td>
+                            <td>Blocks all attacks including unstoppable</td>
+                            <td>None currently</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>⚡ Attack Resolution</h3>
+                <p><strong>Rule:</strong> If <code>Attack Level ≥ Defense Level</code>, the attack succeeds and the target dies.</p>
+                <ul class="mt-2">
+                    <li>Basic attack (1) vs No defense (0) = <strong>Target dies</strong></li>
+                    <li>Basic attack (1) vs Basic defense (1) = <strong>Target survives</strong></li>
+                    <li>Powerful attack (2) vs Basic defense (1) = <strong>Target dies</strong></li>
+                    <li>Unstoppable attack (3) vs Powerful defense (2) = <strong>Target dies</strong></li>
+                </ul>
+                <p class="mechanic-note mt-2">
+                    <strong>Special Cases:</strong>
+                    <ul>
+                        <li>Healing provides defense level 1 (basic protection) for one night</li>
+                        <li>Vests provide defense level 2 (powerful protection) for one night</li>
+                        <li>Jailed players cannot be visited or attacked</li>
+                        <li>Kidnapped players cannot be visited or attacked</li>
+                    </ul>
+                </p>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Special Mechanics</h2>
+
+            <div class="mechanic-card">
+                <h3>⛓️ Jailing System</h3>
+                <p><strong>Role:</strong> Jailer Bee</p>
+                <ul>
+                    <li>Jailer selects target at dusk phase</li>
+                    <li>Jailed target <strong>cannot</strong>:
+                        <ul>
+                            <li>Perform night actions</li>
+                            <li>Be visited by anyone</li>
+                            <li>Die from attacks</li>
+                        </ul>
+                    </li>
+                    <li>Jailer can execute jailed target (max 3 executions)</li>
+                    <li>Execution is unstoppable attack (level 3)</li>
+                    <li>Cannot jail same person twice in a row</li>
+                    <li>If Jailer executes a Bee, loses all remaining executions</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🎒 Kidnapping</h3>
+                <p><strong>Role:</strong> Kidnapper Wasp</p>
+                <ul>
+                    <li>Can kidnap once per game</li>
+                    <li>Kidnapped player:
+                        <ul>
+                            <li>Cannot act or vote for 1 full night/day cycle</li>
+                            <li>Can see and chat in Wasp chat during kidnapping</li>
+                            <li>Cannot be visited by anyone</li>
+                            <li>Released next night, can act normally</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🚫 Roleblocking</h3>
+                <p><strong>Roles:</strong> Escort Bee, Consort Wasp</p>
+                <ul>
+                    <li>Prevents target's night action from executing</li>
+                    <li>Does NOT prevent visits (action is attempted but fails)</li>
+                    <li>Escort Bee cannot roleblock same person twice in a row</li>
+                    <li>Roleblocked players receive notification</li>
+                    <li>Veteran Bee on alert cannot be roleblocked</li>
+                </ul>
+                <p class="mechanic-note mt-2">
+                    <strong>Difference from Jailing:</strong> Roleblock prevents action but allows visits. Jailing prevents both action AND visits.
+                </p>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🔄 Transportation</h3>
+                <p><strong>Role:</strong> Transporter Bee</p>
+                <ul>
+                    <li>Swaps two players each night</li>
+                    <li>All actions targeting either player are redirected to the other</li>
+                    <li>Selected at dusk phase</li>
+                    <li><strong>Example:</strong> If Transporter swaps A and B:
+                        <ul>
+                            <li>Wasp targets A → Actually targets B</li>
+                            <li>Healer targets B → Actually targets A</li>
+                            <li>Investigator targets A → Investigates B instead</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🧪 Poisoning</h3>
+                <p><strong>Role:</strong> Poisoner Wasp</p>
+                <ul>
+                    <li>Marks target with poison</li>
+                    <li>Poison takes effect after <strong>2 nights</strong></li>
+                    <li>Can be cured by healing during the delay period</li>
+                    <li>Poison is undetectable (no notification to victim)</li>
+                    <li>Death from poison is basic attack (level 1)</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🎭 Deception Mechanics</h3>
+
+                <h4 class="mt-2">Blackmailer Wasp</h4>
+                <ul>
+                    <li>Silences target's voice during next day phase</li>
+                    <li>Target is server muted (cannot speak in voice)</li>
+                    <li>Text messages are transformed to positive/deflecting context</li>
+                    <li>Makes accusations sound like jokes or casual comments</li>
+                    <li>Target knows they're voice muted, doesn't know about text transformation</li>
+                </ul>
+
+                <h4 class="mt-2">Deceiver Wasp</h4>
+                <ul>
+                    <li>Transforms target's text messages during next day phase</li>
+                    <li>Messages are twisted to sound incriminating</li>
+                    <li>Flips accusations, adds suspicious behavior, claims evil roles</li>
+                    <li>Target is NOT notified they're deceived</li>
+                    <li>Must figure it out from context and reactions</li>
+                    <li>Uses AI to generate convincing twisted messages</li>
+                </ul>
+
+                <h4 class="mt-2">Hypnotist Wasp</h4>
+                <ul>
+                    <li>Sends false feedback about night results</li>
+                    <li>Target thinks their action succeeded/failed when it didn't</li>
+                    <li>Creates confusion about investigation results</li>
+                    <li>Can make investigators think they found evil when target is good</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🕯️ Cult System</h3>
+                <p><strong>Role:</strong> Cultist</p>
+                <ul>
+                    <li>Cultist votes with other cult members each night</li>
+                    <li>Most-voted player is converted to cult</li>
+                    <li>Cannot convert Wasps or Neutral Killing roles</li>
+                    <li>Converted players join cult team and can vote on conversions</li>
+                    <li>Cult wins when all alive players are cultists or converted</li>
+                    <li>Converted players keep their original abilities</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🧹 Janitor (Cleaning)</h3>
+                <p><strong>Role:</strong> Janitor Wasp</p>
+                <ul>
+                    <li>Cleans dead bodies (3 uses)</li>
+                    <li>Hides cleaned body's role from all players</li>
+                    <li>Janitor learns the cleaned role privately</li>
+                    <li>Role remains hidden unless "reveal roles" is enabled</li>
+                    <li>Prevents Bees from getting information from deaths</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🎪 Disguising</h3>
+                <p><strong>Role:</strong> Disguiser Wasp</p>
+                <ul>
+                    <li>Disguises as dead player (3 uses)</li>
+                    <li>Appears as that role to investigations</li>
+                    <li>Can change disguise each night</li>
+                    <li>Must predict when investigators will check them</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🎨 Mimicking</h3>
+                <p><strong>Role:</strong> Mimic Wasp</p>
+                <ul>
+                    <li>Chooses Bee role each night (3 uses)</li>
+                    <li>Appears as chosen role if investigated that night</li>
+                    <li>Must predict investigator timing</li>
+                    <li>Returns to normal role when not mimicking</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🪤 Trapping</h3>
+                <p><strong>Role:</strong> Trapper Bee</p>
+                <ul>
+                    <li>Sets trap at target's house</li>
+                    <li>Any attacker visiting is roleblocked</li>
+                    <li>Trapper learns identity of trapped attackers</li>
+                    <li>Does not prevent visits, only blocks attack actions</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🎖️ Veteran Alert</h3>
+                <p><strong>Role:</strong> Veteran Bee</p>
+                <ul>
+                    <li>Goes on alert (3 uses)</li>
+                    <li>Kills all visitors with powerful attack (level 2)</li>
+                    <li>Cannot be roleblocked while on alert</li>
+                    <li>Visitors die for trying to visit</li>
+                    <li>Includes friendly roles (Healers, Investigators, etc.)</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🐜 Guardian System</h3>
+                <p><strong>Role:</strong> Guardian Ant</p>
+                <ul>
+                    <li>Chooses target on Night 1</li>
+                    <li>Target cannot die from night kills while Guardian is alive</li>
+                    <li>If target dies (from lynch or Guardian dying): Guardian becomes Butterfly with 3 vests</li>
+                    <li>Wins if target survives and wins</li>
+                    <li>Target doesn't know they're being guarded</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>💕 Matchmaker Link</h3>
+                <p><strong>Role:</strong> Matchmaker Beetle</p>
+                <ul>
+                    <li>Automatically linked with random player on Night 1</li>
+                    <li>Linked player doesn't know about link</li>
+                    <li>If linked partner dies → Matchmaker dies</li>
+                    <li>If linked partner wins → Matchmaker wins</li>
+                    <li>Creates secret alliance</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🎰 Gambling</h3>
+                <p><strong>Role:</strong> Gambler Beetle</p>
+                <ul>
+                    <li>Bets on who dies each night</li>
+                    <li>Gains lucky coin if prediction correct</li>
+                    <li>Wins when collecting 3 lucky coins</li>
+                    <li>Can spend 1 coin to survive an attack</li>
+                    <li>Auto-defense if attacked while holding coins</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🏴‍☠️ Pirate Dueling</h3>
+                <p><strong>Role:</strong> Pirate Beetle</p>
+                <ul>
+                    <li>Challenges players to duels (rock-paper-scissors)</li>
+                    <li>Target selected at dusk, responds during night</li>
+                    <li>Results revealed at dawn</li>
+                    <li>Wins after winning 2 duels</li>
+                    <li>Target is roleblocked during duel</li>
+                    <li>Becomes Butterfly after winning</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🎭 Doppelgänger Copy</h3>
+                <p><strong>Role:</strong> Doppelgänger</p>
+                <ul>
+                    <li>Chooses target on Night 1</li>
+                    <li>Copies target's exact role and team</li>
+                    <li>If copied target dies → Doppelgänger dies</li>
+                    <li>Wins with copied team</li>
+                    <li>Target doesn't know they were copied</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🔥 Fire Ant Arson</h3>
+                <p><strong>Role:</strong> Fire Ant</p>
+                <ul>
+                    <li>Can douse players (gasoline) OR ignite all doused players</li>
+                    <li>Douse multiple players across multiple nights</li>
+                    <li>Ignition is unstoppable attack (level 3)</li>
+                    <li>Ignition kills all doused at once</li>
+                    <li>Cannot douse and ignite same night</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Mute & Deaf Variants</h2>
+
+            <div class="mechanic-card">
+                <h3>🤐 Mute Bee Variants</h3>
+                <p>Some roles have "Mute" variants that add a unique challenge:</p>
+                <ul>
+                    <li>All messages in voice/text converted to emojis</li>
+                    <li>Server-muted (cannot speak in voice)</li>
+                    <li>Uses AI to generate contextually appropriate emojis</li>
+                    <li>Can hear voice chat normally</li>
+                    <li>Creates hilarious and challenging gameplay</li>
+                </ul>
+                <p class="mt-2"><strong>Affected Roles:</strong></p>
+                <ul>
+                    <li>Mute Scout Bee</li>
+                    <li>Mute Nurse Bee</li>
+                    <li>Mute Soldier Bee</li>
+                    <li>Mute Jailer Bee</li>
+                    <li>Mute Wasp / Mute Wasp Queen</li>
+                    <li>Mute Spy Wasp</li>
+                    <li>Mute Clown Beetle</li>
+                    <li>Mute Butterfly</li>
+                    <li>Mute Murder Hornet</li>
+                    <li>Plus standalone Mute Bee role</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🦻 Deaf Bee</h3>
+                <ul>
+                    <li>Cannot hear voice chat (server deafened)</li>
+                    <li>Can read text and speak normally in voice and text</li>
+                    <li>Must rely on text chat for information</li>
+                    <li>Creates different gameplay experience</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Night Action Priority</h2>
+            <p class="intro-text">When multiple actions occur at night, they are processed in this order:</p>
+
+            <table class="mechanic-table">
+                <thead>
+                    <tr>
+                        <th>Priority</th>
+                        <th>Action Type</th>
+                        <th>Examples</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td>Guilty Vigilante Execution</td>
+                        <td>Soldier Bee who killed a Bee dies from guilt</td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td>Kidnapping/Jailing</td>
+                        <td>Kidnapped/Jailed players cannot act</td>
+                    </tr>
+                    <tr>
+                        <td>3</td>
+                        <td>Sabotage</td>
+                        <td>Sabotaged players' actions fail silently</td>
+                    </tr>
+                    <tr>
+                        <td>4</td>
+                        <td>Protection Phase</td>
+                        <td>Healing, guards, vests, alerts applied</td>
+                    </tr>
+                    <tr>
+                        <td>5</td>
+                        <td>Kill Phase</td>
+                        <td>Mafia kills, serial kills, shoots executed</td>
+                    </tr>
+                    <tr>
+                        <td>6</td>
+                        <td>Roleblock/Jail</td>
+                        <td>Actions blocked by roleblock or jail</td>
+                    </tr>
+                    <tr>
+                        <td>7</td>
+                        <td>Witch Control</td>
+                        <td>Spider controls player actions</td>
+                    </tr>
+                    <tr>
+                        <td>8</td>
+                        <td>Transporter Swaps</td>
+                        <td>Actions redirected by swaps</td>
+                    </tr>
+                    <tr>
+                        <td>9</td>
+                        <td>Counter-Attacks</td>
+                        <td>Murder Hornet, Veteran Bee counter-attacks</td>
+                    </tr>
+                    <tr>
+                        <td>10</td>
+                        <td>Attack Resolution</td>
+                        <td>Determine who dies based on attack vs defense</td>
+                    </tr>
+                    <tr>
+                        <td>11</td>
+                        <td>Investigation Results</td>
+                        <td>Investigators get their results</td>
+                    </tr>
+                    <tr>
+                        <td>12</td>
+                        <td>Visit Tracking</td>
+                        <td>Lookout, Tracker, Spy receive visit info</td>
+                    </tr>
+                    <tr>
+                        <td>13</td>
+                        <td>Poison Deaths</td>
+                        <td>2-night delayed poison deaths occur</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="section">
+            <h2>Visit Mechanics</h2>
+
+            <div class="mechanic-card">
+                <h3>👣 What Counts as a Visit?</h3>
+                <p>Most night actions involve "visiting" a target. These actions count as visits:</p>
+                <ul>
+                    <li>Killing (Wasp kills, Serial Killer, Soldier Bee)</li>
+                    <li>Investigating (Scout Bee, Queen's Guard, Spy Wasp)</li>
+                    <li>Protecting (Nurse Bee, Bodyguard Bee)</li>
+                    <li>Roleblocking (Escort Bee, Consort Wasp)</li>
+                    <li>Tracking (Tracker Bee, Lookout Bee)</li>
+                    <li>Jailing (Jailer Bee)</li>
+                    <li>And most other targeted actions</li>
+                </ul>
+
+                <p class="mt-2"><strong>Actions that do NOT count as visits:</strong></p>
+                <ul>
+                    <li>Spy Bee observing Wasps (doesn't visit anyone)</li>
+                    <li>Veteran Bee going on alert (stays home)</li>
+                    <li>Butterfly using vest (stays home)</li>
+                    <li>Queen Bee revealing (day action)</li>
+                    <li>Some passive abilities</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🔍 Visit Detection</h3>
+                <p><strong>Roles that can detect visits:</strong></p>
+                <ul>
+                    <li><strong>Lookout Bee:</strong> Sees who visits their target</li>
+                    <li><strong>Tracker Bee:</strong> Sees who their target visits</li>
+                    <li><strong>Spy Bee:</strong> Sees who Wasps visit</li>
+                    <li><strong>Pollinator Bee:</strong> Sees both visitors and targets (2 night delay)</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>⚠️ Dangerous Visits</h3>
+                <p>Visiting certain players can be deadly:</p>
+                <ul>
+                    <li><strong>Murder Hornet:</strong> Kills anyone who visits them</li>
+                    <li><strong>Veteran Bee (on alert):</strong> Kills all visitors</li>
+                    <li><strong>Trapper Bee (if you're an attacker):</strong> Roleblocked and revealed</li>
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2024 BobbyTheBot Mafia | Bee-themed social deduction game</p>
+            <p>Inspired by Town of Salem and classic Mafia</p>
+        </div>
+    </footer>
+</body>
+</html>

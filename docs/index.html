@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BobbyTheBot Mafia - Game Documentation</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1 class="nav-title">🐝 BobbyTheBot Mafia</h1>
+            <ul class="nav-links">
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="roles.html">Roles</a></li>
+                <li><a href="mechanics.html">Game Mechanics</a></li>
+                <li><a href="phases.html">Game Phases</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section id="overview" class="section">
+            <h2>Welcome to BobbyTheBot Mafia!</h2>
+            <p class="intro-text">
+                A bee-themed social deduction game inspired by Town of Salem and classic Mafia.
+                Battle between Bees (Town), Wasps (Mafia), and Neutral roles in voice chat mayhem!
+            </p>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🐝</div>
+                    <h3>Bee Team</h3>
+                    <p>Protect the hive! Use investigation, healing, and protection to eliminate all threats.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🐝‍⬛</div>
+                    <h3>Wasp Team</h3>
+                    <p>Infiltrate and destroy! Work together at night to eliminate the Bees.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🦋</div>
+                    <h3>Neutral Roles</h3>
+                    <p>Create chaos! Each neutral has unique win conditions and abilities.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="quick-start" class="section">
+            <h2>Quick Start Guide</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Join the Game</h3>
+                        <p>Join a voice channel and wait for the game to start. You'll receive a DM with your role assignment.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Understand Your Role</h3>
+                        <p>Read your role description carefully. Check if you have night actions or special abilities.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Night Phase</h3>
+                        <p>If you have a night action, you'll receive a DM prompting you to select targets using buttons.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3>Day Phase</h3>
+                        <p>Discuss with other players, share information, and try to identify evil players.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <h3>Voting Phase</h3>
+                        <p>Vote to eliminate a player using the buttons in the game channel. Majority wins!</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="teams" class="section">
+            <h2>Teams & Win Conditions</h2>
+
+            <div class="team-card bee-team">
+                <h3>🐝 Bee Team (Town)</h3>
+                <p><strong>Win Condition:</strong> Eliminate all Wasps and harmful Neutrals</p>
+                <p><strong>Strategy:</strong> Use investigation roles to identify threats, protect key players, and vote out evil roles during the day.</p>
+                <ul class="team-roles">
+                    <li>👮 Queen's Guard (Investigator)</li>
+                    <li>🔍 Scout Bee (Sheriff)</li>
+                    <li>⚕️ Nurse Bee (Doctor)</li>
+                    <li>🛡️ Bodyguard Bee (Bodyguard)</li>
+                    <li>👁️ Lookout Bee (Lookout)</li>
+                    <li>⚔️ Soldier Bee (Vigilante)</li>
+                    <li>👑 Queen Bee (Mayor)</li>
+                    <li>⛓️ Jailer Bee (Jailor)</li>
+                    <li>And many more!</li>
+                </ul>
+            </div>
+
+            <div class="team-card wasp-team">
+                <h3>🐝‍⬛ Wasp Team (Mafia)</h3>
+                <p><strong>Win Condition:</strong> Equal or outnumber all other players</p>
+                <p><strong>Strategy:</strong> Coordinate kills at night, blend in during the day, and eliminate key Bee roles.</p>
+                <ul class="team-roles">
+                    <li>👸 Wasp Queen (Godfather)</li>
+                    <li>🗡️ Killer Wasp (Mafioso)</li>
+                    <li>🎭 Deceiver Wasp (Forger)</li>
+                    <li>🕵️ Spy Wasp (Consigliere)</li>
+                    <li>💋 Consort Wasp (Consort)</li>
+                    <li>🧹 Janitor Wasp (Janitor)</li>
+                    <li>🤐 Blackmailer Wasp (Blackmailer)</li>
+                    <li>And more!</li>
+                </ul>
+            </div>
+
+            <div class="team-card neutral-team">
+                <h3>🦋 Neutral Roles</h3>
+                <p><strong>Win Conditions:</strong> Varies by role</p>
+                <p><strong>Strategy:</strong> Each neutral has unique goals. Some must survive, others must kill, and some have special objectives.</p>
+                <ul class="team-roles">
+                    <li>💀 Murder Hornet (Serial Killer)</li>
+                    <li>🔥 Fire Ant (Arsonist)</li>
+                    <li>🤡 Clown Beetle (Jester)</li>
+                    <li>🎯 Bounty Hunter (Executioner)</li>
+                    <li>🦋 Butterfly (Survivor)</li>
+                    <li>🕷️ Spider (Witch)</li>
+                    <li>🏴‍☠️ Pirate Beetle (Pirate)</li>
+                    <li>And many more!</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="core-mechanics" class="section">
+            <h2>Core Game Mechanics</h2>
+
+            <div class="mechanic-card">
+                <h3>⚔️ Attack & Defense System</h3>
+                <table class="mechanic-table">
+                    <thead>
+                        <tr>
+                            <th>Level</th>
+                            <th>Attack</th>
+                            <th>Defense</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>0</td>
+                            <td>No attack</td>
+                            <td>No defense</td>
+                        </tr>
+                        <tr>
+                            <td>1</td>
+                            <td>Basic attack</td>
+                            <td>Basic defense (blocks basic attacks)</td>
+                        </tr>
+                        <tr>
+                            <td>2</td>
+                            <td>Powerful attack</td>
+                            <td>Powerful defense (blocks powerful attacks)</td>
+                        </tr>
+                        <tr>
+                            <td>3</td>
+                            <td>Unstoppable attack</td>
+                            <td>Invincible defense (blocks all attacks)</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p class="mechanic-note">
+                    <strong>Resolution:</strong> If attack level ≥ defense level, the attack succeeds and the target dies.
+                </p>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🌙 Night Actions</h3>
+                <p>Many roles can perform actions at night:</p>
+                <ul>
+                    <li><strong>Killing:</strong> Wasps vote on who to kill, Serial Killers choose targets</li>
+                    <li><strong>Investigating:</strong> Learn information about other players</li>
+                    <li><strong>Protecting:</strong> Heal or guard players from attacks</li>
+                    <li><strong>Roleblocking:</strong> Prevent a player's action from working</li>
+                    <li><strong>Visiting:</strong> Most actions involve "visiting" a target</li>
+                </ul>
+            </div>
+
+            <div class="mechanic-card">
+                <h3>🗳️ Voting & Elimination</h3>
+                <ul>
+                    <li>Each player gets <strong>1 vote</strong> during voting phase</li>
+                    <li><strong>Queen Bee</strong> gets 4 votes after revealing</li>
+                    <li>Minimum <strong>2 votes</strong> needed to eliminate (1 in debug mode)</li>
+                    <li><strong>Ties:</strong> Trigger a 60-second revote, then random selection if still tied</li>
+                    <li><strong>Marshal Bee</strong> can protect one Bee per day from lynching</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="special-features" class="section">
+            <h2>Special Features</h2>
+
+            <div class="feature-list">
+                <div class="feature-item">
+                    <h3>🤐 Mute Variants</h3>
+                    <p>Some roles are mute - all their messages are converted to emojis using AI! Creates hilarious and challenging gameplay.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>🦻 Deaf Bee</h3>
+                    <p>Cannot hear voice chat but can speak and read text normally. Must rely on text communication.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>🎭 Deception Mechanics</h3>
+                    <p>Deceiver Wasp twists messages to sound incriminating. Blackmailer mutes and transforms text to deflecting messages.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>⛓️ Jailing System</h3>
+                    <p>Jailer can jail targets, preventing all actions and visits. Can execute jailed targets with unstoppable attack.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>🎒 Kidnapping</h3>
+                    <p>Kidnapper Wasp can kidnap a player for an entire cycle - they can see and chat in Wasp chat!</p>
+                </div>
+                <div class="feature-item">
+                    <h3>🕯️ Cult System</h3>
+                    <p>Cultists vote to convert players each night. Win when all alive players are part of the Cult.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="resources" class="section">
+            <h2>Learn More</h2>
+            <div class="resource-cards">
+                <a href="roles.html" class="resource-card">
+                    <h3>📋 All Roles</h3>
+                    <p>Complete list of all roles with detailed descriptions and abilities</p>
+                </a>
+                <a href="mechanics.html" class="resource-card">
+                    <h3>⚙️ Game Mechanics</h3>
+                    <p>In-depth explanation of attack/defense, night actions, and special mechanics</p>
+                </a>
+                <a href="phases.html" class="resource-card">
+                    <h3>🌓 Game Phases</h3>
+                    <p>Detailed breakdown of Setup, Night, Dusk, Day, and Voting phases</p>
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2024 BobbyTheBot Mafia | Bee-themed social deduction game</p>
+            <p>Inspired by Town of Salem and classic Mafia</p>
+        </div>
+    </footer>
+</body>
+</html>

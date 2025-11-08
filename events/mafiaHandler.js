@@ -5,7 +5,7 @@ const { TARGET_GUILD_ID } = require('../config/guildConfig');
 const { ROLES } = require('../mafia/roles/mafiaRoles');
 const { createGame, getGame, getGameByPlayer, deleteGame, getAllGames, addVisit, getVisitors, clearNightData, clearDayData, clearVotes, updateActivity } = require('../mafia/game/mafiaGameState');
 const { processNightActions } = require('../mafia/game/mafiaActions');
-const { getPlayerTeam, getRoleDistribution, shuffleArray, getTeamCounts, countVotes, determineWinners, checkWinConditions, initializePlayerRole } = require('../mafia/game/mafiaUtils');
+const { getPlayerTeam, getRoleDistribution, shuffleArray, getTeamCounts, determineWinners, checkWinConditions, initializePlayerRole } = require('../mafia/game/mafiaUtils');
 const OpenAI = require('openai');
 
 // Constants
@@ -443,25 +443,22 @@ function createGameEmbed(game) {
     } else if (game.phase === 'voting') {
         embed.setDescription(`**Phase:** 🗳️ Voting Time\n**Time Remaining:** ${Math.ceil((game.phaseEndTime - Date.now()) / 1000)}s`);
         embed.addFields({
-            name: 'Instructions',
-            value: 'Vote for a player to eliminate using the buttons below!',
-            inline: false
+            name: `Alive Players (${alivePlayers.length})`,
+            value: alivePlayers.map(p => `• ${p.displayName}`).join('\n'),
+            inline: true
         });
-
-        const voteCounts = countVotes(game.votes || {});
-
-        if (Object.keys(voteCounts).length > 0) {
-            const voteStatus = alivePlayers.map(p => {
-                const count = voteCounts[p.id] || 0;
-                return `• ${p.displayName}: ${count} vote${count !== 1 ? 's' : ''}`;
-            }).join('\n');
-
+        if (deadPlayers.length > 0) {
             embed.addFields({
-                name: 'Current Votes',
-                value: voteStatus,
-                inline: false
+                name: `Eliminated (${deadPlayers.length})`,
+                value: deadPlayers.map(p => `• ${p.displayName}`).join('\n'),
+                inline: true
             });
         }
+        embed.addFields({
+            name: 'Instructions',
+            value: 'Check your DMs to vote for a player to eliminate!',
+            inline: false
+        });
     }
 
     return embed;
@@ -2245,9 +2242,9 @@ async function processNightAction(userId, message, game, client) {
                 const newTarget = numbers[1] - 1;
 
                 if (controlTarget >= 0 && controlTarget < validTargets.length &&
-                    newTarget >= 0 && newTarget < alivePlayers.length) {
+                    newTarget >= 0 && newTarget < validTargets.length) {
                     const controlled = validTargets[controlTarget];
-                    const redirected = alivePlayers[newTarget];
+                    const redirected = validTargets[newTarget];
                     game.nightActions[userId] = {
                         actionType: 'witch',
                         target: controlled.id,
@@ -2258,7 +2255,7 @@ async function processNightAction(userId, message, game, client) {
                     await sendInvalidChoiceMessage(message, validTargets, 'Send two numbers: first is who to control, second is their new target.');
                 }
             } else {
-                await sendInvalidChoiceMessage(message, alivePlayers.filter(p => p.id !== userId), 'Send two numbers separated by a space: first is who to control, second is their new target.');
+                await sendInvalidChoiceMessage(message, validTargets, 'Send two numbers separated by a space: first is who to control, second is their new target.');
             }
             break;
 
@@ -2777,6 +2774,9 @@ async function processNightAction(userId, message, game, client) {
             // Unknown action type or no night action
             break;
     }
+
+    // Check if all night actions are complete and end phase early
+    await checkNightActionsComplete(game, client);
 }
 
 // Helper function to send invalid choice messages
@@ -2787,6 +2787,41 @@ async function sendInvalidChoiceMessage(message, validTargets, customMessage = n
 
     const errorMessage = customMessage || `Invalid choice. Please send a valid number (1-${validTargets.length}):`;
     await message.reply(`${errorMessage}\n\n${targets}`);
+}
+
+// Check if all night actions are complete and end phase early if so
+async function checkNightActionsComplete(game, client) {
+    if (game.phase !== 'night') return;
+
+    const alivePlayers = game.players.filter(p => p.alive);
+
+    // Get all players who need to submit a night action
+    const playersWithActions = alivePlayers.filter(p => {
+        const role = ROLES[p.role];
+        const isCultMember = p.convertedToCult;
+        return role.nightAction || isCultMember;
+    });
+
+    // Check if all players with night actions have submitted
+    const allActionsSubmitted = playersWithActions.every(p => game.nightActions[p.id] !== undefined);
+
+    if (allActionsSubmitted && playersWithActions.length > 0) {
+        // Clear the phase timer
+        if (game.phaseTimer) {
+            clearTimeout(game.phaseTimer);
+        }
+
+        // Announce early completion to all players via DM
+        const earlyEndEmbed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('🌙 All Night Actions Received!')
+            .setDescription('Everyone has submitted their night action! Proceeding to dawn...')
+            .setTimestamp();
+        await sendToEveryoneInGame(game, client, earlyEndEmbed);
+
+        // End the night phase
+        await endNightPhase(game, client);
+    }
 }
 
 // End night phase
@@ -3092,6 +3127,33 @@ async function endNightPhase(game, client) {
             await user.send({ embeds: [marshalEmbed] });
         } catch (error) {
             console.error(`Could not send Marshal instructions to ${marshal.displayName}:`, error);
+        }
+    }
+
+    // Send Queen Bee reveal button
+    const queenBees = game.players.filter(p => p.alive && p.role === 'QUEEN_BEE' && !p.hasRevealed);
+    for (const queen of queenBees) {
+        try {
+            const user = await client.users.fetch(queen.id);
+
+            const queenEmbed = new EmbedBuilder()
+                .setColor('#FFD700')
+                .setTitle('👑 Queen Bee - Reveal Option Available')
+                .setDescription('You can reveal yourself as the Queen Bee to gain **3 extra votes** (4 total) during voting!\n\nClick the button below to reveal yourself, or type **!reveal** in DMs.\n\n⚠️ **Warning:** This is permanent and will reveal your role to everyone!')
+                .setTimestamp();
+
+            const revealButton = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`queenreveal_${game.id}`)
+                        .setLabel('Reveal as Queen Bee')
+                        .setStyle(ButtonStyle.Danger)
+                        .setEmoji('👑')
+                );
+
+            await user.send({ embeds: [queenEmbed], components: [revealButton] });
+        } catch (error) {
+            console.error(`Could not send Queen Bee reveal option to ${queen.displayName}:`, error);
         }
     }
 
@@ -5119,8 +5181,8 @@ module.exports = (client) => {
                     const prefix = isMedium ? '**Medium:**' : `👻 **${player.displayName}:**`;
                     const formattedMessage = `${prefix} ${messageToSend}`;
 
-                    // Send to all dead players
-                    const deadPlayers = game.players.filter(p => !p.alive);
+                    // Send to all dead players except the sender
+                    const deadPlayers = game.players.filter(p => !p.alive && p.id !== message.author.id);
                     for (const deadPlayer of deadPlayers) {
                         try {
                             const user = await client.users.fetch(deadPlayer.id);
@@ -5130,14 +5192,14 @@ module.exports = (client) => {
                         }
                     }
 
-                    // Send to Medium if they exist and aren't the sender
-                    const medium = game.players.find(p => p.alive && p.role === 'MEDIUM_BEE');
-                    if (medium && medium.id !== message.author.id) {
+                    // Send to all Mediums except the sender
+                    const mediums = game.players.filter(p => p.alive && p.role === 'MEDIUM_BEE' && p.id !== message.author.id);
+                    for (const medium of mediums) {
                         try {
                             const mediumUser = await client.users.fetch(medium.id);
                             await mediumUser.send(formattedMessage);
                         } catch (error) {
-                            console.error('Could not send message to Medium:', error);
+                            console.error(`Could not send message to Medium ${medium.displayName}:`, error);
                         }
                     }
 
@@ -5537,7 +5599,7 @@ module.exports = (client) => {
 
         // Parse customId correctly - gameId contains underscores (e.g., mafia_1234567890)
         const parts = interaction.customId.split('_');
-        const action = parts[0]; // e.g., 'mafiavote'
+        const action = parts[0]; // e.g., 'mafiavote' or 'queenreveal'
 
         let gameId, targetId;
         if (action === 'mafiavote') {
@@ -5545,6 +5607,88 @@ module.exports = (client) => {
             // targetId is always the last part, gameId is everything in between
             targetId = parts[parts.length - 1];
             gameId = parts.slice(1, -1).join('_');
+        } else if (action === 'queenreveal') {
+            // For queenreveal buttons: queenreveal_mafia_timestamp
+            gameId = parts.slice(1).join('_');
+        }
+
+        // Handle Queen Bee reveal button
+        if (action === 'queenreveal') {
+            const game = getGame(gameId);
+
+            if (!game) {
+                return interaction.reply({
+                    content: 'This game is no longer active.',
+                    ephemeral: true
+                });
+            }
+
+            const player = game.players.find(p => p.id === interaction.user.id);
+            if (!player) {
+                return interaction.reply({
+                    content: 'You are not in this game!',
+                    ephemeral: true
+                });
+            }
+
+            if (!player.alive) {
+                return interaction.reply({
+                    content: 'You must be alive to reveal!',
+                    ephemeral: true
+                });
+            }
+
+            if (player.role !== 'QUEEN_BEE') {
+                return interaction.reply({
+                    content: 'Only the Queen Bee can reveal!',
+                    ephemeral: true
+                });
+            }
+
+            if (game.phase !== 'day' && game.phase !== 'voting') {
+                return interaction.reply({
+                    content: 'You can only reveal during the day or voting phase!',
+                    ephemeral: true
+                });
+            }
+
+            if (player.hasRevealed) {
+                return interaction.reply({
+                    content: 'You have already revealed yourself!',
+                    ephemeral: true
+                });
+            }
+
+            // Mark as revealed
+            player.hasRevealed = true;
+
+            // Announce to all players via DM
+            const revealEmbed = new EmbedBuilder()
+                .setColor('#FFD700')
+                .setTitle('👑 ROYAL REVEAL! 👑')
+                .setDescription(`**${player.displayName}** has revealed themselves as the **Queen Bee**!\n\nThey now have **3 extra votes** during voting!`)
+                .setTimestamp();
+
+            await sendToEveryoneInGame(game, client, revealEmbed);
+
+            // Post to #mafia channel with @here ping
+            try {
+                if (!game.cachedChannel) {
+                    game.cachedChannel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+                }
+                const channel = game.cachedChannel;
+                await channel.send({
+                    content: '@here',
+                    embeds: [revealEmbed]
+                });
+            } catch (error) {
+                console.error('Could not send Queen Bee reveal to mafia channel:', error);
+            }
+
+            await interaction.reply({
+                content: 'You have revealed yourself as the Queen Bee! You now have 3 extra votes.',
+                ephemeral: true
+            });
         }
 
         if (action === 'mafiavote') {
