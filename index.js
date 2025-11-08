@@ -80,39 +80,13 @@ require('./events/changelogHandler')(client, changelogChannelId);
 const valorantApiHandler = require('./events/valorantApiHandler');
 valorantApiHandler.init(client);
 
-// Create a simple HTTP server for health checks
-const PORT = process.env.PORT || 8080;
-const server = http.createServer((req, res) => {
-  if (req.url === '/health' || req.url === '/') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      status: 'ok',
-      botStatus: client.ws.status === 0 ? 'ready' : 'not ready',
-      uptime: process.uptime()
-    }));
-  } else {
-    res.writeHead(404);
-    res.end('Not Found');
-  }
-});
-
-server.listen(PORT, () => {
-  console.log(`Health check server listening on port ${PORT}`);
-});
-
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is already in use`);
-  } else {
-    console.error('HTTP server error:', error);
-  }
-});
-
-// Initialize Mafia Webhook API server
+// Initialize Mafia Webhook API server (replaces old health check server)
+// The webhook API includes a /health endpoint, so we don't need a separate server
 let mafiaWebhookServer = null;
 if (process.env.MAFIA_WEBHOOK_ENABLED !== 'false') {
   const MafiaWebhookServer = require('./api/mafiaWebhookServer');
-  const webhookPort = process.env.MAFIA_WEBHOOK_PORT || 3001;
+  // Use PORT environment variable for App Platform compatibility
+  const webhookPort = process.env.MAFIA_WEBHOOK_PORT || process.env.PORT || 3001;
 
   // Wait for client to be ready before starting webhook server
   client.once('ready', () => {

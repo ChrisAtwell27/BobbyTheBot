@@ -12,7 +12,11 @@
       "Bash(tree:*)",
       "Bash(if not exist \"e:\\BobbyTheBot\\BobbyTheBot\\api\" mkdir \"e:\\BobbyTheBot\\BobbyTheBot\\api\")",
       "Bash(mkdir:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(test:*)",
+      "Bash(netstat:*)",
+      "Bash(curl:*)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []
