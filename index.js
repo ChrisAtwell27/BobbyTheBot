@@ -82,21 +82,23 @@ valorantApiHandler.init(client);
 
 // Initialize Mafia Webhook API server (replaces old health check server)
 // The webhook API includes a /health endpoint, so we don't need a separate server
+// START IMMEDIATELY for App Platform health checks (don't wait for Discord client)
 let mafiaWebhookServer = null;
 if (process.env.MAFIA_WEBHOOK_ENABLED !== 'false') {
   const MafiaWebhookServer = require('./api/mafiaWebhookServer');
   // Use PORT environment variable for App Platform compatibility
   const webhookPort = process.env.MAFIA_WEBHOOK_PORT || process.env.PORT || 3001;
 
-  // Wait for client to be ready before starting webhook server
-  client.once('ready', () => {
-    try {
-      mafiaWebhookServer = new MafiaWebhookServer(client, mafiaHandler.getActiveGames());
-      mafiaWebhookServer.start(webhookPort);
-    } catch (error) {
-      console.error('Failed to start Mafia Webhook API:', error);
-    }
-  });
+  try {
+    // Start webhook server immediately so App Platform health checks pass
+    // The server will work for /health endpoint even before Discord client is ready
+    // Game-specific endpoints will just return "no game found" until client connects
+    mafiaWebhookServer = new MafiaWebhookServer(client, mafiaHandler.getActiveGames());
+    mafiaWebhookServer.start(webhookPort);
+    console.log('🚀 Mafia Webhook API starting (before Discord client ready for App Platform health checks)');
+  } catch (error) {
+    console.error('Failed to start Mafia Webhook API:', error);
+  }
 }
 
 // Start the bot
