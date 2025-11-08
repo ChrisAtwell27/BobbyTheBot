@@ -579,3 +579,144 @@ footer {
 .mt-1 { margin-top: 0.5rem; }
 .mt-2 { margin-top: 1rem; }
 .mt-3 { margin-top: 1.5rem; }
+
+/* Command Cards */
+.command-card {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-left: 5px solid var(--bee-yellow);
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.command-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.command-card.debug {
+    border-left-color: var(--wasp-red);
+}
+
+.command-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.command-header h3 {
+    color: var(--bee-black);
+    font-size: 1.8rem;
+    margin: 0;
+}
+
+.alt-command {
+    font-size: 1.2rem;
+    color: #666;
+    font-weight: normal;
+}
+
+.command-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.command-badge {
+    background: var(--bee-yellow);
+    color: var(--bee-black);
+}
+
+.command-badge.debug {
+    background: var(--wasp-red);
+    color: white;
+}
+
+.command-badge.organizer {
+    background: var(--accent);
+    color: white;
+}
+
+.command-badge.queen {
+    background: var(--bee-yellow);
+    color: var(--bee-black);
+    border: 2px solid var(--bee-black);
+}
+
+.command-description {
+    font-size: 1.2rem;
+    color: #555;
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+}
+
+.command-details {
+    margin-top: 1.5rem;
+}
+
+.command-details h4 {
+    color: var(--bee-black);
+    margin: 1.5rem 0 0.75rem 0;
+    font-size: 1.2rem;
+}
+
+.command-details h4:first-child {
+    margin-top: 0;
+}
+
+.command-details ul {
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.command-details li {
+    margin-bottom: 0.5rem;
+    color: #555;
+    line-height: 1.6;
+}
+
+.code-block {
+    background: #2c2c2c;
+    color: #fff;
+    padding: 1.5rem;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    margin: 1rem 0;
+    overflow-x: auto;
+}
+
+.code-block code {
+    color: var(--bee-yellow);
+    font-weight: bold;
+}
+
+/* Interaction Cards */
+.interaction-card {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    border-left: 5px solid var(--neutral-purple);
+}
+
+.interaction-card h3 {
+    color: var(--bee-black);
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.interaction-card ul {
+    padding-left: 1.5rem;
+}
+
+.interaction-card li {
+    margin-bottom: 0.75rem;
+    color: #555;
+}

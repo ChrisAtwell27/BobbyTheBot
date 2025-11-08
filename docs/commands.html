@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commands - BobbyTheBot Mafia</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1 class="nav-title">🐝 BobbyTheBot Mafia</h1>
+            <ul class="nav-links">
+                <li><a href="index.html">Overview</a></li>
+                <li><a href="roles.html">Roles</a></li>
+                <li><a href="mechanics.html">Game Mechanics</a></li>
+                <li><a href="phases.html">Game Phases</a></li>
+                <li><a href="commands.html">Commands</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section class="section">
+            <h2>All Commands</h2>
+            <p class="intro-text">
+                Complete reference for all BobbyTheBot Mafia commands. Use these to start games, view roles, and control gameplay.
+            </p>
+
+            <div class="filter-container">
+                <button class="filter-btn active" data-filter="all">All Commands</button>
+                <button class="filter-btn" data-filter="primary">Primary</button>
+                <button class="filter-btn" data-filter="debug">Debug/Testing</button>
+                <button class="filter-btn" data-filter="ingame">In-Game</button>
+            </div>
+        </section>
+
+        <!-- PRIMARY COMMANDS -->
+        <section class="section">
+            <h2 style="color: #FFD700;">🎮 Primary Commands</h2>
+
+            <div class="command-card primary" data-category="primary">
+                <div class="command-header">
+                    <h3>!createmafia</h3>
+                    <span class="command-badge">Everyone</span>
+                </div>
+                <p class="command-description">
+                    Start a new Bee Mafia game with all players currently in the voice channel.
+                </p>
+
+                <div class="command-details">
+                    <h4>Requirements:</h4>
+                    <ul>
+                        <li>Must be in the designated Mafia voice channel</li>
+                        <li>Minimum <strong>6 players</strong> required</li>
+                        <li>No player can already be in an active game</li>
+                    </ul>
+
+                    <h4>Parameters:</h4>
+                    <ul>
+                        <li><code>random</code> - Enable random role mode (all roles randomized except Wasp Queen)</li>
+                        <li><code>revealroles</code> - Show all roles to all players at game start</li>
+                        <li><code>[preset_name]</code> - Use a specific preset role distribution</li>
+                    </ul>
+
+                    <h4>Usage Examples:</h4>
+                    <div class="code-block">
+                        <code>!createmafia</code> - Standard game with default roles<br>
+                        <code>!createmafia random</code> - Chaos mode with random roles<br>
+                        <code>!createmafia revealroles</code> - Everyone sees all roles from start<br>
+                        <code>!createmafia basic</code> - Use 'basic' preset<br>
+                        <code>!createmafia chaos random</code> - Chaos preset with random roles
+                    </div>
+
+                    <div class="mechanic-note mt-2">
+                        <strong>After Running:</strong> An interactive button prompt appears to configure phase timings:
+                        <ul>
+                            <li><strong>Quick Start</strong> - Uses default timings (Night: 60s, Day: 180s, Voting: 120s)</li>
+                            <li><strong>Configure Custom Times</strong> - Opens modal to set custom phase durations</li>
+                            <li><strong>Auto-Start</strong> - If no button clicked within 2 minutes, game starts with defaults</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="command-card primary" data-category="primary">
+                <div class="command-header">
+                    <h3>!mafiaroles <span class="alt-command">or !roles</span></h3>
+                    <span class="command-badge">Everyone</span>
+                </div>
+                <p class="command-description">
+                    View detailed information about all available roles in the game.
+                </p>
+
+                <div class="command-details">
+                    <h4>Parameters:</h4>
+                    <ul>
+                        <li><code>bee</code> - Show only Bee team roles (town)</li>
+                        <li><code>wasp</code> - Show only Wasp team roles (mafia)</li>
+                        <li><code>neutral</code> - Show only Neutral roles</li>
+                        <li><code>all</code> - Show all roles (default if no parameter)</li>
+                    </ul>
+
+                    <h4>Usage Examples:</h4>
+                    <div class="code-block">
+                        <code>!mafiaroles</code> - Shows all roles<br>
+                        <code>!mafiaroles bee</code> - Shows only Bee roles<br>
+                        <code>!roles wasp</code> - Shows only Wasp roles<br>
+                        <code>!mafiaroles neutral</code> - Shows only Neutral roles
+                    </div>
+
+                    <h4>Output Includes:</h4>
+                    <ul>
+                        <li>Role name and emoji</li>
+                        <li>Role description</li>
+                        <li>Key abilities (top 3)</li>
+                        <li>Whether role has night action (🌙) or defense (🛡️)</li>
+                        <li>Win conditions</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="command-card primary" data-category="primary">
+                <div class="command-header">
+                    <h3>!mafiapresets <span class="alt-command">or !presets</span></h3>
+                    <span class="command-badge">Everyone</span>
+                </div>
+                <p class="command-description">
+                    Display all available preset role distributions with descriptions.
+                </p>
+
+                <div class="command-details">
+                    <h4>Usage:</h4>
+                    <div class="code-block">
+                        <code>!mafiapresets</code> - Shows all available presets<br>
+                        <code>!presets</code> - Alternative command
+                    </div>
+
+                    <h4>Common Presets:</h4>
+                    <ul>
+                        <li><strong>basic</strong> - Classic balanced game with standard roles</li>
+                        <li><strong>chaos</strong> - Chaotic game with more neutrals and special roles</li>
+                        <li><strong>investigative</strong> - Focus on information gathering roles</li>
+                        <li><strong>killing</strong> - More killing power roles</li>
+                        <li>And more!</li>
+                    </ul>
+
+                    <p class="mt-2">Use presets with: <code>!createmafia [preset_name]</code></p>
+                </div>
+            </div>
+
+            <div class="command-card primary ingame" data-category="primary ingame">
+                <div class="command-header">
+                    <h3>!reveal</h3>
+                    <span class="command-badge queen">Queen Bee Only</span>
+                </div>
+                <p class="command-description">
+                    Reveal yourself as the Queen Bee to gain 3 extra votes (4 total) during voting phase.
+                </p>
+
+                <div class="command-details">
+                    <h4>Requirements:</h4>
+                    <ul>
+                        <li>Must be the <strong>Queen Bee</strong> role</li>
+                        <li>Must be alive</li>
+                        <li>Can only be used during <strong>day or voting phase</strong></li>
+                        <li>Only usable <strong>once per game</strong> (permanent)</li>
+                    </ul>
+
+                    <h4>Usage:</h4>
+                    <div class="code-block">
+                        <code>!reveal</code> - Permanently reveals Queen Bee to all players
+                    </div>
+
+                    <div class="mechanic-note mt-2">
+                        <strong>Effect:</strong> Your vote becomes worth 4 votes instead of 1 for the rest of the game. All players will know you are the Queen Bee.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- DEBUG COMMANDS -->
+        <section class="section">
+            <h2 style="color: #DC143C;">🐛 Debug & Testing Commands</h2>
+            <p class="intro-text">
+                These commands are for testing and development purposes. They allow testing with bots and custom role configurations.
+            </p>
+
+            <div class="command-card debug" data-category="debug">
+                <div class="command-header">
+                    <h3>!createmafiadebug</h3>
+                    <span class="command-badge debug">Debug Mode</span>
+                </div>
+                <p class="command-description">
+                    Create a test game with specified roles plus 12 bot players for testing and debugging.
+                </p>
+
+                <div class="command-details">
+                    <h4>Requirements:</h4>
+                    <ul>
+                        <li>Must be in the Mafia voice channel</li>
+                        <li>Can have fewer than 6 real players (bots fill the rest)</li>
+                    </ul>
+
+                    <h4>Parameters:</h4>
+                    <ul>
+                        <li><code>[ROLE]</code> - Assign a specific role to yourself (use exact role name from mafiaRoles.js)</li>
+                        <li><code>ROLE1,ROLE2</code> - Comma-separated for multiple players (first role to you, second to next player, etc.)</li>
+                        <li><code>random</code> - Enable random mode for unspecified roles</li>
+                        <li><code>NoAI</code> - Disable bot auto-actions (bots won't automatically perform night actions)</li>
+                        <li><code>revealroles</code> - Show all roles at game start</li>
+                    </ul>
+
+                    <h4>Usage Examples:</h4>
+                    <div class="code-block">
+                        <code>!createmafiadebug SCOUT_BEE</code> - Play as Scout Bee<br>
+                        <code>!createmafiadebug SCOUT_BEE,WASP_QUEEN</code> - First role to you, second to next player<br>
+                        <code>!createmafiadebug WASP_QUEEN random</code> - Play as Wasp Queen with random mode<br>
+                        <code>!createmafiadebug PIRATE_BEETLE NoAI</code> - Play as Pirate, bots don't auto-act<br>
+                        <code>!createmafiadebug random</code> - Random role assignment with random mode
+                    </div>
+
+                    <h4>Valid Role Names:</h4>
+                    <p>Use exact role names from the roles list:</p>
+                    <ul style="columns: 2;">
+                        <li>QUEENS_GUARD</li>
+                        <li>SCOUT_BEE</li>
+                        <li>NURSE_BEE</li>
+                        <li>GUARD_BEE</li>
+                        <li>LOOKOUT_BEE</li>
+                        <li>SOLDIER_BEE</li>
+                        <li>QUEEN_BEE</li>
+                        <li>WORKER_BEE</li>
+                        <li>JAILER_BEE</li>
+                        <li>ESCORT_BEE</li>
+                        <li>MEDIUM_BEE</li>
+                        <li>VETERAN_BEE</li>
+                        <li>TRACKER_BEE</li>
+                        <li>WASP_QUEEN</li>
+                        <li>KILLER_WASP</li>
+                        <li>DECEIVER_WASP</li>
+                        <li>SPY_WASP</li>
+                        <li>CONSORT_WASP</li>
+                        <li>JANITOR_WASP</li>
+                        <li>BLACKMAILER_WASP</li>
+                        <li>POISONER_WASP</li>
+                        <li>MURDER_HORNET</li>
+                        <li>FIRE_ANT</li>
+                        <li>CLOWN_BEETLE</li>
+                        <li>BOUNTY_HUNTER</li>
+                        <li>BUTTERFLY</li>
+                        <li>SPIDER</li>
+                        <li>PIRATE_BEETLE</li>
+                        <li>GAMBLER_BEETLE</li>
+                        <li>And more! (See !mafiaroles for full list)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="command-card debug" data-category="debug">
+                <div class="command-header">
+                    <h3>!mafiadebugskip</h3>
+                    <span class="command-badge organizer">Organizer Only</span>
+                </div>
+                <p class="command-description">
+                    Immediately skip to the next game phase (debug mode only).
+                </p>
+
+                <div class="command-details">
+                    <h4>Requirements:</h4>
+                    <ul>
+                        <li>Game must be in <strong>debug mode</strong></li>
+                        <li>User must be the <strong>game organizer</strong></li>
+                    </ul>
+
+                    <h4>Usage:</h4>
+                    <div class="code-block">
+                        <code>!mafiadebugskip</code> - Skips to next phase immediately
+                    </div>
+
+                    <h4>Phase Progression:</h4>
+                    <p>Setup → Night → Dusk → Day → Voting → (repeat) or End</p>
+                </div>
+            </div>
+
+            <div class="command-card debug" data-category="debug">
+                <div class="command-header">
+                    <h3>!mafiadebugend</h3>
+                    <span class="command-badge organizer">Organizer Only</span>
+                </div>
+                <p class="command-description">
+                    Immediately end the debug game and clean up all game state.
+                </p>
+
+                <div class="command-details">
+                    <h4>Requirements:</h4>
+                    <ul>
+                        <li>Game must be in <strong>debug mode</strong></li>
+                        <li>User must be the <strong>game organizer</strong></li>
+                    </ul>
+
+                    <h4>Usage:</h4>
+                    <div class="code-block">
+                        <code>!mafiadebugend</code> - Ends the current debug game
+                    </div>
+
+                    <div class="mechanic-note mt-2">
+                        <strong>Note:</strong> This will clean up all game state, unmute players, and reset the channel.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- IN-GAME INTERACTIONS -->
+        <section class="section">
+            <h2 style="color: #9370DB;">💬 In-Game Interactions</h2>
+            <p class="intro-text">
+                During gameplay, players interact with the bot through DMs and buttons rather than commands.
+            </p>
+
+            <div class="interaction-card">
+                <h3>🌙 Night Actions</h3>
+                <p>Players with night abilities receive DM prompts from the bot with numbered buttons to select targets.</p>
+                <ul>
+                    <li><strong>Format:</strong> Bot sends a message with buttons for each alive player</li>
+                    <li><strong>Selection:</strong> Click the button corresponding to your target</li>
+                    <li><strong>Confirmation:</strong> Bot confirms your action in DM</li>
+                    <li><strong>Wasp Team:</strong> Vote on kill target in team chat</li>
+                </ul>
+                <div class="mechanic-note mt-2">
+                    <strong>Example:</strong> Scout Bee receives a DM with buttons for each player. Click the button for the player you want to investigate.
+                </div>
+            </div>
+
+            <div class="interaction-card">
+                <h3>🗳️ Voting</h3>
+                <p>During voting phase, players vote through DM buttons sent by the bot.</p>
+                <ul>
+                    <li><strong>Format:</strong> Bot sends buttons with all alive player names + "Skip" option</li>
+                    <li><strong>Selection:</strong> Click the player you want to vote to eliminate</li>
+                    <li><strong>Change Vote:</strong> Click a different button to change your vote</li>
+                    <li><strong>Results:</strong> Announced in game channel when voting ends</li>
+                </ul>
+            </div>
+
+            <div class="interaction-card">
+                <h3>💬 Text Communication</h3>
+                <p>Messages sent in the mafia text channel during day phase are relayed to all players.</p>
+                <ul>
+                    <li><strong>Day Phase:</strong> All alive players can see text messages</li>
+                    <li><strong>Night Phase:</strong> Only Wasps can communicate in team chat</li>
+                    <li><strong>Dead Chat:</strong> Dead players can communicate with Medium Bee at night</li>
+                    <li><strong>Special Effects:</strong> Blackmailed/Deceived players have messages transformed</li>
+                </ul>
+            </div>
+
+            <div class="interaction-card">
+                <h3>🎭 Special Role Actions</h3>
+                <p>Some roles have unique interaction methods:</p>
+                <ul>
+                    <li><strong>Jailer Bee:</strong> Selects jail target at dusk, decides execution at night (buttons in DM)</li>
+                    <li><strong>Transporter Bee:</strong> Selects two players to swap at dusk (buttons in DM)</li>
+                    <li><strong>Pirate Beetle:</strong> Selects duel target and RPS choice at dusk (buttons in DM)</li>
+                    <li><strong>Clown Beetle:</strong> After being lynched, selects one voter to haunt (buttons in DM)</li>
+                    <li><strong>Queen Bee:</strong> Use <code>!reveal</code> command during day/voting</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- COMMAND QUICK REFERENCE -->
+        <section class="section">
+            <h2>📋 Quick Reference</h2>
+
+            <table class="mechanic-table">
+                <thead>
+                    <tr>
+                        <th>Command</th>
+                        <th>Alternative</th>
+                        <th>Who Can Use</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>!createmafia</code></td>
+                        <td>-</td>
+                        <td>Everyone</td>
+                        <td>Start a new game</td>
+                    </tr>
+                    <tr>
+                        <td><code>!mafiaroles</code></td>
+                        <td><code>!roles</code></td>
+                        <td>Everyone</td>
+                        <td>View all roles</td>
+                    </tr>
+                    <tr>
+                        <td><code>!mafiapresets</code></td>
+                        <td><code>!presets</code></td>
+                        <td>Everyone</td>
+                        <td>View game presets</td>
+                    </tr>
+                    <tr>
+                        <td><code>!reveal</code></td>
+                        <td>-</td>
+                        <td>Queen Bee Only</td>
+                        <td>Reveal for extra votes</td>
+                    </tr>
+                    <tr style="background: #ffe6e6;">
+                        <td><code>!createmafiadebug</code></td>
+                        <td>-</td>
+                        <td>Everyone</td>
+                        <td>Start debug game with bots</td>
+                    </tr>
+                    <tr style="background: #ffe6e6;">
+                        <td><code>!mafiadebugskip</code></td>
+                        <td>-</td>
+                        <td>Organizer (Debug)</td>
+                        <td>Skip to next phase</td>
+                    </tr>
+                    <tr style="background: #ffe6e6;">
+                        <td><code>!mafiadebugend</code></td>
+                        <td>-</td>
+                        <td>Organizer (Debug)</td>
+                        <td>End debug game</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p class="mechanic-note mt-2">
+                <strong>Debug commands</strong> (highlighted in red) are for testing purposes only and should not be used in regular games.
+            </p>
+        </section>
+
+        <!-- GAME FLOW -->
+        <section class="section">
+            <h2>🎮 Typical Game Flow</h2>
+
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Setup</h3>
+                        <p>Player runs <code>!createmafia</code> → Configures timings → Game starts</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Role Assignment</h3>
+                        <p>Bot DMs each player their role with description and abilities</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Night Phase</h3>
+                        <p>Players receive DM prompts → Select actions via buttons → Actions processed</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3>Day Phase</h3>
+                        <p>Results announced → Players discuss in voice/text → Share information</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <h3>Voting</h3>
+                        <p>Bot sends voting buttons → Players vote → Results announced → Repeat or End</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TIPS -->
+        <section class="section">
+            <h2>💡 Command Tips</h2>
+
+            <div class="feature-list">
+                <div class="feature-item">
+                    <h3>Starting Your First Game</h3>
+                    <ul>
+                        <li>Use <code>!createmafia basic</code> for a balanced beginner game</li>
+                        <li>Get 6+ players in voice channel first</li>
+                        <li>Use "Quick Start" for default timings on your first game</li>
+                        <li>Run <code>!mafiaroles bee</code> before starting to learn Bee roles</li>
+                    </ul>
+                </div>
+
+                <div class="feature-item">
+                    <h3>Testing & Learning</h3>
+                    <ul>
+                        <li>Use <code>!createmafiadebug SCOUT_BEE</code> to practice a specific role</li>
+                        <li>Add <code>revealroles</code> to see what bots are doing</li>
+                        <li>Use <code>NoAI</code> flag to manually control bot actions for testing</li>
+                        <li>Use <code>!mafiadebugskip</code> to speed through phases while testing</li>
+                    </ul>
+                </div>
+
+                <div class="feature-item">
+                    <h3>Advanced Setup</h3>
+                    <ul>
+                        <li>Combine flags: <code>!createmafia chaos random revealroles</code></li>
+                        <li>Use custom timings for faster or slower games</li>
+                        <li>Try different presets to find your group's favorite</li>
+                        <li><code>random</code> mode creates unpredictable and exciting games</li>
+                    </ul>
+                </div>
+
+                <div class="feature-item">
+                    <h3>During Gameplay</h3>
+                    <ul>
+                        <li>Always check your DMs for night action prompts</li>
+                        <li>Submit actions quickly - timers are active!</li>
+                        <li>Queen Bee: Save <code>!reveal</code> for crucial moments</li>
+                        <li>Dead players: You can still help your team via Medium Bee</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2024 BobbyTheBot Mafia | Bee-themed social deduction game</p>
+            <p>Inspired by Town of Salem and classic Mafia</p>
+        </div>
+    </footer>
+
+    <script>
+        // Filter functionality
+        const filterBtns = document.querySelectorAll('.filter-btn');
+        const commandCards = document.querySelectorAll('.command-card');
+
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const filter = btn.getAttribute('data-filter');
+
+                // Update active button
+                filterBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Filter commands
+                commandCards.forEach(card => {
+                    const categories = card.getAttribute('data-category').split(' ');
+                    if (filter === 'all' || categories.includes(filter)) {
+                        card.style.display = 'block';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
