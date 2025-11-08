@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const http = require('http');
+const https = require('https');
 
 // Load environment variables
 require('dotenv').config();
@@ -80,10 +81,13 @@ require('./events/changelogHandler')(client, changelogChannelId);
 const valorantApiHandler = require('./events/valorantApiHandler');
 valorantApiHandler.init(client);
 
-// Create a simple HTTP server for health checks (App Platform requirement)
+// Create HTTP server that proxies webhook API requests
 // This starts IMMEDIATELY so App Platform health checks pass
 const PORT = process.env.PORT || 8080;
+const WEBHOOK_PORT = process.env.MAFIA_WEBHOOK_PORT || 3001;
+
 const server = http.createServer((req, res) => {
+  // Handle health checks for App Platform
   if (req.url === '/health' || req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -91,10 +95,48 @@ const server = http.createServer((req, res) => {
       botStatus: client.ws.status === 0 ? 'ready' : 'not ready',
       uptime: process.uptime()
     }));
-  } else {
-    res.writeHead(404);
-    res.end('Not Found');
+    return;
   }
+
+  // Proxy /api/* requests to the webhook API on port 3001
+  if (req.url.startsWith('/api/')) {
+    // Forward the request to the webhook API
+    const options = {
+      hostname: 'localhost',
+      port: WEBHOOK_PORT,
+      path: req.url,
+      method: req.method,
+      headers: req.headers
+    };
+
+    const proxyReq = http.request(options, (proxyRes) => {
+      // Forward the response headers
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      // Pipe the response back to the client
+      proxyRes.pipe(res);
+    });
+
+    proxyReq.on('error', (error) => {
+      console.error('Proxy error:', error);
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        error: 'Webhook API not available',
+        message: 'The webhook API server is not running yet. Please wait for Discord client to connect.'
+      }));
+    });
+
+    // Pipe the request body to the proxy request
+    req.pipe(proxyReq);
+    return;
+  }
+
+  // 404 for other routes
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    error: 'Not Found',
+    hint: 'Use /health for health checks or /api/* for webhook API endpoints'
+  }));
 });
 
 server.listen(PORT, () => {
