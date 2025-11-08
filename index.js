@@ -71,7 +71,8 @@ require('./events/birthdayHandler')(client);
 require('./events/wordleHandler')(client);
 require('./events/socialMediaPostHandler')(client);
 require('./events/valorantInhouseHandler')(client);
-require('./events/mafiaHandler')(client);
+const mafiaHandler = require('./events/mafiaHandler');
+mafiaHandler(client);
 require('./events/triviaHandler')(client);
 require('./events/bountyHandler')(client);
 require('./events/changelogHandler')(client, changelogChannelId);
@@ -106,6 +107,23 @@ server.on('error', (error) => {
     console.error('HTTP server error:', error);
   }
 });
+
+// Initialize Mafia Webhook API server
+let mafiaWebhookServer = null;
+if (process.env.MAFIA_WEBHOOK_ENABLED !== 'false') {
+  const MafiaWebhookServer = require('./api/mafiaWebhookServer');
+  const webhookPort = process.env.MAFIA_WEBHOOK_PORT || 3001;
+
+  // Wait for client to be ready before starting webhook server
+  client.once('ready', () => {
+    try {
+      mafiaWebhookServer = new MafiaWebhookServer(client, mafiaHandler.getActiveGames());
+      mafiaWebhookServer.start(webhookPort);
+    } catch (error) {
+      console.error('Failed to start Mafia Webhook API:', error);
+    }
+  });
+}
 
 // Start the bot
 const { setupVerificationChannel, handleMemberJoin, handleReactionAdd } = require('./verification');

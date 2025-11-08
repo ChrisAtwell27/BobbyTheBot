@@ -2,7 +2,17 @@
   "permissions": {
     "allow": [
       "Bash(del diagnose-cpu.js add-early-returns.js)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(git ls-tree:*)",
+      "Bash(python -m http.server:*)",
+      "Bash(dir:*)",
+      "Bash(tree:*)",
+      "Bash(if not exist \"e:\\BobbyTheBot\\BobbyTheBot\\api\" mkdir \"e:\\BobbyTheBot\\BobbyTheBot\\api\")",
+      "Bash(mkdir:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

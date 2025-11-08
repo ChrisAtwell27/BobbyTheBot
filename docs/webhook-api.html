@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webhook API - BobbyTheBot Mafia Documentation</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .endpoint-card {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+
+        .endpoint-card h3 {
+            margin-top: 0;
+            color: #667eea;
+            font-size: 1.3em;
+        }
+
+        .http-method {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 0.9em;
+            margin-right: 10px;
+            font-family: monospace;
+        }
+
+        .method-get {
+            background: #28a745;
+            color: white;
+        }
+
+        .method-post {
+            background: #007bff;
+            color: white;
+        }
+
+        .endpoint-path {
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 8px 12px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-bottom: 15px;
+        }
+
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .code-block .keyword {
+            color: #569cd6;
+        }
+
+        .code-block .string {
+            color: #ce9178;
+        }
+
+        .code-block .comment {
+            color: #6a9955;
+        }
+
+        .code-block .number {
+            color: #b5cea8;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+
+        .warning-box h4 {
+            margin-top: 0;
+            color: #856404;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+
+        .info-box h4 {
+            margin-top: 0;
+            color: #1976D2;
+        }
+
+        .success-box {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+
+        .success-box h4 {
+            margin-top: 0;
+            color: #155724;
+        }
+
+        .setup-steps {
+            counter-reset: step-counter;
+        }
+
+        .setup-step {
+            position: relative;
+            padding-left: 60px;
+            margin-bottom: 30px;
+        }
+
+        .setup-step::before {
+            counter-increment: step-counter;
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 40px;
+            height: 40px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .setup-step h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .api-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        .api-table th,
+        .api-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .api-table th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
+        .api-table tr:hover {
+            background: #f5f5f5;
+        }
+
+        .demo-button {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: 600;
+            margin: 10px 10px 10px 0;
+            transition: background 0.3s;
+        }
+
+        .demo-button:hover {
+            background: #5568d3;
+        }
+
+        .demo-button.secondary {
+            background: #6c757d;
+        }
+
+        .demo-button.secondary:hover {
+            background: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1 class="nav-title">🐝 BobbyTheBot Mafia</h1>
+            <ul class="nav-links">
+                <li><a href="index.html">Overview</a></li>
+                <li><a href="roles.html">Roles</a></li>
+                <li><a href="mechanics.html">Game Mechanics</a></li>
+                <li><a href="phases.html">Game Phases</a></li>
+                <li><a href="commands.html">Commands</a></li>
+                <li><a href="webhook-api.html" class="active">Webhook API</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section class="section">
+            <h1>🔗 Webhook API</h1>
+            <p class="intro-text">
+                Control Discord voice chat from your website! The Mafia Webhook API allows external applications
+                to mute, deafen, and manage voice states during mafia games, enabling web-based game interfaces
+                while maintaining Discord voice communication.
+            </p>
+
+            <div class="info-box">
+                <h4>🚀 What You Can Build</h4>
+                <ul>
+                    <li><strong>Web-based Mafia Game:</strong> Create a browser game that controls Discord voice chat</li>
+                    <li><strong>Mobile Apps:</strong> Build mobile applications that integrate with Discord voice</li>
+                    <li><strong>Custom Interfaces:</strong> Design your own game UI while using Discord for communication</li>
+                    <li><strong>Automation Tools:</strong> Programmatically control voice states based on game logic</li>
+                </ul>
+            </div>
+
+            <div style="margin: 30px 0;">
+                <a href="mafia-webhook-example.html" class="demo-button">🎮 Try Interactive Demo</a>
+                <a href="https://github.com/yourusername/BobbyTheBot" class="demo-button secondary">📚 View on GitHub</a>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>📋 Quick Start</h2>
+
+            <div class="setup-steps">
+                <div class="setup-step">
+                    <h3>Install Dependencies</h3>
+                    <p>The webhook API requires Express and CORS. Install them using npm:</p>
+                    <div class="code-block">
+<span class="keyword">npm</span> install express cors
+                    </div>
+                </div>
+
+                <div class="setup-step">
+                    <h3>Configure Environment Variables</h3>
+                    <p>Add these settings to your <code>.env</code> file:</p>
+                    <div class="code-block">
+<span class="comment"># Mafia Webhook API Configuration</span>
+MAFIA_WEBHOOK_PORT=<span class="number">3001</span>
+MAFIA_WEBHOOK_SECRET=<span class="string">your_secure_random_secret_here</span>
+MAFIA_WEB_ORIGIN=<span class="string">http://localhost:8080</span>
+                    </div>
+                </div>
+
+                <div class="setup-step">
+                    <h3>Start the Bot</h3>
+                    <p>Run your bot normally. The webhook server starts automatically:</p>
+                    <div class="code-block">
+<span class="keyword">npm</span> start
+
+<span class="comment"># You should see:</span>
+✅ Mafia Webhook API server listening on port <span class="number">3001</span>
+🔒 Webhook authentication is ENABLED
+                    </div>
+                </div>
+
+                <div class="setup-step">
+                    <h3>Test the Connection</h3>
+                    <p>Verify the API is running:</p>
+                    <div class="code-block">
+<span class="keyword">curl</span> http://localhost:<span class="number">3001</span>/health
+
+<span class="comment"># Response:</span>
+{
+  <span class="string">"success"</span>: <span class="keyword">true</span>,
+  <span class="string">"service"</span>: <span class="string">"Mafia Webhook API"</span>,
+  <span class="string">"status"</span>: <span class="string">"online"</span>
+}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>🔐 Authentication</h2>
+
+            <p>The API supports two authentication methods to keep your bot secure:</p>
+
+            <div class="endpoint-card">
+                <h3>1. Bearer Token (Recommended)</h3>
+                <p>Include your webhook secret in the Authorization header:</p>
+                <div class="code-block">
+<span class="keyword">fetch</span>(<span class="string">'http://localhost:3001/api/voice/mute'</span>, {
+  method: <span class="string">'POST'</span>,
+  headers: {
+    <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span>,
+    <span class="string">'Authorization'</span>: <span class="string">'Bearer your_webhook_secret'</span>
+  },
+  body: <span class="keyword">JSON</span>.stringify({ userId, guildId, reason })
+})
+                </div>
+            </div>
+
+            <div class="endpoint-card">
+                <h3>2. HMAC Signature</h3>
+                <p>Sign your request body with HMAC-SHA256:</p>
+                <div class="code-block">
+<span class="keyword">const</span> crypto = <span class="keyword">require</span>(<span class="string">'crypto'</span>);
+<span class="keyword">const</span> payload = <span class="keyword">JSON</span>.stringify(requestBody);
+<span class="keyword">const</span> signature = crypto
+  .createHmac(<span class="string">'sha256'</span>, webhookSecret)
+  .update(payload)
+  .digest(<span class="string">'hex'</span>);
+
+<span class="comment">// Include in headers</span>
+headers: {
+  <span class="string">'X-Webhook-Signature'</span>: signature
+}
+                </div>
+            </div>
+
+            <div class="warning-box">
+                <h4>⚠️ Security Warning</h4>
+                <p>Always use HTTPS in production! Never send your webhook secret over unencrypted connections.
+                   Keep your <code>MAFIA_WEBHOOK_SECRET</code> secure and never commit it to version control.</p>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>📡 API Endpoints</h2>
+
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Endpoint</th>
+                        <th>Method</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>/health</code></td>
+                        <td><span class="http-method method-get">GET</span></td>
+                        <td>Check if API is online</td>
+                    </tr>
+                    <tr>
+                        <td><code>/api/game/:guildId</code></td>
+                        <td><span class="http-method method-get">GET</span></td>
+                        <td>Get current game state</td>
+                    </tr>
+                    <tr>
+                        <td><code>/api/voice/members/:guildId</code></td>
+                        <td><span class="http-method method-get">GET</span></td>
+                        <td>Get voice channel members</td>
+                    </tr>
+                    <tr>
+                        <td><code>/api/voice/mute</code></td>
+                        <td><span class="http-method method-post">POST</span></td>
+                        <td>Mute a player</td>
+                    </tr>
+                    <tr>
+                        <td><code>/api/voice/unmute</code></td>
+                        <td><span class="http-method method-post">POST</span></td>
+                        <td>Unmute a player</td>
+                    </tr>
+                    <tr>
+                        <td><code>/api/voice/deafen</code></td>
+                        <td><span class="http-method method-post">POST</span></td>
+                        <td>Deafen a player</td>
+                    </tr>
+                    <tr>
+                        <td><code>/api/voice/undeafen</code></td>
+                        <td><span class="http-method method-post">POST</span></td>
+                        <td>Undeafen a player</td>
+                    </tr>
+                    <tr>
+                        <td><code>/api/voice/bulk</code></td>
+                        <td><span class="http-method method-post">POST</span></td>
+                        <td>Perform multiple operations</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="section">
+            <h2>🎯 Example: Mute a Player</h2>
+
+            <div class="endpoint-card">
+                <h3>
+                    <span class="http-method method-post">POST</span>
+                    <span class="endpoint-path">/api/voice/mute</span>
+                </h3>
+
+                <p><strong>Request Body:</strong></p>
+                <div class="code-block">
+{
+  <span class="string">"userId"</span>: <span class="string">"987654321"</span>,
+  <span class="string">"guildId"</span>: <span class="string">"123456789"</span>,
+  <span class="string">"reason"</span>: <span class="string">"Night phase"</span>
+}
+                </div>
+
+                <p><strong>JavaScript Example:</strong></p>
+                <div class="code-block">
+<span class="keyword">async function</span> mutePlayer(userId, guildId) {
+  <span class="keyword">const</span> response = <span class="keyword">await</span> <span class="keyword">fetch</span>(<span class="string">'http://localhost:3001/api/voice/mute'</span>, {
+    method: <span class="string">'POST'</span>,
+    headers: {
+      <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span>,
+      <span class="string">'Authorization'</span>: <span class="string">`Bearer ${WEBHOOK_SECRET}`</span>
+    },
+    body: <span class="keyword">JSON</span>.stringify({
+      userId: userId,
+      guildId: guildId,
+      reason: <span class="string">'Night phase'</span>
+    })
+  });
+
+  <span class="keyword">const</span> data = <span class="keyword">await</span> response.json();
+  <span class="keyword">console</span>.log(data);
+  <span class="comment">// { success: true, message: "Muted PlayerName", userId: "987654321", muted: true }</span>
+}
+                </div>
+
+                <p><strong>Success Response:</strong></p>
+                <div class="code-block">
+{
+  <span class="string">"success"</span>: <span class="keyword">true</span>,
+  <span class="string">"message"</span>: <span class="string">"Muted PlayerName"</span>,
+  <span class="string">"userId"</span>: <span class="string">"987654321"</span>,
+  <span class="string">"muted"</span>: <span class="keyword">true</span>
+}
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>🔄 Example: Bulk Operations</h2>
+
+            <div class="endpoint-card">
+                <h3>
+                    <span class="http-method method-post">POST</span>
+                    <span class="endpoint-path">/api/voice/bulk</span>
+                </h3>
+
+                <p>Perfect for phase transitions! Mute/unmute multiple players at once:</p>
+
+                <div class="code-block">
+<span class="keyword">async function</span> startNightPhase(guildId, players) {
+  <span class="comment">// Mute all alive players for night phase</span>
+  <span class="keyword">const</span> operations = players
+    .filter(p => p.isAlive)
+    .map(p => ({
+      userId: p.id,
+      mute: <span class="keyword">true</span>,
+      reason: <span class="string">'Night phase - discussion locked'</span>
+    }));
+
+  <span class="keyword">const</span> response = <span class="keyword">await</span> <span class="keyword">fetch</span>(<span class="string">'http://localhost:3001/api/voice/bulk'</span>, {
+    method: <span class="string">'POST'</span>,
+    headers: {
+      <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span>,
+      <span class="string">'Authorization'</span>: <span class="string">`Bearer ${WEBHOOK_SECRET}`</span>
+    },
+    body: <span class="keyword">JSON</span>.stringify({
+      guildId: guildId,
+      operations: operations
+    })
+  });
+
+  <span class="keyword">return await</span> response.json();
+}
+                </div>
+
+                <p><strong>Response:</strong></p>
+                <div class="code-block">
+{
+  <span class="string">"success"</span>: <span class="keyword">true</span>,
+  <span class="string">"message"</span>: <span class="string">"Processed 8 operations"</span>,
+  <span class="string">"results"</span>: [
+    { <span class="string">"userId"</span>: <span class="string">"111"</span>, <span class="string">"success"</span>: <span class="keyword">true</span>, <span class="string">"muted"</span>: <span class="keyword">true</span> },
+    { <span class="string">"userId"</span>: <span class="string">"222"</span>, <span class="string">"success"</span>: <span class="keyword">true</span>, <span class="string">"muted"</span>: <span class="keyword">true</span> },
+    <span class="comment">// ...</span>
+  ]
+}
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>📊 Example: Get Game State</h2>
+
+            <div class="endpoint-card">
+                <h3>
+                    <span class="http-method method-get">GET</span>
+                    <span class="endpoint-path">/api/game/:guildId</span>
+                </h3>
+
+                <p>Retrieve the current game state, including players and voice status:</p>
+
+                <div class="code-block">
+<span class="keyword">async function</span> getGameState(guildId) {
+  <span class="keyword">const</span> response = <span class="keyword">await</span> <span class="keyword">fetch</span>(
+    <span class="string">`http://localhost:3001/api/game/${guildId}`</span>,
+    {
+      headers: {
+        <span class="string">'Authorization'</span>: <span class="string">`Bearer ${WEBHOOK_SECRET}`</span>
+      }
+    }
+  );
+
+  <span class="keyword">const</span> data = <span class="keyword">await</span> response.json();
+  <span class="keyword">return</span> data.game;
+}
+                </div>
+
+                <p><strong>Response:</strong></p>
+                <div class="code-block">
+{
+  <span class="string">"success"</span>: <span class="keyword">true</span>,
+  <span class="string">"game"</span>: {
+    <span class="string">"guildId"</span>: <span class="string">"123456789"</span>,
+    <span class="string">"phase"</span>: <span class="string">"night"</span>,
+    <span class="string">"day"</span>: <span class="number">1</span>,
+    <span class="string">"isActive"</span>: <span class="keyword">true</span>,
+    <span class="string">"players"</span>: [
+      {
+        <span class="string">"id"</span>: <span class="string">"987654321"</span>,
+        <span class="string">"name"</span>: <span class="string">"PlayerName"</span>,
+        <span class="string">"isAlive"</span>: <span class="keyword">true</span>,
+        <span class="string">"role"</span>: <span class="string">"Beekeeper Bee"</span>
+      }
+    ],
+    <span class="string">"voiceMembers"</span>: [
+      {
+        <span class="string">"id"</span>: <span class="string">"987654321"</span>,
+        <span class="string">"username"</span>: <span class="string">"PlayerName"</span>,
+        <span class="string">"displayName"</span>: <span class="string">"Player Display Name"</span>,
+        <span class="string">"muted"</span>: <span class="keyword">true</span>,
+        <span class="string">"deafened"</span>: <span class="keyword">false</span>
+      }
+    ]
+  }
+}
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>🛠️ Use Cases</h2>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🌐</div>
+                    <h3>Web Game Interface</h3>
+                    <p>Build a browser-based mafia game with custom UI, animations, and interactions while controlling Discord voice chat for player communication.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📱</div>
+                    <h3>Mobile Apps</h3>
+                    <p>Create mobile applications that integrate with Discord voice, allowing players to join games from their phones with native interfaces.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🤖</div>
+                    <h3>Game Automation</h3>
+                    <p>Programmatically control voice states based on game events, custom logic, or external triggers for enhanced gameplay experiences.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Analytics Dashboard</h3>
+                    <p>Monitor games in real-time, track player statistics, and display live game state on external dashboards or streaming overlays.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>🔍 Error Handling</h2>
+
+            <p>All endpoints return consistent error responses:</p>
+
+            <div class="code-block">
+{
+  <span class="string">"success"</span>: <span class="keyword">false</span>,
+  <span class="string">"error"</span>: <span class="string">"Error description"</span>,
+  <span class="string">"message"</span>: <span class="string">"Detailed error message"</span>
+}
+            </div>
+
+            <h3>Common HTTP Status Codes:</h3>
+            <ul>
+                <li><strong>200</strong> - Success</li>
+                <li><strong>400</strong> - Bad request (missing parameters)</li>
+                <li><strong>401</strong> - Unauthorized (invalid or missing authentication)</li>
+                <li><strong>404</strong> - Not found (no active game or resource)</li>
+                <li><strong>500</strong> - Internal server error</li>
+            </ul>
+        </section>
+
+        <section class="section">
+            <h2>🔒 Security Best Practices</h2>
+
+            <div class="warning-box">
+                <h4>Production Security Checklist</h4>
+                <ul>
+                    <li>✅ Always use HTTPS in production (never HTTP)</li>
+                    <li>✅ Generate a strong random webhook secret (32+ characters)</li>
+                    <li>✅ Never commit secrets to version control</li>
+                    <li>✅ Restrict CORS to specific domains (not <code>*</code>)</li>
+                    <li>✅ Use environment variables for configuration</li>
+                    <li>✅ Implement rate limiting for API endpoints</li>
+                    <li>✅ Use firewall rules to restrict API access</li>
+                    <li>✅ Monitor API logs for suspicious activity</li>
+                </ul>
+            </div>
+
+            <p><strong>Generate a secure secret:</strong></p>
+            <div class="code-block">
+<span class="comment"># Linux/Mac:</span>
+openssl rand -hex <span class="number">32</span>
+
+<span class="comment"># Or use an online generator:</span>
+<span class="comment"># https://randomkeygen.com/</span>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>📚 Additional Resources</h2>
+
+            <div class="success-box">
+                <h4>📖 Documentation Files</h4>
+                <ul>
+                    <li><strong>Quick Start Guide:</strong> <code>WEBHOOK_SETUP.md</code> - Step-by-step setup instructions</li>
+                    <li><strong>API Documentation:</strong> <code>api/README.md</code> - Complete endpoint reference</li>
+                    <li><strong>Example Implementation:</strong> <code>api/mafiaWebhookServer.js</code> - Source code</li>
+                    <li><strong>Interactive Demo:</strong> <a href="mafia-webhook-example.html">mafia-webhook-example.html</a> - Try it yourself!</li>
+                </ul>
+            </div>
+
+            <div style="margin: 30px 0;">
+                <a href="mafia-webhook-example.html" class="demo-button">🎮 Open Interactive Demo</a>
+                <a href="commands.html" class="demo-button secondary">📖 View Commands</a>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>❓ Troubleshooting</h2>
+
+            <div class="endpoint-card">
+                <h3>Port Already in Use</h3>
+                <p>Change the port in your <code>.env</code> file:</p>
+                <div class="code-block">
+MAFIA_WEBHOOK_PORT=<span class="number">3002</span>
+                </div>
+            </div>
+
+            <div class="endpoint-card">
+                <h3>Authentication Failures</h3>
+                <ul>
+                    <li>Verify <code>MAFIA_WEBHOOK_SECRET</code> is set correctly in <code>.env</code></li>
+                    <li>Check that the Authorization header includes <code>Bearer </code> prefix</li>
+                    <li>Ensure the secret matches between bot and web application</li>
+                </ul>
+            </div>
+
+            <div class="endpoint-card">
+                <h3>CORS Errors</h3>
+                <ul>
+                    <li>Set <code>MAFIA_WEB_ORIGIN</code> to your web application's URL</li>
+                    <li>For development, use <code>*</code> to allow all origins</li>
+                    <li>Ensure your website URL matches the origin setting</li>
+                </ul>
+            </div>
+
+            <div class="endpoint-card">
+                <h3>User Not in Voice Channel</h3>
+                <p>Ensure the user is actually in the mafia voice channel before sending API requests.
+                   You'll get a 400 error if the user isn't in voice chat.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2024 BobbyTheBot Mafia | Bee-themed social deduction game</p>
+            <p>Inspired by Town of Salem and classic Mafia</p>
+        </div>
+    </footer>
+</body>
+</html>

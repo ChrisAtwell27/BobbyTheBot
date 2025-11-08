@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mafia Webhook Demo - BobbyTheBot Mafia</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .config-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 600;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.3s, transform 0.1s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-success {
+            background: #28a745;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+
+        .game-state {
+            background: #e9ecef;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .players-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .player-card {
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            padding: 15px;
+            transition: border-color 0.3s;
+        }
+
+        .player-card:hover {
+            border-color: #667eea;
+        }
+
+        .player-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+
+        .player-status {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+
+        .status-alive {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-dead {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-muted {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-deafened {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .player-controls {
+            margin-top: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .player-controls .btn {
+            font-size: 12px;
+            padding: 6px 12px;
+            margin: 0;
+        }
+
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .response-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .response-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .phase-indicator {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .phase-setup { background: #ffc107; color: #333; }
+        .phase-night { background: #343a40; color: white; }
+        .phase-day { background: #28a745; color: white; }
+        .phase-voting { background: #dc3545; color: white; }
+        .phase-ended { background: #6c757d; color: white; }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+
+        .info-box h3 {
+            color: #1976D2;
+            margin-bottom: 10px;
+        }
+
+        .info-box code {
+            background: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            color: #d63384;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1 class="nav-title">🐝 BobbyTheBot Mafia</h1>
+            <ul class="nav-links">
+                <li><a href="index.html">Overview</a></li>
+                <li><a href="roles.html">Roles</a></li>
+                <li><a href="mechanics.html">Game Mechanics</a></li>
+                <li><a href="phases.html">Game Phases</a></li>
+                <li><a href="commands.html">Commands</a></li>
+                <li><a href="webhook-api.html">Webhook API</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container" style="margin-top: 100px;">
+        <h1>🐝 Mafia Game - Webhook Control Demo</h1>
+        <p class="subtitle">Interactive example: Control Discord voice chat from your web application</p>
+
+        <div class="info-box">
+            <h3>Getting Started</h3>
+            <p>This example demonstrates how to integrate with the BobbyTheBot Mafia Webhook API to control voice channel muting and deafening from a web application.</p>
+            <p style="margin-top: 10px;"><strong>Required:</strong> Set <code>MAFIA_WEBHOOK_SECRET</code> in your bot's .env file for authentication.</p>
+        </div>
+
+        <div class="config-section">
+            <h2 style="margin-bottom: 20px;">⚙️ Configuration</h2>
+            <div class="input-group">
+                <label for="apiUrl">Webhook API URL:</label>
+                <input type="text" id="apiUrl" value="http://localhost:3001" placeholder="http://localhost:3001">
+            </div>
+            <div class="input-group">
+                <label for="authToken">Webhook Secret (Bearer Token):</label>
+                <input type="password" id="authToken" placeholder="Your MAFIA_WEBHOOK_SECRET">
+            </div>
+            <div class="input-group">
+                <label for="guildId">Guild ID:</label>
+                <input type="text" id="guildId" placeholder="Your Discord Server ID">
+            </div>
+            <button class="btn btn-success" onclick="testConnection()">Test Connection</button>
+            <button class="btn" onclick="loadGameState()">Load Game State</button>
+        </div>
+
+        <div class="game-state" id="gameState" style="display: none;">
+            <h2>🎮 Current Game State</h2>
+            <div id="gameInfo"></div>
+            <div id="playersContainer"></div>
+        </div>
+
+        <div class="config-section">
+            <h2 style="margin-bottom: 20px;">🔧 Voice Control</h2>
+            <p style="margin-bottom: 15px; color: #666;">Test individual voice control actions:</p>
+            <div class="input-group">
+                <label for="userId">User ID:</label>
+                <input type="text" id="userId" placeholder="Discord User ID">
+            </div>
+            <button class="btn btn-warning" onclick="muteUser()">🔇 Mute User</button>
+            <button class="btn btn-success" onclick="unmuteUser()">🔊 Unmute User</button>
+            <button class="btn btn-warning" onclick="deafenUser()">🎧 Deafen User</button>
+            <button class="btn btn-success" onclick="undeafenUser()">👂 Undeafen User</button>
+        </div>
+
+        <div id="response"></div>
+    </div>
+
+    <script>
+        // Helper function to get API URL
+        function getApiUrl() {
+            return document.getElementById('apiUrl').value;
+        }
+
+        // Helper function to get auth headers
+        function getAuthHeaders() {
+            const token = document.getElementById('authToken').value;
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            };
+        }
+
+        // Helper function to get guild ID
+        function getGuildId() {
+            return document.getElementById('guildId').value;
+        }
+
+        // Display response
+        function displayResponse(data, isError = false) {
+            const responseDiv = document.getElementById('response');
+            responseDiv.className = 'response ' + (isError ? 'response-error' : 'response-success');
+            responseDiv.textContent = JSON.stringify(data, null, 2);
+        }
+
+        // Test connection to the webhook API
+        async function testConnection() {
+            try {
+                const response = await fetch(`${getApiUrl()}/health`);
+                const data = await response.json();
+                displayResponse(data);
+            } catch (error) {
+                displayResponse({ error: 'Failed to connect', message: error.message }, true);
+            }
+        }
+
+        // Load current game state
+        async function loadGameState() {
+            const guildId = getGuildId();
+            if (!guildId) {
+                alert('Please enter a Guild ID');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${getApiUrl()}/api/game/${guildId}`, {
+                    headers: getAuthHeaders()
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    displayGameState(data.game);
+                    displayResponse(data);
+                } else {
+                    displayResponse(data, true);
+                }
+            } catch (error) {
+                displayResponse({ error: 'Failed to load game state', message: error.message }, true);
+            }
+        }
+
+        // Display game state in UI
+        function displayGameState(game) {
+            const gameStateDiv = document.getElementById('gameState');
+            const gameInfoDiv = document.getElementById('gameInfo');
+            const playersContainer = document.getElementById('playersContainer');
+
+            gameStateDiv.style.display = 'block';
+
+            // Display game info
+            const phaseClass = `phase-${game.phase.toLowerCase()}`;
+            gameInfoDiv.innerHTML = `
+                <p style="margin-bottom: 10px;">
+                    <strong>Phase:</strong> <span class="phase-indicator ${phaseClass}">${game.phase}</span>
+                    <strong style="margin-left: 20px;">Day:</strong> ${game.day}
+                    <strong style="margin-left: 20px;">Active:</strong> ${game.isActive ? '✅ Yes' : '❌ No'}
+                </p>
+            `;
+
+            // Create players grid
+            playersContainer.innerHTML = '<h3 style="margin-top: 20px; margin-bottom: 10px;">Players:</h3><div class="players-grid" id="playersGrid"></div>';
+            const playersGrid = document.getElementById('playersGrid');
+
+            // Combine player data with voice state
+            const playerMap = new Map();
+            game.players.forEach(p => {
+                playerMap.set(p.id, { ...p, muted: false, deafened: false });
+            });
+
+            game.voiceMembers?.forEach(vm => {
+                if (playerMap.has(vm.id)) {
+                    playerMap.get(vm.id).muted = vm.muted;
+                    playerMap.get(vm.id).deafened = vm.deafened;
+                } else {
+                    playerMap.set(vm.id, {
+                        id: vm.id,
+                        name: vm.displayName,
+                        isAlive: true,
+                        role: 'Unknown',
+                        muted: vm.muted,
+                        deafened: vm.deafened
+                    });
+                }
+            });
+
+            // Display player cards
+            playerMap.forEach(player => {
+                const card = document.createElement('div');
+                card.className = 'player-card';
+                card.innerHTML = `
+                    <div class="player-name">${player.name}</div>
+                    <div>
+                        <span class="player-status ${player.isAlive ? 'status-alive' : 'status-dead'}">
+                            ${player.isAlive ? '💚 Alive' : '💀 Dead'}
+                        </span>
+                        ${player.muted ? '<span class="player-status status-muted">🔇 Muted</span>' : ''}
+                        ${player.deafened ? '<span class="player-status status-deafened">🎧 Deafened</span>' : ''}
+                    </div>
+                    <div style="color: #666; font-size: 12px; margin-top: 5px;">Role: ${player.role}</div>
+                    <div class="player-controls">
+                        <button class="btn btn-warning" onclick="muteSpecific('${player.id}')">Mute</button>
+                        <button class="btn btn-success" onclick="unmuteSpecific('${player.id}')">Unmute</button>
+                        <button class="btn btn-warning" onclick="deafenSpecific('${player.id}')">Deafen</button>
+                        <button class="btn btn-success" onclick="undeafenSpecific('${player.id}')">Undeafen</button>
+                    </div>
+                `;
+                playersGrid.appendChild(card);
+            });
+        }
+
+        // Voice control functions
+        async function muteUser() {
+            await performVoiceAction('mute', document.getElementById('userId').value);
+        }
+
+        async function unmuteUser() {
+            await performVoiceAction('unmute', document.getElementById('userId').value);
+        }
+
+        async function deafenUser() {
+            await performVoiceAction('deafen', document.getElementById('userId').value);
+        }
+
+        async function undeafenUser() {
+            await performVoiceAction('undeafen', document.getElementById('userId').value);
+        }
+
+        // Voice control for specific player
+        async function muteSpecific(userId) {
+            await performVoiceAction('mute', userId);
+            loadGameState();
+        }
+
+        async function unmuteSpecific(userId) {
+            await performVoiceAction('unmute', userId);
+            loadGameState();
+        }
+
+        async function deafenSpecific(userId) {
+            await performVoiceAction('deafen', userId);
+            loadGameState();
+        }
+
+        async function undeafenSpecific(userId) {
+            await performVoiceAction('undeafen', userId);
+            loadGameState();
+        }
+
+        // Perform voice action
+        async function performVoiceAction(action, userId) {
+            if (!userId) {
+                alert('Please enter a User ID');
+                return;
+            }
+
+            const guildId = getGuildId();
+            if (!guildId) {
+                alert('Please enter a Guild ID');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${getApiUrl()}/api/voice/${action}`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        userId,
+                        guildId,
+                        reason: `${action} via web interface`
+                    })
+                });
+
+                const data = await response.json();
+                displayResponse(data, !data.success);
+            } catch (error) {
+                displayResponse({ error: `Failed to ${action}`, message: error.message }, true);
+            }
+        }
+
+        // Bulk operations example
+        async function muteAllPlayers(playerIds) {
+            const guildId = getGuildId();
+            const operations = playerIds.map(id => ({
+                userId: id,
+                mute: true,
+                reason: 'Night phase - bulk mute'
+            }));
+
+            try {
+                const response = await fetch(`${getApiUrl()}/api/voice/bulk`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ guildId, operations })
+                });
+
+                const data = await response.json();
+                displayResponse(data, !data.success);
+            } catch (error) {
+                displayResponse({ error: 'Bulk operation failed', message: error.message }, true);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -4198,6 +4198,9 @@ async function cleanupInactiveGames(client) {
     return gamesToDelete.length;
 }
 
+// Store active games globally so webhook server can access them
+const activeGames = new Map();
+
 module.exports = (client) => {
     console.log('🐝 Mafia Handler loaded!');
 
@@ -5767,4 +5770,10 @@ module.exports = (client) => {
             }
         }
     });
+};
+
+// Also export the games Map for webhook server access
+module.exports.getActiveGames = () => {
+    const { getAllGames } = require('../mafia/game/mafiaGameState');
+    return getAllGames();
 };
