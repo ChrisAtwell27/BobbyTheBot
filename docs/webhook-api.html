@@ -221,6 +221,12 @@
                 while maintaining Discord voice communication.
             </p>
 
+            <div class="success-box">
+                <h4>✅ BobbyTheBot Webhook API is Live!</h4>
+                <p><strong>Public API URL:</strong> <code>https://bobby-the-bot-i76i6.ondigitalocean.app</code></p>
+                <p style="margin-top: 10px;">Use this URL in your website to control Discord voice chat during mafia games!</p>
+            </div>
+
             <div class="info-box">
                 <h4>🚀 What You Can Build</h4>
                 <ul>
@@ -233,7 +239,7 @@
 
             <div style="margin: 30px 0;">
                 <a href="mafia-webhook-example.html" class="demo-button">🎮 Try Interactive Demo</a>
-                <a href="https://github.com/yourusername/BobbyTheBot" class="demo-button secondary">📚 View on GitHub</a>
+                <a href="https://github.com/ChrisAtwell27/BobbyTheBot" class="demo-button secondary">📚 View on GitHub</a>
             </div>
         </section>
 
@@ -410,8 +416,11 @@ headers: {
 
                 <p><strong>JavaScript Example:</strong></p>
                 <div class="code-block">
+<span class="keyword">const</span> API_URL = <span class="string">'https://bobby-the-bot-i76i6.ondigitalocean.app'</span>;
+<span class="keyword">const</span> WEBHOOK_SECRET = <span class="string">'your_webhook_secret_here'</span>;
+
 <span class="keyword">async function</span> mutePlayer(userId, guildId) {
-  <span class="keyword">const</span> response = <span class="keyword">await</span> <span class="keyword">fetch</span>(<span class="string">'http://localhost:3001/api/voice/mute'</span>, {
+  <span class="keyword">const</span> response = <span class="keyword">await</span> <span class="keyword">fetch</span>(<span class="string">`${API_URL}/api/voice/mute`</span>, {
     method: <span class="string">'POST'</span>,
     headers: {
       <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span>,

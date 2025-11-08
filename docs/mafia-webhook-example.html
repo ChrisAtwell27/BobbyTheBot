@@ -285,15 +285,18 @@
             <h2 style="margin-bottom: 20px;">⚙️ Configuration</h2>
             <div class="input-group">
                 <label for="apiUrl">Webhook API URL:</label>
-                <input type="text" id="apiUrl" value="http://localhost:3001" placeholder="http://localhost:3001">
+                <input type="text" id="apiUrl" value="https://bobby-the-bot-i76i6.ondigitalocean.app" placeholder="https://bobby-the-bot-i76i6.ondigitalocean.app">
+                <p style="font-size: 12px; color: #666; margin-top: 5px;">💡 BobbyTheBot's public webhook API URL</p>
             </div>
             <div class="input-group">
                 <label for="authToken">Webhook Secret (Bearer Token):</label>
-                <input type="password" id="authToken" placeholder="Your MAFIA_WEBHOOK_SECRET">
+                <input type="password" id="authToken" placeholder="Contact bot owner for webhook secret">
+                <p style="font-size: 12px; color: #666; margin-top: 5px;">🔒 Required for authentication - keep this secret!</p>
             </div>
             <div class="input-group">
                 <label for="guildId">Guild ID:</label>
-                <input type="text" id="guildId" placeholder="Your Discord Server ID">
+                <input type="text" id="guildId" value="701308904877064193" placeholder="Your Discord Server ID">
+                <p style="font-size: 12px; color: #666; margin-top: 5px;">🎮 BobbyTheBot's Discord server ID</p>
             </div>
             <button class="btn btn-success" onclick="testConnection()">Test Connection</button>
             <button class="btn" onclick="loadGameState()">Load Game State</button>
