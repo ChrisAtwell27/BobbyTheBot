@@ -568,8 +568,12 @@ footer {
 
     .command-card,
     .interaction-card {
-        margin: 0 1rem 1.5rem 1rem;
+        margin-bottom: 1.5rem;
         padding: 1.5rem;
+    }
+
+    .commands-container {
+        padding: 0 1rem;
     }
 
     .command-header {
@@ -605,13 +609,10 @@ footer {
     background: white;
     border-radius: 12px;
     padding: 2rem;
-    margin: 0 2rem 2rem 2rem;
+    margin-bottom: 2rem;
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
     border-left: 5px solid var(--bee-yellow);
     transition: transform 0.3s, box-shadow 0.3s;
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
 }
 
 .command-card:hover {
@@ -739,12 +740,9 @@ footer {
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
     border-radius: 12px;
     padding: 2rem;
-    margin: 0 2rem 2rem 2rem;
+    margin-bottom: 2rem;
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
     border-left: 5px solid var(--neutral-purple);
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
 }
 
 .interaction-card h3 {
