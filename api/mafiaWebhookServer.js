@@ -413,6 +413,122 @@ class MafiaWebhookServer {
       }
     });
 
+    // Mute everyone in a voice channel
+    this.app.post('/api/voice/channel/mute', this.verifySignature.bind(this), async (req, res) => {
+      try {
+        const { channelId, guildId, reason } = req.body;
+        const vcId = channelId || MAFIA_VC_ID;
+
+        if (!guildId) {
+          return res.status(400).json({
+            success: false,
+            error: 'guildId is required'
+          });
+        }
+
+        const voiceChannel = await this.client.channels.fetch(vcId);
+
+        if (!voiceChannel || !voiceChannel.isVoiceBased()) {
+          return res.status(404).json({
+            success: false,
+            error: 'Voice channel not found'
+          });
+        }
+
+        const results = [];
+        for (const [memberId, member] of voiceChannel.members) {
+          try {
+            await member.voice.setMute(true, reason || 'Muted via webhook - channel operation');
+            results.push({
+              userId: memberId,
+              username: member.user.username,
+              success: true,
+              muted: true
+            });
+          } catch (error) {
+            results.push({
+              userId: memberId,
+              username: member.user.username,
+              success: false,
+              error: error.message
+            });
+          }
+        }
+
+        res.json({
+          success: true,
+          message: `Muted ${results.filter(r => r.success).length} of ${results.length} members in voice channel`,
+          channelId: vcId,
+          results: results
+        });
+      } catch (error) {
+        console.error('[Mafia API] Error muting voice channel:', error);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to mute voice channel',
+          message: error.message
+        });
+      }
+    });
+
+    // Unmute everyone in a voice channel
+    this.app.post('/api/voice/channel/unmute', this.verifySignature.bind(this), async (req, res) => {
+      try {
+        const { channelId, guildId, reason } = req.body;
+        const vcId = channelId || MAFIA_VC_ID;
+
+        if (!guildId) {
+          return res.status(400).json({
+            success: false,
+            error: 'guildId is required'
+          });
+        }
+
+        const voiceChannel = await this.client.channels.fetch(vcId);
+
+        if (!voiceChannel || !voiceChannel.isVoiceBased()) {
+          return res.status(404).json({
+            success: false,
+            error: 'Voice channel not found'
+          });
+        }
+
+        const results = [];
+        for (const [memberId, member] of voiceChannel.members) {
+          try {
+            await member.voice.setMute(false, reason || 'Unmuted via webhook - channel operation');
+            results.push({
+              userId: memberId,
+              username: member.user.username,
+              success: true,
+              muted: false
+            });
+          } catch (error) {
+            results.push({
+              userId: memberId,
+              username: member.user.username,
+              success: false,
+              error: error.message
+            });
+          }
+        }
+
+        res.json({
+          success: true,
+          message: `Unmuted ${results.filter(r => r.success).length} of ${results.length} members in voice channel`,
+          channelId: vcId,
+          results: results
+        });
+      } catch (error) {
+        console.error('[Mafia API] Error unmuting voice channel:', error);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to unmute voice channel',
+          message: error.message
+        });
+      }
+    });
+
     // 404 handler
     this.app.use((req, res) => {
       res.status(404).json({
@@ -426,7 +542,9 @@ class MafiaWebhookServer {
           'POST /api/voice/unmute',
           'POST /api/voice/deafen',
           'POST /api/voice/undeafen',
-          'POST /api/voice/bulk'
+          'POST /api/voice/bulk',
+          'POST /api/voice/channel/mute',
+          'POST /api/voice/channel/unmute'
         ]
       });
     });
