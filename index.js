@@ -128,11 +128,15 @@ const server = http.createServer((req, res) => {
     };
 
     const proxyReq = http.request(options, (proxyRes) => {
-      // Merge CORS headers with response headers from webhook API
-      const responseHeaders = {
-        ...proxyRes.headers,
-        ...corsHeaders
-      };
+      // Get headers from webhook API but REMOVE any CORS headers to avoid duplicates
+      const responseHeaders = { ...proxyRes.headers };
+      delete responseHeaders['access-control-allow-origin'];
+      delete responseHeaders['access-control-allow-methods'];
+      delete responseHeaders['access-control-allow-headers'];
+      delete responseHeaders['access-control-max-age'];
+
+      // Add our CORS headers (only once!)
+      Object.assign(responseHeaders, corsHeaders);
 
       // Forward the response headers with CORS
       res.writeHead(proxyRes.statusCode, responseHeaders);
