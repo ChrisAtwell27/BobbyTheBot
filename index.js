@@ -87,9 +87,27 @@ const PORT = process.env.PORT || 8080;
 const WEBHOOK_PORT = process.env.MAFIA_WEBHOOK_PORT || 3001;
 
 const server = http.createServer((req, res) => {
+  // Add CORS headers for all requests
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Webhook-Signature',
+    'Access-Control-Max-Age': '86400'
+  };
+
+  // Handle OPTIONS preflight requests
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, corsHeaders);
+    res.end();
+    return;
+  }
+
   // Handle health checks for App Platform
   if (req.url === '/health' || req.url === '/') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      ...corsHeaders
+    });
     res.end(JSON.stringify({
       status: 'ok',
       botStatus: client.ws.status === 0 ? 'ready' : 'not ready',
@@ -110,15 +128,24 @@ const server = http.createServer((req, res) => {
     };
 
     const proxyReq = http.request(options, (proxyRes) => {
-      // Forward the response headers
-      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      // Merge CORS headers with response headers from webhook API
+      const responseHeaders = {
+        ...proxyRes.headers,
+        ...corsHeaders
+      };
+
+      // Forward the response headers with CORS
+      res.writeHead(proxyRes.statusCode, responseHeaders);
       // Pipe the response back to the client
       proxyRes.pipe(res);
     });
 
     proxyReq.on('error', (error) => {
       console.error('Proxy error:', error);
-      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.writeHead(502, {
+        'Content-Type': 'application/json',
+        ...corsHeaders
+      });
       res.end(JSON.stringify({
         success: false,
         error: 'Webhook API not available',
