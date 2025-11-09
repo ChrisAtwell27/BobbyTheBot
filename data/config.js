@@ -9,7 +9,8 @@ module.exports = {
         miscgames: "1276296976182411335",
         updates: "1276298066789535765",
         repo: "1395453341890248754",
-        dbd: "1425834397017309227"
+        dbd: "1425834397017309227",
+        valRanks: "REPLACE_WITH_MESSAGE_ID" // Add the message ID from !setupvalranks command
     },
     roleMappings: {
         'EggGold': '818839698306236487',
@@ -21,8 +22,30 @@ module.exports = {
         '🔥': '1021080456223019108',
         'pingsock': '701465164716703808',
         'mega_grin': '1349166787526397982',
-        'ghosty': '767531901128409109'
+        'ghosty': '767531901128409109',
+        // Valorant Rank Roles - Replace with your actual role IDs
+        'Iron': '1437184754624630937',
+        'Bronze': '1437184839320342678',
+        'Silver': '1437184911801979010',
+        'Gold': '1437184972833296394',
+        'Platinum': '1437185027132621070',
+        'Diamond': '1437185100939792595',
+        'Ascendant': '1437185137778360360',
+        'Immortal': '1437185506780647494',
+        'Radiant': '1437185548950310942'
     },
+    // Array of Valorant rank role IDs for mutual exclusivity
+    valorantRankRoles: [
+        'REPLACE_WITH_IRON_ROLE_ID',
+        'REPLACE_WITH_BRONZE_ROLE_ID',
+        'REPLACE_WITH_SILVER_ROLE_ID',
+        'REPLACE_WITH_GOLD_ROLE_ID',
+        'REPLACE_WITH_PLATINUM_ROLE_ID',
+        'REPLACE_WITH_DIAMOND_ROLE_ID',
+        'REPLACE_WITH_ASCENDANT_ROLE_ID',
+        'REPLACE_WITH_IMMORTAL_ROLE_ID',
+        'REPLACE_WITH_RADIANT_ROLE_ID'
+    ],
     topEggRoleId: '701309444562092113',
     thinIceRoleId: '1210273721705693217', // Replace with your Thin Ice role ID
     loggingChannelId: '1276266582234103808', // Replace with your logging channel ID

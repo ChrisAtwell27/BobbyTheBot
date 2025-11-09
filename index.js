@@ -48,6 +48,7 @@ client.setMaxListeners(process.env.MAX_EVENT_LISTENERS || 50);
 
 // Import and initialize event handlers
 require('./events/messageReactionHandler')(client);
+require('./events/valorantRankRoleHandler')(client);
 require('./events/loggingHandler')(client, loggingChannelId);
 require('./events/alertHandler')(client, alertKeywords, alertChannelId);
 require('./events/thinIceHandler')(client);

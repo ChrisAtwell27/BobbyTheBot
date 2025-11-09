@@ -299,13 +299,16 @@ async function createTeamEmbed(team) {
 }
 
 // Helper function to create team buttons (FIXED - use valorant_ prefix)
-function createTeamButtons(teamId, isFull) {
+function createTeamButtons(teamId, isFull, team = null) {
     // Extract just the message ID from the full team ID
     const messageId = teamId.replace('valorant_team_', '');
 
+    // Get current team count if team object is provided
+    const teamCount = team ? getTotalMembers(team) : '?';
+
     const joinButton = new ButtonBuilder()
         .setCustomId(`valorant_join_${messageId}`)
-        .setLabel('Join Team')
+        .setLabel(isFull ? 'Team Full' : `Join Team (${teamCount}/5)`)
         .setStyle(ButtonStyle.Success)
         .setEmoji('➕')
         .setDisabled(isFull);
@@ -461,7 +464,7 @@ module.exports = (client) => {
                 // Create updated embed and components
                 const isFull = getTotalMembers(team) >= 5;
                 const updatedEmbed = await createTeamEmbed(team);
-                const updatedComponents = createTeamButtons(teamId, isFull);
+                const updatedComponents = createTeamButtons(teamId, isFull, team);
 
                 // Edit the existing message instead of deleting/recreating
                 await message.edit({
@@ -535,7 +538,7 @@ module.exports = (client) => {
                 // Create the team embed and buttons
                 try {
                     const embed = await createTeamEmbed(team);
-                    const components = createTeamButtons(teamId, false);
+                    const components = createTeamButtons(teamId, false, team);
                     
                     const teamMessage = await message.channel.send({
                         embeds: [embed.embed],
@@ -609,7 +612,7 @@ module.exports = (client) => {
                     // Update the team display
                     const isFull = getTotalMembers(team) >= 5;
                     const updatedEmbed = await createTeamEmbed(team);
-                    const updatedComponents = createTeamButtons(fullTeamId, isFull);
+                    const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
 
                     // Update the main team message
                     try {
@@ -696,17 +699,14 @@ module.exports = (client) => {
                     });
                 }
 
-                // Defer the interaction immediately to prevent timeout
-                await safeInteractionResponse(interaction, 'defer');
-
-                // Add user to team
+                // Add user to team FIRST
                 team.members.push(userInfo);
 
                 try {
-                    // Update the team display
+                    // Update the team display IMMEDIATELY (no defer needed)
                     const isFull = getTotalMembers(team) >= 5;
                     const updatedEmbed = await createTeamEmbed(team);
-                    const updatedComponents = createTeamButtons(fullTeamId, isFull);
+                    const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
 
                     const success = await safeInteractionResponse(interaction, 'update', {
                         embeds: [updatedEmbed.embed],
@@ -717,6 +717,15 @@ module.exports = (client) => {
                     if (!success) {
                         console.log('Failed to update interaction, but team was still updated');
                         return;
+                    }
+
+                    // Send a quick notification in the channel that someone joined
+                    try {
+                        const channel = await client.channels.fetch(team.channelId);
+                        const joinEmoji = isFull ? '🎉' : '✅';
+                        await channel.send(`${joinEmoji} **${userInfo.displayName}** joined the team! **(${getTotalMembers(team)}/5)**`);
+                    } catch (notifyError) {
+                        console.error('[VALORANT TEAM] Error sending join notification:', notifyError.message);
                     }
 
                     // If team is full, celebrate!
@@ -871,23 +880,28 @@ module.exports = (client) => {
                     });
                 }
 
-                // Defer the interaction immediately to prevent timeout
-                await safeInteractionResponse(interaction, 'defer');
-
-                // Remove user from team
+                // Remove user from team FIRST
                 team.members.splice(memberIndex, 1);
 
                 try {
-                    // Update the team display
+                    // Update the team display IMMEDIATELY (no defer needed)
                     const isFull = getTotalMembers(team) >= 5;
                     const updatedEmbed = await createTeamEmbed(team);
-                    const updatedComponents = createTeamButtons(fullTeamId, isFull);
+                    const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
 
                     await safeInteractionResponse(interaction, 'update', {
                         embeds: [updatedEmbed.embed],
                         files: updatedEmbed.files,
                         components: updatedComponents
                     });
+
+                    // Send a notification in the channel that someone left
+                    try {
+                        const channel = await client.channels.fetch(team.channelId);
+                        await channel.send(`⬅️ **${userInfo.displayName}** left the team. **(${getTotalMembers(team)}/5)**`);
+                    } catch (notifyError) {
+                        console.error('[VALORANT TEAM] Error sending leave notification:', notifyError.message);
+                    }
 
                     // Send warning if team is now critically low on members (DM to leader only)
                     const totalMembers = getTotalMembers(team);

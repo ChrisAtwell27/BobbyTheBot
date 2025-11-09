@@ -1,4 +1,4 @@
-const { roleMessageIds, roleMappings } = require('../data/config');
+const { roleMessageIds, roleMappings, valorantRankRoles } = require('../data/config');
 
 module.exports = (client) => {
   client.on("messageReactionAdd", async (reaction, user) => {
@@ -39,6 +39,19 @@ module.exports = (client) => {
         try {
           const guild = reaction.message.guild;
           const member = await guild.members.fetch(user.id);
+
+          // Check if this is a Valorant rank role (mutual exclusivity)
+          const isValorantRankRole = valorantRankRoles && valorantRankRoles.includes(roleId);
+
+          if (isValorantRankRole && messageId === roleMessageIds.valRanks) {
+            // Remove all other Valorant rank roles before adding the new one
+            for (const rankRoleId of valorantRankRoles) {
+              if (rankRoleId !== roleId && member.roles.cache.has(rankRoleId)) {
+                await member.roles.remove(rankRoleId);
+                console.log(`Removed rank role ${rankRoleId} from user ${user.username}`);
+              }
+            }
+          }
 
           if (!member.roles.cache.has(roleId)) {
             await member.roles.add(roleId);
