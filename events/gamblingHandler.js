@@ -420,6 +420,11 @@ module.exports = (client) => {
 
         const challengeMessage = await message.channel.send({ embeds: [embed], components: [acceptButton] });
 
+        // Store only IDs to avoid memory leak
+        const messageId = challengeMessage.id;
+        const channelId = challengeMessage.channelId;
+        const authorUsername = message.author.username;
+
         // Auto-expire challenge
         setTimeout(async () => {
             if (challenges.has(challengeId)) {
@@ -443,9 +448,18 @@ module.exports = (client) => {
                             .setDisabled(true)
                             .setEmoji('⏰')
                     );
-                
-                challengeMessage.edit({ components: [disabledButton] });
-                message.channel.send(`⏰ Rock Paper Scissors challenge by **${message.author.username}** has expired and been refunded.`);
+
+                // Fetch channel and message fresh instead of using stale references
+                try {
+                    const channel = await client.channels.fetch(channelId);
+                    if (channel) {
+                        const msg = await channel.messages.fetch(messageId);
+                        await msg.edit({ components: [disabledButton] });
+                        await channel.send(`⏰ Rock Paper Scissors challenge by **${authorUsername}** has expired and been refunded.`);
+                    }
+                } catch (error) {
+                    // Message may have been deleted, ignore
+                }
             }
         }, CHALLENGE_TIMEOUT);
     }
@@ -514,6 +528,11 @@ module.exports = (client) => {
 
         const challengeMessage = await message.channel.send({ embeds: [embed], components: [acceptButton] });
 
+        // Store only IDs to avoid memory leak
+        const messageId = challengeMessage.id;
+        const channelId = challengeMessage.channelId;
+        const authorUsername = message.author.username;
+
         setTimeout(async () => {
             if (challenges.has(challengeId)) {
                 challenges.delete(challengeId);
@@ -529,8 +548,17 @@ module.exports = (client) => {
                             .setEmoji('⏰')
                     );
 
-                challengeMessage.edit({ components: [disabledButton] });
-                message.channel.send(`⏰ Higher Card challenge by **${message.author.username}** has expired and been refunded.`);
+                // Fetch channel and message fresh instead of using stale references
+                try {
+                    const channel = await client.channels.fetch(channelId);
+                    if (channel) {
+                        const msg = await channel.messages.fetch(messageId);
+                        await msg.edit({ components: [disabledButton] });
+                        await channel.send(`⏰ Higher Card challenge by **${authorUsername}** has expired and been refunded.`);
+                    }
+                } catch (error) {
+                    // Message may have been deleted, ignore
+                }
             }
         }, CHALLENGE_TIMEOUT);
     }
@@ -609,6 +637,11 @@ module.exports = (client) => {
 
         const challengeMessage = await message.channel.send({ embeds: [embed], components: [acceptButton] });
 
+        // Store only IDs to avoid memory leak
+        const messageId = challengeMessage.id;
+        const channelId = challengeMessage.channelId;
+        const authorUsername = message.author.username;
+
         setTimeout(async () => {
             if (challenges.has(challengeId)) {
                 challenges.delete(challengeId);
@@ -624,8 +657,17 @@ module.exports = (client) => {
                             .setEmoji('⏰')
                     );
 
-                challengeMessage.edit({ components: [disabledButton] });
-                message.channel.send(`⏰ Quick Draw challenge by **${message.author.username}** has expired and been refunded.`);
+                // Fetch channel and message fresh instead of using stale references
+                try {
+                    const channel = await client.channels.fetch(channelId);
+                    if (channel) {
+                        const msg = await channel.messages.fetch(messageId);
+                        await msg.edit({ components: [disabledButton] });
+                        await channel.send(`⏰ Quick Draw challenge by **${authorUsername}** has expired and been refunded.`);
+                    }
+                } catch (error) {
+                    // Message may have been deleted, ignore
+                }
             }
         }, CHALLENGE_TIMEOUT);
     }
@@ -694,6 +736,11 @@ module.exports = (client) => {
 
         const challengeMessage = await message.channel.send({ embeds: [embed], components: [acceptButton] });
 
+        // Store only IDs to avoid memory leak
+        const messageId = challengeMessage.id;
+        const channelId = challengeMessage.channelId;
+        const authorUsername = message.author.username;
+
         setTimeout(async () => {
             if (challenges.has(challengeId)) {
                 challenges.delete(challengeId);
@@ -709,8 +756,17 @@ module.exports = (client) => {
                             .setEmoji('⏰')
                     );
 
-                challengeMessage.edit({ components: [disabledButton] });
-                message.channel.send(`⏰ Number Duel challenge by **${message.author.username}** has expired and been refunded.`);
+                // Fetch channel and message fresh instead of using stale references
+                try {
+                    const channel = await client.channels.fetch(channelId);
+                    if (channel) {
+                        const msg = await channel.messages.fetch(messageId);
+                        await msg.edit({ components: [disabledButton] });
+                        await channel.send(`⏰ Number Duel challenge by **${authorUsername}** has expired and been refunded.`);
+                    }
+                } catch (error) {
+                    // Message may have been deleted, ignore
+                }
             }
         }, CHALLENGE_TIMEOUT);
     }

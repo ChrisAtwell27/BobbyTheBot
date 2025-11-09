@@ -542,6 +542,10 @@ module.exports = (client) => {
                 components: [challengeButtons]
             });
 
+            // Store only message ID to avoid memory leak
+            const messageId = challengeMessage.id;
+            const channelId = challengeMessage.channelId;
+
             // Auto-expire challenge
             setTimeout(async () => {
                 if (activeChallenges.has(challengeId)) {
@@ -559,12 +563,21 @@ module.exports = (client) => {
                         .setTitle('⏰ Gladiator Challenge Expired')
                         .setDescription('The challenge timed out and has been cancelled.')
                         .setTimestamp();
-                    
-                    challengeMessage.edit({ 
-                        embeds: [expiredEmbed], 
-                        components: [],
-                        files: []
-                    }).catch(() => {});
+
+                    // Fetch message fresh instead of using stale reference
+                    try {
+                        const channel = await client.channels.fetch(channelId);
+                        if (channel) {
+                            const msg = await channel.messages.fetch(messageId);
+                            await msg.edit({
+                                embeds: [expiredEmbed],
+                                components: [],
+                                files: []
+                            });
+                        }
+                    } catch (error) {
+                        // Message may have been deleted, ignore
+                    }
                 }
             }, CHALLENGE_TIMEOUT);
         }

@@ -27,6 +27,9 @@ module.exports = (client) => {
             clearTimeout(activeBumpTimer);
         }
 
+        // Store only the channel ID to avoid memory leak from holding message reference
+        const channelId = message.channelId;
+
         // Send confirmation message
         await message.channel.send({
             content: `✅ Bump detected! I'll remind <@&${topEggRoleId}> to bump again in 2 hours.`,
@@ -36,8 +39,16 @@ module.exports = (client) => {
         // Set timer for 2 hours
         activeBumpTimer = setTimeout(async () => {
             try {
+                // Fetch the channel fresh instead of using stale message reference
+                const channel = await client.channels.fetch(channelId);
+                if (!channel) {
+                    console.error('[BUMP] Could not find commands channel');
+                    activeBumpTimer = null;
+                    return;
+                }
+
                 // Send reminder in the commands channel
-                await message.channel.send({
+                await channel.send({
                     content: `🔔 <@&${topEggRoleId}> Time to bump again! Use \`/bump\` to keep the server active!`,
                     allowedMentions: { roles: [topEggRoleId] }
                 });

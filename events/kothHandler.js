@@ -100,7 +100,8 @@ module.exports = (client) => {
             startTime: Date.now(),
             endTime: Date.now() + GAME_DURATION,
             channelId: channelId,
-            lastActivity: Date.now()
+            lastActivity: Date.now(),
+            timer: null // Store timer reference to prevent memory leaks
         };
 
         activeKothGames.set(channelId, gameData);
@@ -126,8 +127,8 @@ module.exports = (client) => {
 
         await message.channel.send({ embeds: [embed], files: [attachment] });
 
-        // Set timer to end game
-        setTimeout(() => {
+        // Set timer to end game and store reference
+        gameData.timer = setTimeout(() => {
             endKothGame(channelId, client);
         }, GAME_DURATION);
     }
@@ -190,8 +191,11 @@ module.exports = (client) => {
 
             await message.channel.send({ embeds: [resultEmbed], files: [attachment] });
 
-            // Set new timer
-            setTimeout(() => {
+            // Clear old timer and set new one to prevent memory leaks
+            if (gameData.timer) {
+                clearTimeout(gameData.timer);
+            }
+            gameData.timer = setTimeout(() => {
                 endKothGame(channelId, client);
             }, GAME_DURATION);
 
@@ -255,6 +259,12 @@ module.exports = (client) => {
     async function endKothGame(channelId, client) {
         const gameData = activeKothGames.get(channelId);
         if (!gameData) return;
+
+        // Clear timer to prevent memory leaks
+        if (gameData.timer) {
+            clearTimeout(gameData.timer);
+            gameData.timer = null;
+        }
 
         // Calculate house cut and winnings
         const houseCut = Math.floor(gameData.pot * HOUSE_CUT);
