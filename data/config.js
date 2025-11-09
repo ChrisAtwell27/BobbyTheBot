@@ -10,7 +10,7 @@ module.exports = {
         updates: "1276298066789535765",
         repo: "1395453341890248754",
         dbd: "1425834397017309227",
-        valRanks: "REPLACE_WITH_MESSAGE_ID" // Add the message ID from !setupvalranks command
+        valRanks: "1437189840394256485" // Add the message ID from !setupvalranks command
     },
     roleMappings: {
         'EggGold': '818839698306236487',
