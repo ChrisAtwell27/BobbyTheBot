@@ -37,6 +37,17 @@ Before setting up, make sure you have:
 
 ## Setup Instructions
 
+### Step 0: Verify Your Emojis (Important!)
+
+Before setting up, verify that your emoji names match exactly what the bot expects:
+
+1. In Discord, type: `!listemojis`
+2. The bot will show all server emojis and specifically highlight which Valorant rank emojis it found
+3. Check the "Valorant Rank Emojis Status" section to see which emojis are missing
+4. **Emoji names are case-sensitive!** Make sure they match exactly: `Iron`, `Bronze`, `Silver`, `Gold`, `Platinum`, `Diamond`, `Ascendant`, `Immortal`, `Radiant`
+
+**Tip:** You can also test individual emojis with `!testemoji EmojiName` (e.g., `!testemoji Iron`)
+
 ### Step 1: Get Role IDs
 
 1. In Discord, type `\@RoleName` (e.g., `\@Iron`) in any channel
@@ -147,11 +158,13 @@ The `messageReactionHandler` checks if the reacted role is in the `valorantRankR
 
 ### Reactions aren't working
 
-1. **Check emoji names**: Emoji names in `roleMappings` must match your Discord emoji names exactly (case-sensitive)
-2. **Check role IDs**: Make sure role IDs are correct (no extra spaces or quotes)
-3. **Check message ID**: Ensure the message ID in `roleMessageIds.valRanks` matches the actual message ID
-4. **Check bot permissions**: Bot needs "Manage Roles" permission
-5. **Check role hierarchy**: Bot's role must be higher than the rank roles in the server settings
+1. **First, verify emoji names**: Run `!listemojis` to see exactly what emoji names exist in your server
+2. **Check emoji names in config**: Emoji names in `roleMappings` must match your Discord emoji names exactly (case-sensitive)
+3. **Test individual emojis**: Use `!testemoji EmojiName` to verify the bot can find and react with each emoji
+4. **Check role IDs**: Make sure role IDs are correct (no extra spaces or quotes)
+5. **Check message ID**: Ensure the message ID in `roleMessageIds.valRanks` matches the actual message ID
+6. **Check bot permissions**: Bot needs "Manage Roles" permission
+7. **Check role hierarchy**: Bot's role must be higher than the rank roles in the server settings
 
 ### Bot can't add reactions
 
@@ -173,6 +186,8 @@ The `messageReactionHandler` checks if the reacted role is in the `valorantRankR
 | Command | Permission | Description |
 |---------|-----------|-------------|
 | `!setupvalranks` | Administrator | Creates the rank selection message in the current channel |
+| `!listemojis` | Administrator | Lists all custom emojis in the server and shows which Valorant rank emojis are found/missing |
+| `!testemoji <name>` | Administrator | Tests if a specific emoji can be found and reacted with (e.g., `!testemoji Iron`) |
 
 ## Example Config
 

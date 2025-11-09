@@ -11,21 +11,28 @@ module.exports = (client) => {
         }
 
         try {
+            // Get guild emojis to display in the embed
+            const guild = message.guild;
+            const rankEmojiNames = ['Iron', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Ascendant', 'Immortal', 'Radiant'];
+
+            // Build the description with actual emoji references
+            let description = 'React with your current VALORANT rank to get the corresponding role!\n\n**Available ranks:**\n';
+
+            for (const emojiName of rankEmojiNames) {
+                const guildEmoji = guild.emojis.cache.find(e => e.name === emojiName);
+                if (guildEmoji) {
+                    description += `${guildEmoji} **${emojiName}**\n`;
+                } else {
+                    description += `❓ **${emojiName}** (emoji not found)\n`;
+                }
+            }
+
+            description += '\n*Note: You can only have one rank role at a time. Reacting to a new rank will remove your previous rank role.*';
+
             // Create an embed for the rank selection message
             const embed = new EmbedBuilder()
                 .setTitle('🎮 Select Your VALORANT Rank')
-                .setDescription('React with your current VALORANT rank to get the corresponding role!\n\n' +
-                    'Available ranks:\n' +
-                    ':Iron: **Iron**\n' +
-                    ':Bronze: **Bronze**\n' +
-                    ':Silver: **Silver**\n' +
-                    ':Gold: **Gold**\n' +
-                    ':Platinum: **Platinum**\n' +
-                    ':Diamond: **Diamond**\n' +
-                    ':Ascendant: **Ascendant**\n' +
-                    ':Immortal: **Immortal**\n' +
-                    ':Radiant: **Radiant**\n\n' +
-                    '*Note: You can only have one rank role at a time. Reacting to a new rank will remove your previous rank role.*')
+                .setDescription(description)
                 .setColor('#FF4655') // VALORANT red color
                 .setFooter({ text: 'React below to select your rank!' })
                 .setTimestamp();
@@ -33,22 +40,22 @@ module.exports = (client) => {
             // Send the embed
             const sentMessage = await message.channel.send({ embeds: [embed] });
 
-            // Add all the rank emoji reactions
-            // Note: These emoji names should match your Discord server's custom emojis
-            const rankEmojis = ['Iron', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Ascendant', 'Immortal', 'Radiant'];
+            console.log('Available guild emojis:', guild.emojis.cache.map(e => e.name).join(', '));
 
             // Add reactions in order
-            for (const emoji of rankEmojis) {
+            for (const emojiName of rankEmojiNames) {
                 try {
-                    await sentMessage.react(emoji);
-                } catch (error) {
-                    console.error(`Failed to add reaction ${emoji}:`, error);
-                    // If it's a custom emoji, try with colon format
-                    try {
-                        await sentMessage.react(`:${emoji}:`);
-                    } catch (err) {
-                        console.error(`Failed to add reaction :${emoji}::`, err);
+                    // Find the emoji in the guild's emoji collection
+                    const guildEmoji = guild.emojis.cache.find(e => e.name === emojiName);
+
+                    if (guildEmoji) {
+                        await sentMessage.react(guildEmoji);
+                        console.log(`✅ Added reaction: ${emojiName}`);
+                    } else {
+                        console.error(`❌ Emoji "${emojiName}" not found in server. Available emojis: ${guild.emojis.cache.map(e => e.name).join(', ')}`);
                     }
+                } catch (error) {
+                    console.error(`Failed to add reaction ${emojiName}:`, error);
                 }
             }
 
@@ -57,17 +64,46 @@ module.exports = (client) => {
             console.log(`Message ID: ${sentMessage.id}`);
             console.log(`Add this to your config.js roleMessageIds: valRanks: "${sentMessage.id}"`);
 
-            // Send a confirmation message to the admin
-            await message.reply(
-                `✅ Valorant rank role message created!\n\n` +
-                `**Next steps:**\n` +
+            // Check which emojis were successfully added
+            const foundEmojis = [];
+            const missingEmojis = [];
+
+            for (const emojiName of rankEmojiNames) {
+                const guildEmoji = guild.emojis.cache.find(e => e.name === emojiName);
+                if (guildEmoji) {
+                    foundEmojis.push(emojiName);
+                } else {
+                    missingEmojis.push(emojiName);
+                }
+            }
+
+            let replyMessage = `✅ Valorant rank role message created!\n\n`;
+
+            if (missingEmojis.length > 0) {
+                replyMessage += `⚠️ **Warning:** The following emojis were not found in your server:\n${missingEmojis.map(e => `- :${e}:`).join('\n')}\n\n`;
+                replyMessage += `Please make sure these custom emojis exist in your server with the exact names shown above (case-sensitive).\n\n`;
+            }
+
+            if (foundEmojis.length > 0) {
+                replyMessage += `✅ Successfully added reactions for: ${foundEmojis.join(', ')}\n\n`;
+            }
+
+            replyMessage += `**Next steps:**\n` +
                 `1. Add this to your \`data/config.js\` under \`roleMessageIds\`:\n` +
                 `\`\`\`js\nvalRanks: "${sentMessage.id}"\`\`\`\n\n` +
-                `2. Add the emoji-to-role mappings to \`roleMappings\` in \`data/config.js\`:\n` +
-                `\`\`\`js\n// Example format:\n'Iron': 'YOUR_IRON_ROLE_ID',\n'Bronze': 'YOUR_BRONZE_ROLE_ID',\n// ... etc\`\`\`\n\n` +
+                `2. Add the emoji-to-role mappings to \`roleMappings\` in \`data/config.js\`. Use the **exact emoji names** from your server:\n` +
+                `\`\`\`js\n// Example format (emoji names must match exactly):\n`;
+
+            for (const emojiName of foundEmojis) {
+                replyMessage += `'${emojiName}': 'YOUR_${emojiName.toUpperCase()}_ROLE_ID',\n`;
+            }
+
+            replyMessage += `\`\`\`\n\n` +
                 `3. Get role IDs by typing \`\\@RoleName\` in Discord and copying the ID from the mention.\n\n` +
-                `4. Restart the bot for changes to take effect.`
-            );
+                `4. Restart the bot for changes to take effect.`;
+
+            // Send a confirmation message to the admin
+            await message.reply(replyMessage);
 
         } catch (error) {
             console.error('Error setting up Valorant rank roles:', error);
