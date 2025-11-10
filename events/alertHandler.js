@@ -1,11 +1,13 @@
 // alertHandler.js
-const { EmbedBuilder, Collection } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
+const { CleanupMap } = require('../utils/memoryUtils');
 
 module.exports = (client, alertKeywords, alertChannelId) => {
-  // Rate limiting: Track alerts to prevent spam
-  const alertCooldowns = new Collection();
+  // Rate limiting: Track alerts to prevent spam with automatic cleanup
+  // CleanupMap automatically removes expired entries and auto-registers for graceful shutdown
   const COOLDOWN_MS = 60000; // 1 minute cooldown per user per keyword
+  const alertCooldowns = new CleanupMap(COOLDOWN_MS, 1 * 60 * 1000); // Auto-cleanup every 1 minute
 
   // Validation on initialization
   let isValidConfig = true;
@@ -117,24 +119,6 @@ module.exports = (client, alertKeywords, alertChannelId) => {
     }
   });
 
-  // Cleanup old cooldowns every 5 minutes
-  const cleanupInterval = setInterval(() => {
-    const now = Date.now();
-    let cleaned = 0;
-
-    for (const [key, timestamp] of alertCooldowns.entries()) {
-      if (now - timestamp > COOLDOWN_MS) {
-        alertCooldowns.delete(key);
-        cleaned++;
-      }
-    }
-
-    if (cleaned > 0) {
-      console.log(`🧹 Cleaned up ${cleaned} alert cooldowns`);
-    }
-  }, 5 * 60 * 1000);
-
-  // Store interval ID for potential cleanup
-  if (!global.alertHandlerIntervals) global.alertHandlerIntervals = [];
-  global.alertHandlerIntervals.push(cleanupInterval);
+  // Note: Automatic cleanup is now handled by CleanupMap internally
+  // No need for manual cleanup interval - CleanupMap handles it automatically
 };

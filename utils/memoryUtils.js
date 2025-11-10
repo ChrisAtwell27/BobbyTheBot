@@ -3,6 +3,11 @@
 // ===============================================
 // Utilities to prevent memory leaks in long-running Discord bot processes
 
+// Global registry to track all CleanupMap instances for graceful shutdown
+if (!global.cleanupMapRegistry) {
+    global.cleanupMapRegistry = [];
+}
+
 /**
  * LimitedMap - A Map with automatic size limiting using LRU (Least Recently Used) eviction
  * Prevents unbounded growth by removing oldest entries when limit is reached
@@ -61,6 +66,9 @@ class CleanupMap extends Map {
             this.cleanup();
         }, cleanupInterval);
 
+        // Register this instance for graceful shutdown cleanup
+        global.cleanupMapRegistry.push(this);
+
         console.log(`[Memory] CleanupMap initialized - maxAge: ${maxAge}ms, cleanup every ${cleanupInterval}ms`);
     }
 
@@ -116,6 +124,12 @@ class CleanupMap extends Map {
             clearInterval(this.cleanupTimer);
             this.cleanupTimer = null;
             console.log('[Memory] CleanupMap cleanup timer stopped');
+        }
+
+        // Remove from global registry
+        const index = global.cleanupMapRegistry.indexOf(this);
+        if (index > -1) {
+            global.cleanupMapRegistry.splice(index, 1);
         }
     }
 
@@ -216,11 +230,32 @@ function getMemoryStats() {
     };
 }
 
+/**
+ * Destroy all registered CleanupMap instances
+ * Call this during graceful shutdown to stop all cleanup timers
+ * @returns {number} - Number of CleanupMaps destroyed
+ */
+function destroyAllCleanupMaps() {
+    let count = 0;
+    if (global.cleanupMapRegistry && Array.isArray(global.cleanupMapRegistry)) {
+        // Create a copy since destroy() modifies the array
+        const maps = [...global.cleanupMapRegistry];
+        maps.forEach(cleanupMap => {
+            if (cleanupMap && typeof cleanupMap.destroy === 'function') {
+                cleanupMap.destroy();
+                count++;
+            }
+        });
+    }
+    return count;
+}
+
 module.exports = {
     LimitedMap,
     CleanupMap,
     cleanupOldEntries,
     cleanupFinishedGames,
     setupPeriodicCleanup,
-    getMemoryStats
+    getMemoryStats,
+    destroyAllCleanupMaps
 };

@@ -20,7 +20,8 @@ process.on('uncaughtException', (error) => {
 const { loggingChannelId, alertChannelId, alertKeywords, changelogChannelId } = require('./data/config');
 
 // Initialize database connection
-const { connectToDatabase } = require('./database/connection');
+const { connectToDatabase, disconnectFromDatabase } = require('./database/connection');
+const { destroyAllCleanupMaps } = require('./utils/memoryUtils');
 connectToDatabase().catch(err => {
   console.error('Failed to initialize database:', err);
   console.error('Bot will exit due to database connection failure');
@@ -282,6 +283,17 @@ function gracefulShutdown(signal) {
     if (clearedCount > 0) {
         console.log(`Cleared ${clearedCount} interval timers`);
     }
+
+    // Destroy all CleanupMaps to stop their internal cleanup timers
+    const destroyedCount = destroyAllCleanupMaps();
+    if (destroyedCount > 0) {
+        console.log(`Destroyed ${destroyedCount} CleanupMap instances`);
+    }
+
+    // Disconnect from database
+    disconnectFromDatabase().catch(err => {
+        console.error('Error disconnecting from database:', err);
+    });
 
     // Destroy Discord client
     client.destroy();
