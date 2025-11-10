@@ -20,8 +20,8 @@ const activeInhouses = new LimitedMap(30);
 // Track user cooldowns for in-house creation (auto-cleanup after 2 minutes)
 const userCooldowns = new CleanupMap(2 * 60 * 1000, 1 * 60 * 1000);
 
-// Track user active in-houses count (limit to 200 users)
-const userActiveInhouses = new LimitedMap(200);
+// Track user active in-houses count (limit to 500 users for larger servers)
+const userActiveInhouses = new LimitedMap(500);
 
 // Resend interval in milliseconds (10 minutes)
 const RESEND_INTERVAL = 10 * 60 * 1000;
@@ -384,7 +384,13 @@ function incrementUserInhouseCount(userId) {
 function decrementUserInhouseCount(userId) {
     const current = userActiveInhouses.get(userId) || 0;
     if (current > 0) {
-        userActiveInhouses.set(userId, current - 1);
+        const newCount = current - 1;
+        if (newCount === 0) {
+            // Remove entry when count reaches 0 to prevent memory buildup
+            userActiveInhouses.delete(userId);
+        } else {
+            userActiveInhouses.set(userId, newCount);
+        }
     }
 }
 

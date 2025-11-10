@@ -413,6 +413,7 @@ module.exports = (client) => {
                 });
 
                 collector.on('collect', async (msg) => {
+                    try {
                     const proofUrl = msg.content;
 
                     // Update bounty with claim
@@ -455,6 +456,16 @@ module.exports = (client) => {
                     await msg.react('✅');
 
                     console.log(`[BOUNTY] Bounty ${bountyId} claimed by ${interaction.user.username} for ${bounty.reward} honey`);
+                    collector.stop(); // Explicitly stop collector after successful claim
+                    } catch (collectError) {
+                        console.error('[BOUNTY] Error processing bounty claim:', collectError);
+                        collector.stop(); // Ensure collector is stopped on error
+                        try {
+                            await interaction.followUp({ content: '❌ An error occurred while processing your claim. Please try again.', ephemeral: true });
+                        } catch (followUpError) {
+                            console.error('[BOUNTY] Failed to send error followup:', followUpError);
+                        }
+                    }
                 });
 
                 collector.on('end', collected => {

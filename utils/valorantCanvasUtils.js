@@ -8,10 +8,12 @@ const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 const path = require('path');
 const fs = require('fs');
+const { LimitedMap } = require('./memoryUtils');
 
-// Cache for loaded images
-const imageCache = new Map();
-const rankImageCache = new Map();
+// Cache for loaded images with size limits to prevent memory leaks
+// LimitedMap automatically evicts oldest entries when limit is reached
+const imageCache = new LimitedMap(200); // Limit to 200 cached images
+const rankImageCache = new LimitedMap(50); // Limit to 50 rank images (there are only ~27 unique ranks)
 
 /**
  * Creates a standard Valorant-style background gradient

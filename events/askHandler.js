@@ -25,6 +25,10 @@ if (OPENAI_API_KEY) {
 const conversationHistory = new CleanupMap(60 * 60 * 1000, 10 * 60 * 1000);
 const MAX_HISTORY_LENGTH = 5; // Keep last 5 message pairs per user (user message + Bobby's response)
 
+// Store CleanupMap for graceful shutdown cleanup
+if (!global.askHandlerCleanupMaps) global.askHandlerCleanupMaps = [];
+global.askHandlerCleanupMaps.push(conversationHistory);
+
 // Function to get or create user in database
 async function getOrCreateUser(userId) {
     try {

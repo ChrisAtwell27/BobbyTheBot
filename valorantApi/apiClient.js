@@ -44,6 +44,7 @@ async function makeAPIRequest(endpoint) {
             res.on('end', () => {
                 try {
                     if (data.trim() === '') {
+                        req.destroy(); // Ensure request is destroyed on error
                         reject(new Error('Empty response from API'));
                         return;
                     }
@@ -52,18 +53,27 @@ async function makeAPIRequest(endpoint) {
                     resolve(jsonData);
                 } catch (error) {
                     console.error('[API Client] Failed to parse API response:', data);
+                    req.destroy(); // Ensure request is destroyed on parse error
                     reject(new Error('Failed to parse API response: ' + error.message));
                 }
+            });
+
+            // Handle response errors
+            res.on('error', (error) => {
+                console.error('[API Client] Response stream error:', error.message);
+                req.destroy();
+                reject(new Error('Response error: ' + error.message));
             });
         });
 
         req.on('timeout', () => {
-            req.destroy();
+            req.destroy(); // Destroy request to free resources
             reject(new Error('API request timeout - please try again later'));
         });
 
         req.on('error', (error) => {
             console.error('[API Client] API Request error:', error.message);
+            req.destroy(); // Ensure request is destroyed on error
             reject(new Error('Network error: ' + error.message));
         });
 
