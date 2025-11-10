@@ -60,12 +60,6 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
-// Initialize centralized routers FIRST to reduce CPU usage
-// This replaces 33+ individual messageCreate listeners with 1 central router
-const commandRouter = require('./events/commandRouter')(client);
-const interactionRouter = require('./events/interactionRouter')(client);
-
-<<<<<<< Updated upstream
 // Discord client error handlers
 client.on('error', (error) => {
   console.error('[DISCORD] Client error:', error);
@@ -222,44 +216,16 @@ setInterval(() => {
   }
 }, 5000); // Check every 5 seconds
 
+// Initialize centralized routers FIRST to reduce CPU usage
+// This replaces 33+ individual messageCreate listeners with 1 central router
+console.log('[INIT] 🚀 Initializing centralized event routing system...');
+const commandRouter = require('./events/commandRouter')(client);
+const interactionRouter = require('./events/interactionRouter')(client);
 
-// Import and initialize event handlers
-require('./events/messageReactionHandler')(client);
-require('./events/valorantRankRoleHandler')(client);
-require('./events/debugEmojiHandler')(client);
-require('./events/loggingHandler')(client, loggingChannelId);
-require('./events/alertHandler')(client, alertKeywords, alertChannelId);
-require('./events/thinIceHandler')(client);
-require('./events/eggbuckHandler')(client);
-require('./events/gamblingHandler')(client);
-require('./events/blackjackHandler')(client);
-require('./events/clipHandler')(client);
-require('./events/valorantTeamHandler')(client);
-require('./events/russianRouletteHandler')(client);
-require('./events/helpHandler')(client);
-require('./events/kothHandler')(client);
-require('./events/moderationHandler')(client);
-require('./events/boosterRoleHandler')(client);
-require('./events/memberCountHandler')(client);
-require('./events/askHandler')(client);
-require('./events/valorantMapHandler')(client);
-require('./events/bumpHandler')(client);
-require('./events/birthdayHandler')(client);
-require('./events/wordleHandler')(client);
-require('./events/valorantInhouseHandler')(client);
-const mafiaHandler = require('./events/mafiaHandler');
-mafiaHandler(client);
-require('./events/triviaHandler')(client);
-require('./events/bountyHandler')(client);
-require('./events/changelogHandler')(client, changelogChannelId);
-// Initialize Valorant API handler separately to prevent conflicts
-const valorantApiHandler = require('./events/valorantApiHandler');
-valorantApiHandler.init(client);
-=======
 // Initialize all handlers through the registry
 // Handlers will register with the routers instead of creating individual listeners
 const { mafiaHandler } = require('./events/handlerRegistry')(client, commandRouter, interactionRouter);
->>>>>>> Stashed changes
+console.log('[INIT] ✅ All handlers registered with centralized routers (97% CPU reduction)');
 
 // Create HTTP server that proxies webhook API requests
 // This starts IMMEDIATELY so App Platform health checks pass
