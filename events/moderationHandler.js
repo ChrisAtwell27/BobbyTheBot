@@ -445,19 +445,45 @@ module.exports = (client) => {
                 let totalDeleted = 0;
                 const channelsProcessed = [];
 
+                const MAX_MESSAGES_PER_CHANNEL = 1000; // Safety limit per channel
+                const OPERATION_TIMEOUT = 120000; // 2 minute timeout for entire operation
+                const operationStart = Date.now();
+                let totalMessagesFetched = 0;
+
+                console.log(`[MODERATION] Starting dead command for user ${targetMember.user.tag} (${targetMember.id})`);
+
                 for (const [channelId, channel] of message.guild.channels.cache) {
+                    // Safety check: timeout protection
+                    if (Date.now() - operationStart > OPERATION_TIMEOUT) {
+                        console.warn(`[MODERATION] Operation timeout after ${OPERATION_TIMEOUT}ms. Stopping early. Deleted ${totalDeleted} messages so far.`);
+                        await statusMsg.edit(`⚠️ Operation timed out after processing ${channelsProcessed.length} channels. Deleted ${totalDeleted} messages. Some channels may not have been processed.`);
+                        break;
+                    }
+
                     if (channel.isTextBased() && channel.permissionsFor(message.guild.members.me).has(PermissionsBitField.Flags.ViewChannel)) {
                         try {
                             let lastId;
                             let messagesDeleted = 0;
                             let keepFetching = true;
+                            let channelMessagesFetched = 0;
+
+                            console.log(`[MODERATION] Processing channel: ${channel.name} (${channel.id})`);
 
                             while (keepFetching) {
+                                // Safety check: prevent infinite loops per channel
+                                if (channelMessagesFetched >= MAX_MESSAGES_PER_CHANNEL) {
+                                    console.warn(`[MODERATION] Reached maximum fetch limit of ${MAX_MESSAGES_PER_CHANNEL} messages for channel ${channel.name}. Moving to next channel.`);
+                                    break;
+                                }
+
                                 const options = { limit: 100 };
                                 if (lastId) options.before = lastId;
 
                                 const messages = await channel.messages.fetch(options);
                                 if (messages.size === 0) break;
+
+                                channelMessagesFetched += messages.size;
+                                totalMessagesFetched += messages.size;
 
                                 const userMessages = messages.filter(msg =>
                                     msg.author.id === targetMember.id &&
@@ -465,6 +491,7 @@ module.exports = (client) => {
                                 );
 
                                 if (userMessages.size > 0) {
+                                    console.log(`[MODERATION] Found ${userMessages.size} messages from user in channel ${channel.name}`);
                                     for (const msg of userMessages.values()) {
                                         try {
                                             await msg.delete();
@@ -473,7 +500,7 @@ module.exports = (client) => {
                                             // Small delay to avoid rate limiting
                                             await new Promise(resolve => setTimeout(resolve, 100));
                                         } catch (deleteErr) {
-                                            console.error(`Failed to delete message ${msg.id}:`, deleteErr);
+                                            console.error(`[MODERATION] Failed to delete message ${msg.id}:`, deleteErr);
                                         }
                                     }
                                 }
@@ -491,12 +518,16 @@ module.exports = (client) => {
 
                             if (messagesDeleted > 0) {
                                 channelsProcessed.push(`${channel.name} (${messagesDeleted})`);
+                                console.log(`[MODERATION] Channel ${channel.name} complete: ${messagesDeleted} messages deleted, ${channelMessagesFetched} messages fetched`);
                             }
                         } catch (channelErr) {
-                            console.error(`Error processing channel ${channel.name}:`, channelErr);
+                            console.error(`[MODERATION] Error processing channel ${channel.name}:`, channelErr);
                         }
                     }
                 }
+
+                const operationDuration = ((Date.now() - operationStart) / 1000).toFixed(2);
+                console.log(`[MODERATION] Dead command complete: ${totalDeleted} messages deleted across ${channelsProcessed.length} channels, ${totalMessagesFetched} total messages fetched in ${operationDuration}s`);
 
                 // Assign the specific role
                 let roleAssigned = false;

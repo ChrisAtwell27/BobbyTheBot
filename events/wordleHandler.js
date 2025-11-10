@@ -743,19 +743,44 @@ module.exports = (client) => {
                 let totalScores = 0;
                 let lastMessageId;
 
+                const MAX_MESSAGES_TO_FETCH = 2000; // Safety limit to prevent infinite loops
+                const FETCH_TIMEOUT = 30000; // 30 second timeout
+                let messagesFetched = 0;
+                const startTime = Date.now();
+
+                console.log('[WORDLE] Starting backfill operation...');
+
                 // Warm member cache for better matching during backfill
                 try { await message.guild.members.fetch(); } catch (_) {}
 
                 // Fetch messages in batches
                 while (true) {
+                    // Safety check: prevent infinite loops
+                    if (messagesFetched >= MAX_MESSAGES_TO_FETCH) {
+                        console.warn(`[WORDLE] Reached maximum fetch limit of ${MAX_MESSAGES_TO_FETCH} messages. Stopping backfill.`);
+                        break;
+                    }
+
+                    // Safety check: timeout protection
+                    if (Date.now() - startTime > FETCH_TIMEOUT) {
+                        console.warn(`[WORDLE] Backfill timeout after ${FETCH_TIMEOUT}ms. Stopping backfill.`);
+                        break;
+                    }
+
                     const options = { limit: 100 };
                     if (lastMessageId) {
                         options.before = lastMessageId;
                     }
 
+                    console.log(`[WORDLE] Fetching batch ${Math.floor(messagesFetched / 100) + 1} (${messagesFetched} messages processed so far)...`);
                     const messages = await message.channel.messages.fetch(options);
 
-                    if (messages.size === 0) break;
+                    if (messages.size === 0) {
+                        console.log('[WORDLE] No more messages to fetch. Backfill complete.');
+                        break;
+                    }
+
+                    messagesFetched += messages.size;
 
                     for (const [, msg] of messages) {
                         if (msg.content.includes('Here are yesterday\'s results:') ||
@@ -801,9 +826,12 @@ module.exports = (client) => {
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 }
 
+                const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+                console.log(`[WORDLE] Backfill complete: ${messagesFetched} messages fetched, ${totalMessages} Wordle messages processed, ${totalScores} scores added in ${duration}s`);
+
                 await message.channel.send(`Backfill complete! Processed ${totalMessages} Wordle result messages and added ${totalScores} new scores. (No honey awarded for backfilled scores)`);
             } catch (error) {
-                console.error('Error during backfill:', error);
+                console.error('[WORDLE] Error during backfill:', error);
                 await message.channel.send('An error occurred during backfill. Check console for details.');
             }
         }
