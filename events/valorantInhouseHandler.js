@@ -908,9 +908,15 @@ module.exports = (client) => {
                 }
 
                 try {
-                    // Clear the resend timer before disbanding
+                    // Clear all timers before disbanding to prevent memory leaks
                     if (inhouse.resendTimer) {
                         clearTimeout(inhouse.resendTimer);
+                    }
+                    if (inhouse.expiryTimer) {
+                        clearTimeout(inhouse.expiryTimer);
+                    }
+                    if (inhouse.deleteTimer) {
+                        clearTimeout(inhouse.deleteTimer);
                     }
 
                     // Decrement user's active in-house count
