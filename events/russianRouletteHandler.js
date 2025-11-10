@@ -420,7 +420,7 @@ module.exports = (client) => {
                 console.log('Russian Roulette lobby created:', lobbyId);
 
                 // Auto-delete lobby after timeout
-                setTimeout(() => {
+                lobby.timeoutTimer = setTimeout(() => {
                     const currentLobby = activeLobbies.get(lobbyId);
                     if (currentLobby && !currentLobby.gameStarted) {
                         activeLobbies.delete(lobbyId);
@@ -538,6 +538,10 @@ module.exports = (client) => {
 
             // If no players left, delete lobby
             if (lobby.players.length === 0) {
+                // Clear timeout timer if exists
+                if (lobby.timeoutTimer) {
+                    clearTimeout(lobby.timeoutTimer);
+                }
                 activeLobbies.delete(lobbyId);
                 const emptyEmbed = new EmbedBuilder()
                     .setColor('#666666')
@@ -746,6 +750,10 @@ module.exports = (client) => {
         }
 
         // Clean up lobby
+        // Clear timeout timer if exists
+        if (lobby.timeoutTimer) {
+            clearTimeout(lobby.timeoutTimer);
+        }
         activeLobbies.delete(lobby.id);
     }
 

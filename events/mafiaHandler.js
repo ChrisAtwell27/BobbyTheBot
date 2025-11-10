@@ -1053,7 +1053,7 @@ async function startNightPhase(game, client) {
 
     // In debug mode, make bots automatically perform night actions after a short delay (unless NoAI is enabled)
     if (game.debugMode && !game.noAI) {
-        setTimeout(() => {
+        game.botAiTimer = setTimeout(() => {
             const botPlayers = game.players.filter(p => p.alive && p.id.startsWith('bot'));
             botPlayers.forEach(bot => {
                 const role = ROLES[bot.role];
@@ -3536,7 +3536,7 @@ async function endVotingPhase(game, client) {
                 };
 
                 // Set 30 second timeout for haunt selection
-                setTimeout(async () => {
+                game.hauntTimer = setTimeout(async () => {
                     if (game.pendingHaunt && game.pendingHaunt.jesterId === eliminatedPlayer.id) {
                         // No haunt selected, pick random
                         const randomTarget = guiltyVoters[Math.floor(Math.random() * guiltyVoters.length)];
@@ -3734,7 +3734,7 @@ async function startDuskPhase(game, client) {
 
     // In debug mode, make bots automatically perform dusk actions after a short delay (unless NoAI is enabled)
     if (game.debugMode && !game.noAI) {
-        setTimeout(() => {
+        game.botDuskAiTimer = setTimeout(() => {
             const botPlayers = duskPlayers.filter(p => p.id.startsWith('bot'));
             botPlayers.forEach(bot => {
                 const role = ROLES[bot.role];
@@ -3819,7 +3819,7 @@ async function startDuskPhase(game, client) {
     }, duskTimeout);
 
     // Check if everyone has acted after a short delay
-    setTimeout(() => checkDuskComplete(game, client), 2000);
+    game.duskCheckTimer = setTimeout(() => checkDuskComplete(game, client), 2000);
 }
 
 // Check if dusk phase is complete
@@ -3984,6 +3984,21 @@ async function endGame(game, client, winnerType, specificWinner = null) {
     }
     if (game.warningTimer) {
         clearTimeout(game.warningTimer);
+    }
+    if (game.duskTimer) {
+        clearTimeout(game.duskTimer);
+    }
+    if (game.botAiTimer) {
+        clearTimeout(game.botAiTimer);
+    }
+    if (game.hauntTimer) {
+        clearTimeout(game.hauntTimer);
+    }
+    if (game.botDuskAiTimer) {
+        clearTimeout(game.botDuskAiTimer);
+    }
+    if (game.duskCheckTimer) {
+        clearTimeout(game.duskCheckTimer);
     }
 
     // Use cached channel
@@ -4205,12 +4220,16 @@ module.exports = (client) => {
     console.log('🐝 Mafia Handler loaded!');
 
     // Set up periodic cleanup of inactive games (every 10 minutes)
-    setInterval(async () => {
+    const mafiaCleanupInterval = setInterval(async () => {
         const cleaned = await cleanupInactiveGames(client);
         if (cleaned > 0) {
             console.log(`🧹 Cleaned up ${cleaned} inactive mafia game(s)`);
         }
     }, 600000); // 10 minutes
+
+    // Store interval ID for potential cleanup
+    if (!global.mafiaHandlerIntervals) global.mafiaHandlerIntervals = [];
+    global.mafiaHandlerIntervals.push(mafiaCleanupInterval);
 
     // Handle !createmafia command
     client.on('messageCreate', async (message) => {

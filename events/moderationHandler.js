@@ -56,9 +56,13 @@ module.exports = (client) => {
     });
     
     // Clean up old message data every 5 minutes
-    setInterval(() => {
+    const cleanupInterval = setInterval(() => {
         cleanupOldData();
     }, 5 * 60 * 1000);
+
+    // Store interval ID for potential cleanup
+    if (!global.moderationHandlerIntervals) global.moderationHandlerIntervals = [];
+    global.moderationHandlerIntervals.push(cleanupInterval);
 
     // Check if user is exempt from moderation
     function isExemptFromModeration(member) {

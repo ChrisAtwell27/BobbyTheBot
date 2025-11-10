@@ -239,6 +239,11 @@ module.exports = (client) => {
 
             // Lock opponent's bet
             await updateBobbyBucks(userId, -challenge.amount);
+
+            // Clear expiry timer if exists
+            if (challenge.expiryTimer) {
+                clearTimeout(challenge.expiryTimer);
+            }
             challenges.delete(challengeId);
 
             // Delete from database
@@ -426,7 +431,7 @@ module.exports = (client) => {
         const authorUsername = message.author.username;
 
         // Auto-expire challenge
-        setTimeout(async () => {
+        challenge.expiryTimer = setTimeout(async () => {
             if (challenges.has(challengeId)) {
                 challenges.delete(challengeId);
                 await updateBobbyBucks(userId, betAmount); // Refund
@@ -533,7 +538,7 @@ module.exports = (client) => {
         const channelId = challengeMessage.channelId;
         const authorUsername = message.author.username;
 
-        setTimeout(async () => {
+        challenge.expiryTimer = setTimeout(async () => {
             if (challenges.has(challengeId)) {
                 challenges.delete(challengeId);
                 await updateBobbyBucks(userId, betAmount);
@@ -642,7 +647,7 @@ module.exports = (client) => {
         const channelId = challengeMessage.channelId;
         const authorUsername = message.author.username;
 
-        setTimeout(async () => {
+        challenge.expiryTimer = setTimeout(async () => {
             if (challenges.has(challengeId)) {
                 challenges.delete(challengeId);
                 await updateBobbyBucks(userId, betAmount);
@@ -741,7 +746,7 @@ module.exports = (client) => {
         const channelId = challengeMessage.channelId;
         const authorUsername = message.author.username;
 
-        setTimeout(async () => {
+        challenge.expiryTimer = setTimeout(async () => {
             if (challenges.has(challengeId)) {
                 challenges.delete(challengeId);
                 await updateBobbyBucks(userId, betAmount);
@@ -902,8 +907,8 @@ module.exports = (client) => {
 
         // Random delay between 3-8 seconds
         const delay = Math.random() * 5000 + 3000;
-        
-        setTimeout(() => {
+
+        game.drawTimer = setTimeout(() => {
             const drawEmbed = new EmbedBuilder()
                 .setTitle(`⚡ TYPE: ${randomWord}`)
                 .setColor('#e74c3c')

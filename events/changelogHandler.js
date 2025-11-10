@@ -221,7 +221,11 @@ module.exports = (client, changelogChannelId) => {
   });
 
   // Start periodic checking
-  setInterval(checkForNewCommits, CHECK_INTERVAL);
+  const commitCheckInterval = setInterval(checkForNewCommits, CHECK_INTERVAL);
+
+  // Store interval ID for potential cleanup
+  if (!global.changelogHandlerIntervals) global.changelogHandlerIntervals = [];
+  global.changelogHandlerIntervals.push(commitCheckInterval);
 
   console.log('[Changelog Handler] Registered successfully');
 };

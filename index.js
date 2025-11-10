@@ -240,6 +240,64 @@ client.on('messageReactionAdd', async (reaction, user) => {
     }
 });
 
+// Graceful shutdown handler
+function gracefulShutdown(signal) {
+    console.log(`\nReceived ${signal}, starting graceful shutdown...`);
+
+    // Close HTTP server
+    server.close(() => {
+        console.log('HTTP server closed');
+    });
+
+    // Stop mafia webhook server
+    if (mafiaWebhookServer) {
+        try {
+            mafiaWebhookServer.stop();
+            console.log('Mafia webhook server stopped');
+        } catch (error) {
+            console.error('Error stopping mafia webhook server:', error);
+        }
+    }
+
+    // Clear all intervals
+    const intervalArrays = [
+        global.alertHandlerIntervals,
+        global.changelogHandlerIntervals,
+        global.moderationHandlerIntervals,
+        global.bountyHandlerIntervals,
+        global.mafiaHandlerIntervals,
+        global.registrationManagerIntervals
+    ];
+
+    let clearedCount = 0;
+    intervalArrays.forEach(arr => {
+        if (Array.isArray(arr)) {
+            arr.forEach(interval => {
+                clearInterval(interval);
+                clearedCount++;
+            });
+        }
+    });
+
+    if (clearedCount > 0) {
+        console.log(`Cleared ${clearedCount} interval timers`);
+    }
+
+    // Destroy Discord client
+    client.destroy();
+    console.log('Discord client disconnected');
+
+    // Exit process
+    setTimeout(() => {
+        console.log('Shutdown complete');
+        process.exit(0);
+    }, 1000);
+}
+
+// Register shutdown handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 client.login(process.env.DISCORD_BOT_TOKEN).catch(error => {
     console.error('Failed to login to Discord:', error);
     process.exit(1);

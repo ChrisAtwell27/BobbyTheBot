@@ -848,7 +848,7 @@ module.exports = (client) => {
                         }
 
                         // Auto-delete team after 5 minutes when full
-                        setTimeout(() => {
+                        team.deleteTimer = setTimeout(() => {
                             activeTeams.delete(fullTeamId);
                             try {
                                 interaction.message.delete().catch(() => {});
