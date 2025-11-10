@@ -74,6 +74,7 @@ client.on('shardError', (error) => {
 
 client.on('shardDisconnect', (event, shardId) => {
   console.warn(`[DISCORD] Shard ${shardId} disconnected. Code: ${event.code}`);
+  console.warn('[DISCORD] ⚠️ Connection lost! Bot will attempt to reconnect...');
 });
 
 client.on('shardReconnecting', (shardId) => {
@@ -84,42 +85,131 @@ client.on('shardResume', (shardId, replayedEvents) => {
   console.log(`[DISCORD] Shard ${shardId} resumed. Replayed ${replayedEvents} events.`);
 });
 
+// Track connection state
+client.on('ready', () => {
+  console.log('[DISCORD] ✅ WebSocket connection established');
+});
+
+client.on('invalidSession', () => {
+  console.error('[DISCORD] ❌ Invalid session! Reconnecting...');
+});
+
 // Handle rate limits
 client.rest.on('rateLimited', (info) => {
   console.warn(`[DISCORD] Rate limited! Timeout: ${info.timeout}ms, Limit: ${info.limit}, Method: ${info.method}, Path: ${info.route}`);
 });
 
-// CPU Monitoring to detect high usage
-let lastCpuUsage = process.cpuUsage();
-let highCpuWarningCount = 0;
+// Monitor WebSocket status every 30 seconds
+let consecutiveDisconnects = 0;
+const DISCONNECT_THRESHOLD = 3; // Force restart after 3 consecutive disconnect checks
 
 setInterval(() => {
-  const currentCpu = process.cpuUsage(lastCpuUsage);
-  const currentMemory = process.memoryUsage();
+  const wsStatus = client.ws.status;
+  const wsStatusText = ['READY', 'CONNECTING', 'RECONNECTING', 'IDLE', 'NEARLY', 'DISCONNECTED', 'WAITING_FOR_GUILDS', 'IDENTIFYING', 'RESUMING'][wsStatus] || 'UNKNOWN';
+  const ping = client.ws.ping;
 
-  // Calculate CPU percentage (user + system time over 5 seconds)
-  const cpuPercent = ((currentCpu.user + currentCpu.system) / 5000000) * 100;
+  if (wsStatus !== 0) { // 0 = READY
+    consecutiveDisconnects++;
+    console.warn(`[DISCORD] ⚠️ WebSocket NOT READY! Status: ${wsStatusText} (${wsStatus}) | Ping: ${ping}ms | Consecutive disconnects: ${consecutiveDisconnects}`);
+
+    // If disconnected for too long, force restart
+    if (consecutiveDisconnects >= DISCONNECT_THRESHOLD) {
+      console.error(`[DISCORD] 🚨 Bot has been disconnected for ${DISCONNECT_THRESHOLD * 30}s. Forcing restart...`);
+      process.exit(1);
+    }
+  } else {
+    // Reset counter when connected
+    if (consecutiveDisconnects > 0) {
+      console.log(`[DISCORD] ✅ Reconnected successfully after ${consecutiveDisconnects} disconnect checks`);
+      consecutiveDisconnects = 0;
+    }
+
+    if (ping > 500) {
+      console.warn(`[DISCORD] ⚠️ High ping detected: ${ping}ms`);
+    }
+  }
+}, 30000);
+
+// Watchdog: Detect complete process freeze
+let lastHeartbeat = Date.now();
+let watchdogAlive = true;
+
+// Update heartbeat every 10 seconds
+setInterval(() => {
+  lastHeartbeat = Date.now();
+  watchdogAlive = true;
+}, 10000);
+
+// Check heartbeat every 15 seconds
+setInterval(() => {
+  const timeSinceHeartbeat = Date.now() - lastHeartbeat;
+
+  if (!watchdogAlive || timeSinceHeartbeat > 20000) {
+    console.error(`[WATCHDOG] 🚨 Process appears frozen! Time since last heartbeat: ${timeSinceHeartbeat}ms`);
+    console.error('[WATCHDOG] Forcing process exit to allow restart...');
+    process.exit(1);
+  }
+
+  watchdogAlive = false;
+}, 15000);
+
+// CPU Monitoring using OS-level metrics
+const os = require('os');
+let lastCpuInfo = os.cpus();
+let highCpuWarningCount = 0;
+
+function getSystemCPUUsage() {
+  const currentCpuInfo = os.cpus();
+  let totalIdle = 0;
+  let totalTick = 0;
+
+  for (let i = 0; i < currentCpuInfo.length; i++) {
+    const current = currentCpuInfo[i];
+    const last = lastCpuInfo[i];
+
+    const currentTick = Object.values(current.times).reduce((a, b) => a + b, 0);
+    const lastTick = Object.values(last.times).reduce((a, b) => a + b, 0);
+
+    const currentIdle = current.times.idle;
+    const lastIdle = last.times.idle;
+
+    totalIdle += currentIdle - lastIdle;
+    totalTick += currentTick - lastTick;
+  }
+
+  const idle = totalIdle / currentCpuInfo.length;
+  const total = totalTick / currentCpuInfo.length;
+  const usage = 100 - (100 * idle / total);
+
+  lastCpuInfo = currentCpuInfo;
+  return usage;
+}
+
+setInterval(() => {
+  const systemCpuPercent = getSystemCPUUsage();
+  const currentMemory = process.memoryUsage();
 
   // Memory in MB
   const heapUsedMB = (currentMemory.heapUsed / 1024 / 1024).toFixed(2);
   const heapTotalMB = (currentMemory.heapTotal / 1024 / 1024).toFixed(2);
   const rssMB = (currentMemory.rss / 1024 / 1024).toFixed(2);
 
+  // Load average
+  const loadAvg = os.loadavg();
+  const load1m = loadAvg[0].toFixed(2);
+
   // Log if CPU is high (over 50%)
-  if (cpuPercent > 50) {
+  if (systemCpuPercent > 50) {
     highCpuWarningCount++;
-    console.warn(`[CPU] ⚠️ HIGH CPU USAGE: ${cpuPercent.toFixed(2)}% | Memory: ${heapUsedMB}/${heapTotalMB}MB heap, ${rssMB}MB RSS | Warning #${highCpuWarningCount}`);
-  } else if (cpuPercent > 30) {
-    console.log(`[CPU] Elevated CPU: ${cpuPercent.toFixed(2)}% | Memory: ${heapUsedMB}/${heapTotalMB}MB heap, ${rssMB}MB RSS`);
+    console.warn(`[CPU] 🚨 HIGH SYSTEM CPU: ${systemCpuPercent.toFixed(2)}% | Load: ${load1m} | Memory: ${heapUsedMB}/${heapTotalMB}MB heap, ${rssMB}MB RSS | Warning #${highCpuWarningCount}`);
+  } else if (systemCpuPercent > 30) {
+    console.log(`[CPU] Elevated system CPU: ${systemCpuPercent.toFixed(2)}% | Load: ${load1m} | Memory: ${heapUsedMB}/${heapTotalMB}MB heap, ${rssMB}MB RSS`);
   }
 
   // Log every 30 seconds regardless to track baseline
   if (Date.now() % 30000 < 5000) {
-    console.log(`[HEALTH] CPU: ${cpuPercent.toFixed(2)}% | Memory: ${heapUsedMB}/${heapTotalMB}MB heap, ${rssMB}MB RSS | Uptime: ${(process.uptime() / 60).toFixed(1)}m`);
+    console.log(`[HEALTH] System CPU: ${systemCpuPercent.toFixed(2)}% | Load: ${load1m} | Memory: ${heapUsedMB}/${heapTotalMB}MB heap, ${rssMB}MB RSS | Uptime: ${(process.uptime() / 60).toFixed(1)}m`);
   }
-
-  lastCpuUsage = process.cpuUsage();
-  lastMemoryUsage = currentMemory;
 }, 5000); // Check every 5 seconds
 
 
