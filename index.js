@@ -179,6 +179,13 @@ function getSystemCPUUsage() {
 
   const idle = totalIdle / currentCpuInfo.length;
   const total = totalTick / currentCpuInfo.length;
+
+  // Prevent division by zero on first call
+  if (total === 0) {
+    lastCpuInfo = currentCpuInfo;
+    return 0;
+  }
+
   const usage = 100 - (100 * idle / total);
 
   lastCpuInfo = currentCpuInfo;
