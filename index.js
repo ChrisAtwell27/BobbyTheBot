@@ -7,13 +7,30 @@ require('dotenv').config();
 
 // Global error handlers
 process.on('unhandledRejection', (error) => {
-  console.error('Unhandled promise rejection:', error);
+  console.error('[ERROR] Unhandled promise rejection:', error);
 });
 
+let crashCount = 0;
+const MAX_CRASH_COUNT = 5;
+const CRASH_RESET_TIME = 60000; // Reset crash counter after 1 minute
+
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught exception:', error);
-  // Give time to log then exit
-  setTimeout(() => process.exit(1), 1000);
+  console.error('[CRITICAL] Uncaught exception:', error);
+  crashCount++;
+
+  if (crashCount >= MAX_CRASH_COUNT) {
+    console.error(`[CRITICAL] Bot crashed ${MAX_CRASH_COUNT} times. Exiting...`);
+    setTimeout(() => process.exit(1), 1000);
+  } else {
+    console.log(`[RECOVERY] Crash ${crashCount}/${MAX_CRASH_COUNT}. Bot will attempt to continue...`);
+    // Reset crash counter after a minute of stability
+    setTimeout(() => {
+      if (crashCount > 0) {
+        console.log('[RECOVERY] Reset crash counter after stability period');
+        crashCount = 0;
+      }
+    }, CRASH_RESET_TIME);
+  }
 });
 
 // Load configuration values
@@ -45,6 +62,65 @@ const client = new Client({
 
 // Increase max listeners to prevent warnings
 client.setMaxListeners(process.env.MAX_EVENT_LISTENERS || 50);
+
+// Discord client error handlers
+client.on('error', (error) => {
+  console.error('[DISCORD] Client error:', error);
+});
+
+client.on('shardError', (error) => {
+  console.error('[DISCORD] Shard error:', error);
+});
+
+client.on('shardDisconnect', (event, shardId) => {
+  console.warn(`[DISCORD] Shard ${shardId} disconnected. Code: ${event.code}`);
+});
+
+client.on('shardReconnecting', (shardId) => {
+  console.log(`[DISCORD] Shard ${shardId} attempting to reconnect...`);
+});
+
+client.on('shardResume', (shardId, replayedEvents) => {
+  console.log(`[DISCORD] Shard ${shardId} resumed. Replayed ${replayedEvents} events.`);
+});
+
+// Handle rate limits
+client.rest.on('rateLimited', (info) => {
+  console.warn(`[DISCORD] Rate limited! Timeout: ${info.timeout}ms, Limit: ${info.limit}, Method: ${info.method}, Path: ${info.route}`);
+});
+
+// CPU Monitoring to detect high usage
+let lastCpuUsage = process.cpuUsage();
+let highCpuWarningCount = 0;
+
+setInterval(() => {
+  const currentCpu = process.cpuUsage(lastCpuUsage);
+  const currentMemory = process.memoryUsage();
+
+  // Calculate CPU percentage (user + system time over 5 seconds)
+  const cpuPercent = ((currentCpu.user + currentCpu.system) / 5000000) * 100;
+
+  // Memory in MB
+  const heapUsedMB = (currentMemory.heapUsed / 1024 / 1024).toFixed(2);
+  const heapTotalMB = (currentMemory.heapTotal / 1024 / 1024).toFixed(2);
+  const rssMB = (currentMemory.rss / 1024 / 1024).toFixed(2);
+
+  // Log if CPU is high (over 50%)
+  if (cpuPercent > 50) {
+    highCpuWarningCount++;
+    console.warn(`[CPU] ⚠️ HIGH CPU USAGE: ${cpuPercent.toFixed(2)}% | Memory: ${heapUsedMB}/${heapTotalMB}MB heap, ${rssMB}MB RSS | Warning #${highCpuWarningCount}`);
+  } else if (cpuPercent > 30) {
+    console.log(`[CPU] Elevated CPU: ${cpuPercent.toFixed(2)}% | Memory: ${heapUsedMB}/${heapTotalMB}MB heap, ${rssMB}MB RSS`);
+  }
+
+  // Log every 30 seconds regardless to track baseline
+  if (Date.now() % 30000 < 5000) {
+    console.log(`[HEALTH] CPU: ${cpuPercent.toFixed(2)}% | Memory: ${heapUsedMB}/${heapTotalMB}MB heap, ${rssMB}MB RSS | Uptime: ${(process.uptime() / 60).toFixed(1)}m`);
+  }
+
+  lastCpuUsage = process.cpuUsage();
+  lastMemoryUsage = currentMemory;
+}, 5000); // Check every 5 seconds
 
 
 // Import and initialize event handlers

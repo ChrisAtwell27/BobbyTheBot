@@ -106,9 +106,12 @@ async function balanceTeams(players) {
 
 // Enhanced function to create in-house visualization
 async function createInhouseVisualization(inhouse, showTeams = false, balancedTeams = null) {
+    const vizStartTime = Date.now();
+    console.log('[INHOUSE] Creating canvas visualization...');
+
     const canvas = createCanvas(1100, 420);
     const ctx = canvas.getContext('2d');
-    
+
     // Enhanced background gradient
     const gradient = ctx.createLinearGradient(0, 0, 1100, 420);
     gradient.addColorStop(0, '#0a0e13');
@@ -117,8 +120,12 @@ async function createInhouseVisualization(inhouse, showTeams = false, balancedTe
     gradient.addColorStop(1, '#0a0e13');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 1100, 420);
-    
+
+    const gradientTime = Date.now() - vizStartTime;
+    console.log(`[INHOUSE] Canvas gradient created in ${gradientTime}ms`);
+
     // Add subtle pattern overlay
+    const patternStartTime = Date.now();
     ctx.fillStyle = 'rgba(255, 70, 84, 0.05)';
     for (let i = 0; i < 1100; i += 30) {
         for (let j = 0; j < 420; j += 30) {
@@ -127,6 +134,9 @@ async function createInhouseVisualization(inhouse, showTeams = false, balancedTe
             }
         }
     }
+    const patternTime = Date.now() - patternStartTime;
+    console.log(`[INHOUSE] Pattern overlay created in ${patternTime}ms`);
+
     
     // Enhanced Valorant-style accent
     const accentGradient = ctx.createLinearGradient(0, 0, 1100, 0);
@@ -207,11 +217,18 @@ async function createInhouseVisualization(inhouse, showTeams = false, balancedTe
             const col = i % 5;
             const x = 40 + (col * spacing);
             const y = startY + (row * (slotHeight + 20));
-            
+
             await drawPlayerSlot(ctx, allMembers[i], x, y, slotWidth, slotHeight, i + 1);
         }
     }
-    
+
+    const totalVizTime = Date.now() - vizStartTime;
+    if (totalVizTime > 500) {
+        console.warn(`[INHOUSE] ⚠️ Canvas visualization took ${totalVizTime}ms (>500ms threshold)`);
+    } else {
+        console.log(`[INHOUSE] Canvas visualization complete in ${totalVizTime}ms`);
+    }
+
     return canvas.toBuffer();
 }
 
@@ -540,49 +557,86 @@ module.exports = (client) => {
         console.log('Valorant In-House Match Builder with Team Balancing loaded!');
         console.log('Features: 10-player matches, automatic team balancing, rank-based MMR system');
 
+        // Track resend operations to prevent overlap
+        let resendInProgress = false;
+
         // Function to resend in-house message to keep it at the bottom of chat
         async function resendInhouseMessage(inhouseId) {
             const inhouse = activeInhouses.get(inhouseId);
             if (!inhouse) return; // In-house no longer exists
-            
+
+            // Prevent multiple resends from happening simultaneously
+            if (resendInProgress) {
+                console.log(`[INHOUSE] Resend already in progress, skipping inhouseId: ${inhouseId}`);
+                // Reschedule for later
+                if (inhouse.resendTimer) clearTimeout(inhouse.resendTimer);
+                inhouse.resendTimer = setTimeout(() => resendInhouseMessage(inhouseId), RESEND_INTERVAL);
+                return;
+            }
+
+            const startTime = Date.now();
+            resendInProgress = true;
+
             try {
+                console.log(`[INHOUSE] Starting resend for inhouseId: ${inhouseId}`);
+
                 // Get the channel
                 const channel = await client.channels.fetch(inhouse.channelId);
-                if (!channel) return;
-                
+                if (!channel) {
+                    console.log(`[INHOUSE] Channel not found for inhouseId: ${inhouseId}`);
+                    return;
+                }
+
                 // Create updated embed and components
                 const isFull = getTotalMembers(inhouse) >= 10;
+
+                console.log(`[INHOUSE] Creating embed (this may take a moment)...`);
+                const embedStartTime = Date.now();
                 const updatedEmbed = await createInhouseEmbed(inhouse);
+                const embedDuration = Date.now() - embedStartTime;
+
+                if (embedDuration > 1000) {
+                    console.warn(`[INHOUSE] ⚠️ Embed creation took ${embedDuration}ms (>1s threshold)`);
+                } else {
+                    console.log(`[INHOUSE] Embed created in ${embedDuration}ms`);
+                }
+
                 const updatedComponents = createInhouseButtons(inhouseId, isFull, isFull);
-                
+
                 // Delete the old message if it exists
                 try {
                     const oldMessage = await channel.messages.fetch(inhouse.messageId);
                     if (oldMessage) await oldMessage.delete();
                 } catch (error) {
-                    console.log(`Couldn't delete old in-house message: ${error.message}`);
+                    console.log(`[INHOUSE] Couldn't delete old message: ${error.message}`);
                 }
-                
+
                 // Send a new message
                 const newMessage = await channel.send({
                     embeds: [updatedEmbed.embed],
                     files: updatedEmbed.files,
                     components: [updatedComponents]
                 });
-                
+
                 // Update the in-house with the new message ID
                 inhouse.messageId = newMessage.id;
-                
+
+                const totalDuration = Date.now() - startTime;
+                console.log(`[INHOUSE] Resend complete for inhouseId: ${inhouseId} (total: ${totalDuration}ms)`);
+
                 // Set up the next resend timer if in-house isn't full
                 if (!isFull) {
                     // Clear any existing timer
                     if (inhouse.resendTimer) clearTimeout(inhouse.resendTimer);
-                    
+
                     // Set new timer
                     inhouse.resendTimer = setTimeout(() => resendInhouseMessage(inhouseId), RESEND_INTERVAL);
+                    console.log(`[INHOUSE] Next resend scheduled in ${RESEND_INTERVAL / 1000 / 60} minutes`);
                 }
             } catch (error) {
-                console.error(`Error resending in-house message: ${error}`);
+                console.error(`[INHOUSE] Error resending in-house message:`, error);
+            } finally {
+                resendInProgress = false;
             }
         }
 
