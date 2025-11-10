@@ -312,7 +312,12 @@ async function cleanupExpiredBounties(client) {
 
 module.exports = (client) => {
     // Start cleanup interval
-    setInterval(() => cleanupExpiredBounties(client), CLEANUP_INTERVAL);
+    const bountyCleanupInterval = setInterval(() => cleanupExpiredBounties(client), CLEANUP_INTERVAL);
+
+    // Store interval ID for potential cleanup
+    if (!global.bountyHandlerIntervals) global.bountyHandlerIntervals = [];
+    global.bountyHandlerIntervals.push(bountyCleanupInterval);
+
     console.log('[BOUNTY] Auto-cleanup system initialized (checks every 5 minutes)');
 
     // Message commands

@@ -468,7 +468,7 @@ module.exports = (client) => {
                 activeLobbies.set(lobbyId, lobby);
 
                 // Auto-delete lobby after timeout
-                setTimeout(async () => {
+                lobby.timeoutTimer = setTimeout(async () => {
                     const currentLobby = activeLobbies.get(lobbyId);
                     if (currentLobby && !currentLobby.gameStarted) {
                         // Refund all players
@@ -594,6 +594,10 @@ module.exports = (client) => {
             }
 
             if (lobby.players.length === 0) {
+                // Clear timeout timer if exists
+                if (lobby.timeoutTimer) {
+                    clearTimeout(lobby.timeoutTimer);
+                }
                 activeLobbies.delete(lobbyId);
                 const emptyEmbed = new EmbedBuilder()
                     .setColor('#666666')
@@ -799,6 +803,11 @@ module.exports = (client) => {
         });
 
         activeGames.set(gameId, game);
+
+        // Clear lobby timeout timer if exists
+        if (lobby.timeoutTimer) {
+            clearTimeout(lobby.timeoutTimer);
+        }
         activeLobbies.delete(lobby.id);
 
         await startNewHand(game);
@@ -969,7 +978,7 @@ module.exports = (client) => {
         }
 
         // Start next hand after delay
-        setTimeout(async () => {
+        game.nextHandTimer = setTimeout(async () => {
             game.dealerIndex = (game.dealerIndex + 1) % game.players.length;
             await startNewHand(game);
             

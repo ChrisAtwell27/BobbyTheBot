@@ -179,10 +179,14 @@ function getRegistrationCount() {
 loadUserRegistrations();
 
 // Reload registrations periodically (every 30 minutes)
-setInterval(() => {
+const registrationReloadInterval = setInterval(() => {
     console.log('[Registration Manager] Reloading user registrations from file...');
     loadUserRegistrations();
 }, 30 * 60 * 1000);
+
+// Store interval ID for potential cleanup
+if (!global.registrationManagerIntervals) global.registrationManagerIntervals = [];
+global.registrationManagerIntervals.push(registrationReloadInterval);
 
 module.exports = {
     loadUserRegistrations,

@@ -118,7 +118,7 @@ module.exports = (client, alertKeywords, alertChannelId) => {
   });
 
   // Cleanup old cooldowns every 5 minutes
-  setInterval(() => {
+  const cleanupInterval = setInterval(() => {
     const now = Date.now();
     let cleaned = 0;
 
@@ -133,4 +133,8 @@ module.exports = (client, alertKeywords, alertChannelId) => {
       console.log(`🧹 Cleaned up ${cleaned} alert cooldowns`);
     }
   }, 5 * 60 * 1000);
+
+  // Store interval ID for potential cleanup
+  if (!global.alertHandlerIntervals) global.alertHandlerIntervals = [];
+  global.alertHandlerIntervals.push(cleanupInterval);
 };

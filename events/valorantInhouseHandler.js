@@ -650,7 +650,7 @@ module.exports = (client) => {
                     inhouse.resendTimer = setTimeout(() => resendInhouseMessage(inhouseId), RESEND_INTERVAL);
 
                     // Delete after 30 minutes if in-house isn't full
-                    setTimeout(() => {
+                    inhouse.expiryTimer = setTimeout(() => {
                         const currentInhouse = activeInhouses.get(inhouseId);
                         if (currentInhouse && getTotalMembers(currentInhouse) < INHOUSE_SIZE) {
                             // Clear the resend timer before removing
@@ -876,7 +876,7 @@ module.exports = (client) => {
                     console.log(`⚖️ Teams created for in-house ${fullInhouseId}`);
 
                     // Auto-delete in-house after 10 minutes
-                    setTimeout(() => {
+                    inhouse.deleteTimer = setTimeout(() => {
                         activeInhouses.delete(fullInhouseId);
                         interaction.message.delete().catch(() => {});
                     }, 10 * 60 * 1000);

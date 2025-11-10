@@ -547,7 +547,7 @@ module.exports = (client) => {
             const channelId = challengeMessage.channelId;
 
             // Auto-expire challenge
-            setTimeout(async () => {
+            challenge.expiryTimer = setTimeout(async () => {
                 if (activeChallenges.has(challengeId)) {
                     activeChallenges.delete(challengeId);
 
@@ -669,6 +669,11 @@ module.exports = (client) => {
                 }
 
                 if (action === 'decline') {
+                    // Clear expiry timer if exists
+                    const challenge = activeChallenges.get(challengeId);
+                    if (challenge?.expiryTimer) {
+                        clearTimeout(challenge.expiryTimer);
+                    }
                     activeChallenges.delete(challengeId);
 
                     // Delete from database
@@ -849,6 +854,10 @@ module.exports = (client) => {
 
     // Function to start a gladiator match in a channel (separate from interactions)
     async function startGladiatorMatchInChannel(channel, challenge) {
+        // Clear expiry timer if exists
+        if (challenge?.expiryTimer) {
+            clearTimeout(challenge.expiryTimer);
+        }
         activeChallenges.delete(challenge.id);
 
         // Delete from database
