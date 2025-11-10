@@ -18,7 +18,7 @@
 | 12 | gamblingHandler.js | ✅ Yes | 100 | Command Handler |
 | 13 | gladiatorHandler.js | ✅ Yes | 115 | Command Handler |
 | 14 | helpHandler.js | ✅ Yes | 87-88 | Command Handler |
-| 15 | interactionHandler.js | ✅ Yes | 75-79 | Message Processor |
+| 15 | interactionHandler.js | ❌ Removed | N/A | Redundant (askHandler covers this) |
 | 16 | kothHandler.js | ✅ Yes | 124 | Command Handler |
 | 17 | loggingHandler.js | ✅ Yes | 24 | Custom Event Listener |
 | 18 | mafiaHandler.js | ✅ Yes | 145-155 | Command Handler (Special) |
@@ -54,13 +54,13 @@ Handlers that monitor specific Discord events (reactions, voice, member updates,
 
 ---
 
-### Message Processors (5)
+### Message Processors (4)
 Handlers that need to see ALL messages to monitor for specific conditions:
 - alertHandler.js (monitors for keywords)
 - thinIceHandler.js (monitors profanity in messages with "bobby")
 - bumpHandler.js (monitors DISBOARD bot messages)
-- askHandler.js (AI chat when "bobby" is mentioned)
-- interactionHandler.js (intelligent command suggestions)
+- askHandler.js (AI chat when "bobby" is mentioned + command suggestions)
+- ~~interactionHandler.js~~ (removed - redundant with askHandler)
 
 **Registration:** Via `commandRouter.registerMessageProcessor()`
 

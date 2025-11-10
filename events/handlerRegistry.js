@@ -61,19 +61,15 @@ module.exports = (client, commandRouter, interactionRouter) => {
         commandRouter.registerMessageProcessor(bumpProcessor);
     }
 
-    // Ask handler - responds when messages contain "bobby"
+    // Ask handler - responds when messages contain "bobby" (includes AI chat + command suggestions)
     const askHandler = require('./askHandler');
     const askProcessor = createMessageProcessor(client, askHandler);
     if (askProcessor) {
         commandRouter.registerMessageProcessor(askProcessor);
     }
 
-    // Interaction handler - provides intelligent command suggestions
-    const interactionHandler = require('./interactionHandler');
-    const interactionProcessor = createMessageProcessor(client, interactionHandler);
-    if (interactionProcessor) {
-        commandRouter.registerMessageProcessor(interactionProcessor);
-    }
+    // Note: interactionHandler.js removed - askHandler already handles Bobby mentions with AI
+    // The interactionHandler was causing duplicate/conflicting responses
 
     // ==========================================
     // COMMAND HANDLERS
@@ -107,12 +103,6 @@ module.exports = (client, commandRouter, interactionRouter) => {
 
     // Russian roulette handler - !roulette, !spin
     registerCommandHandler(client, commandRouter, interactionRouter, './russianRouletteHandler');
-
-    // Gladiator handler - !gladiator, !fight
-    registerCommandHandler(client, commandRouter, interactionRouter, './gladiatorHandler');
-
-    // Virtual pet handler - !adopt, !pet, !feed
-    registerCommandHandler(client, commandRouter, interactionRouter, './virtualPetHandler');
 
     // KOTH handler - !koth, !king
     registerCommandHandler(client, commandRouter, interactionRouter, './kothHandler');

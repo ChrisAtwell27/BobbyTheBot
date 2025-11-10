@@ -672,7 +672,7 @@ module.exports = (client) => {
                               userMessageLower.startsWith('!mymemory') || userMessageLower.startsWith('!whatdo') ||
                               userMessageLower.startsWith('!forget') || userMessageLower.startsWith('!ask') ||
                               userMessageLower.startsWith('!8ball') || userMessageLower.startsWith('!magic') ||
-                              message.mentions.has(client.user.id) || userMessageLower.includes('bobby');
+                              (client.user && message.mentions.has(client.user.id)) || userMessageLower.includes('bobby');
 
         if (!isBobbyCommand) return;
 
