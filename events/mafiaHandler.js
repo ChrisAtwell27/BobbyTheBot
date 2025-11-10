@@ -6,6 +6,7 @@ const { ROLES } = require('../mafia/roles/mafiaRoles');
 const { createGame, getGame, getGameByPlayer, deleteGame, getAllGames, addVisit, getVisitors, clearNightData, clearDayData, clearVotes, updateActivity } = require('../mafia/game/mafiaGameState');
 const { processNightActions } = require('../mafia/game/mafiaActions');
 const { getPlayerTeam, getRoleDistribution, shuffleArray, getTeamCounts, determineWinners, checkWinConditions, initializePlayerRole } = require('../mafia/game/mafiaUtils');
+const { CleanupMap } = require('../utils/memoryUtils');
 const OpenAI = require('openai');
 
 // Constants
@@ -19,8 +20,13 @@ const VOTING_DURATION = 120000; // 2 minutes for voting
 const WINNER_REWARD = 500; // BobbyBucks
 const GAME_INACTIVITY_TIMEOUT = 3600000; // 1 hour - games inactive longer than this will be cleaned up
 
-// Store pending game configurations
-const pendingGameConfigs = new Map();
+// Store pending game configurations with automatic cleanup after 5 minutes
+// This prevents memory leaks from abandoned configuration sessions
+const pendingGameConfigs = new CleanupMap(5 * 60 * 1000, 1 * 60 * 1000); // 5 min TTL, cleanup every 1 min
+
+// Store CleanupMap for graceful shutdown cleanup
+if (!global.mafiaHandlerCleanupMaps) global.mafiaHandlerCleanupMaps = [];
+global.mafiaHandlerCleanupMaps.push(pendingGameConfigs);
 
 // OpenAI API configuration for Keller Bee emoji translation
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;

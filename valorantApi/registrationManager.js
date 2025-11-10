@@ -12,6 +12,10 @@ const { calculateMMR } = require('./rankUtils');
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const USERS_FILE = path.join(DATA_DIR, 'valorant_users.json');
 
+// Safety limits to prevent unbounded memory growth
+const MAX_REGISTRATIONS = 50000; // Maximum number of user registrations to keep in memory
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB max file size (50k users ~= 10MB)
+
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -28,11 +32,28 @@ let userRegistrations = new Map();
 function loadUserRegistrations() {
     try {
         if (fs.existsSync(USERS_FILE)) {
+            // Check file size before loading to prevent memory exhaustion
+            const stats = fs.statSync(USERS_FILE);
+            if (stats.size > MAX_FILE_SIZE) {
+                console.error(`[Registration Manager] ⚠️  Users file is too large (${Math.round(stats.size / 1024 / 1024)}MB > ${MAX_FILE_SIZE / 1024 / 1024}MB)`);
+                console.error('[Registration Manager] Skipping reload to prevent memory issues. Manual intervention required.');
+                return userRegistrations;
+            }
+
             const fileData = fs.readFileSync(USERS_FILE, 'utf8');
             const data = JSON.parse(fileData);
 
             // Convert object back to Map
-            userRegistrations = new Map(Object.entries(data));
+            const newRegistrations = new Map(Object.entries(data));
+
+            // Check entry count limit
+            if (newRegistrations.size > MAX_REGISTRATIONS) {
+                console.error(`[Registration Manager] ⚠️  Registration count (${newRegistrations.size}) exceeds limit (${MAX_REGISTRATIONS})`);
+                console.error('[Registration Manager] Skipping reload. Consider increasing MAX_REGISTRATIONS or cleaning up old users.');
+                return userRegistrations;
+            }
+
+            userRegistrations = newRegistrations;
             console.log(`[Registration Manager] Loaded ${userRegistrations.size} registered Valorant users from file`);
 
             // Log loaded users for debugging
@@ -71,6 +92,12 @@ function saveUserRegistrations() {
  * @param {Object} userData - User data (name, tag, region, puuid, registeredAt)
  */
 function addUserRegistration(userId, userData) {
+    // Check if we're at the registration limit
+    if (!userRegistrations.has(userId) && userRegistrations.size >= MAX_REGISTRATIONS) {
+        console.error(`[Registration Manager] ⚠️  Cannot add user ${userId}: Registration limit reached (${MAX_REGISTRATIONS})`);
+        throw new Error(`Registration limit reached (${MAX_REGISTRATIONS} users). Cannot add new users.`);
+    }
+
     userRegistrations.set(userId, userData);
     saveUserRegistrations();
     console.log(`[Registration Manager] Added registration for user ${userId}: ${userData.name}#${userData.tag} (${userData.region})`);

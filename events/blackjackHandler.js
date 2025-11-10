@@ -419,8 +419,10 @@ module.exports = (client) => {
 
         const filter = (i) => i.user.id === userId;
         const collector = gameMessage.createMessageComponentCollector({ filter, time: 120000 });
+        let gameEnded = false; // Track if game has ended to prevent multiple stops
 
         collector.on('collect', async (interaction) => {
+            try {
             if (interaction.customId === 'hit') {
                 playerHand.push(drawCard(gameShoe));
                 playerScore = calculateHandValue(playerHand);
@@ -444,7 +446,8 @@ module.exports = (client) => {
                         )
                         .setFooter({ text: 'Better luck next time!' })
                         .setTimestamp();
-                    
+
+                    gameEnded = true;
                     collector.stop();
                     await interaction.update({ embeds: [gameEmbed], files: [finalAttachment], components: [] });
                 } else {
@@ -495,7 +498,8 @@ module.exports = (client) => {
                             )
                             .setFooter({ text: 'Double down gone wrong!' })
                             .setTimestamp();
-                        
+
+                        gameEnded = true;
                         collector.stop();
                         await interaction.update({ embeds: [gameEmbed], files: [finalAttachment], components: [] });
                         return;
@@ -555,6 +559,7 @@ module.exports = (client) => {
                     .setFooter({ text: 'Thanks for playing! 🎲' })
                     .setTimestamp();
 
+                gameEnded = true;
                 collector.stop();
                 await interaction.update({ embeds: [gameEmbed], files: [finalAttachment], components: [] });
             } else if (interaction.customId === 'surrender') {
@@ -578,7 +583,8 @@ module.exports = (client) => {
                     )
                     .setFooter({ text: 'Sometimes the best move is to fold!' })
                     .setTimestamp();
-                
+
+                gameEnded = true;
                 collector.stop();
                 await interaction.update({ embeds: [gameEmbed], files: [finalAttachment], components: [] });
             } else if (interaction.customId === 'split') {
@@ -618,7 +624,22 @@ module.exports = (client) => {
                 let finalHand2 = [...hand2];
                 await playHand(message, userId, finalHand2, dealerHand, betAmount, 2, currentStreak, deckStatus);
                 
+                gameEnded = true;
                 collector.stop();
+            }
+            } catch (error) {
+                console.error('[Blackjack] Error in collector interaction:', error);
+                // Ensure collector is stopped even on error
+                if (!gameEnded) {
+                    gameEnded = true;
+                    collector.stop();
+                }
+                try {
+                    await interaction.reply({ content: 'An error occurred during the game. Your bet has been refunded.', ephemeral: true });
+                    await updateBobbyBucks(userId, betAmount); // Refund on error
+                } catch (replyError) {
+                    console.error('[Blackjack] Failed to send error message:', replyError);
+                }
             }
         });
 

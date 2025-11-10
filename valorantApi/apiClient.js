@@ -40,10 +40,23 @@ async function makeAPIRequest(endpoint) {
 
         const req = https.request(options, (res) => {
             let data = '';
-            res.on('data', chunk => data += chunk);
+            let dataSize = 0;
+            const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB limit to prevent memory exhaustion
+
+            res.on('data', chunk => {
+                dataSize += chunk.length;
+                if (dataSize > MAX_RESPONSE_SIZE) {
+                    req.destroy();
+                    reject(new Error('API response too large - possible memory exhaustion attempt'));
+                    return;
+                }
+                data += chunk;
+            });
+
             res.on('end', () => {
                 try {
                     if (data.trim() === '') {
+                        req.destroy(); // Ensure request is destroyed on error
                         reject(new Error('Empty response from API'));
                         return;
                     }
@@ -52,18 +65,27 @@ async function makeAPIRequest(endpoint) {
                     resolve(jsonData);
                 } catch (error) {
                     console.error('[API Client] Failed to parse API response:', data);
+                    req.destroy(); // Ensure request is destroyed on parse error
                     reject(new Error('Failed to parse API response: ' + error.message));
                 }
+            });
+
+            // Handle response errors
+            res.on('error', (error) => {
+                console.error('[API Client] Response stream error:', error.message);
+                req.destroy();
+                reject(new Error('Response error: ' + error.message));
             });
         });
 
         req.on('timeout', () => {
-            req.destroy();
+            req.destroy(); // Destroy request to free resources
             reject(new Error('API request timeout - please try again later'));
         });
 
         req.on('error', (error) => {
             console.error('[API Client] API Request error:', error.message);
+            req.destroy(); // Ensure request is destroyed on error
             reject(new Error('Network error: ' + error.message));
         });
 
@@ -82,10 +104,23 @@ async function loadImageFromURL(url) {
             reject(new Error('Image load timeout'));
         }, 5000); // 5 second timeout
 
-        https.get(url, (res) => {
+        const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB limit for images
+        let totalSize = 0;
+
+        const req = https.get(url, (res) => {
             const chunks = [];
 
-            res.on('data', (chunk) => chunks.push(chunk));
+            res.on('data', (chunk) => {
+                totalSize += chunk.length;
+                if (totalSize > MAX_IMAGE_SIZE) {
+                    clearTimeout(timeout);
+                    req.destroy();
+                    reject(new Error('Image too large - exceeds 5MB limit'));
+                    return;
+                }
+                chunks.push(chunk);
+            });
+
             res.on('end', () => {
                 clearTimeout(timeout);
                 const buffer = Buffer.concat(chunks);
@@ -93,7 +128,9 @@ async function loadImageFromURL(url) {
                     .then(resolve)
                     .catch(reject);
             });
-        }).on('error', (error) => {
+        });
+
+        req.on('error', (error) => {
             clearTimeout(timeout);
             console.error('[API Client] Image load error:', error.message);
             reject(error);

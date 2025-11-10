@@ -38,4 +38,23 @@ async function connectToDatabase() {
     }
 }
 
-module.exports = { connectToDatabase, isConnected: () => isConnected };
+async function disconnectFromDatabase() {
+    if (!isConnected) {
+        return;
+    }
+
+    try {
+        // Remove all event listeners to prevent memory leaks
+        mongoose.connection.removeAllListeners('error');
+        mongoose.connection.removeAllListeners('disconnected');
+
+        // Disconnect from MongoDB
+        await mongoose.disconnect();
+        isConnected = false;
+        console.log('✅ Disconnected from MongoDB');
+    } catch (error) {
+        console.error('❌ Error disconnecting from MongoDB:', error);
+    }
+}
+
+module.exports = { connectToDatabase, disconnectFromDatabase, isConnected: () => isConnected };
