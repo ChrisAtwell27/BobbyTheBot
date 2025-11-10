@@ -32,9 +32,6 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Changelog handler - special initialization
     require('./changelogHandler')(client, changelogChannelId);
 
-    // Social media post handler
-    require('./socialMediaPostHandler')(client);
-
     // Birthday handler
     require('./birthdayHandler')(client);
 
@@ -113,9 +110,6 @@ module.exports = (client, commandRouter, interactionRouter) => {
 
     // Gladiator handler - !gladiator, !fight
     registerCommandHandler(client, commandRouter, interactionRouter, './gladiatorHandler');
-
-    // Poker handler - !poker, !createpoker
-    registerCommandHandler(client, commandRouter, interactionRouter, './pokerHandler');
 
     // Virtual pet handler - !adopt, !pet, !feed
     registerCommandHandler(client, commandRouter, interactionRouter, './virtualPetHandler');
