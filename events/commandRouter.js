@@ -2,50 +2,109 @@
  * Centralized Command Router
  * This replaces the individual client.on('messageCreate') listeners in each handler
  * to dramatically reduce CPU usage by processing messages only once.
+ *
+ * Two types of handlers:
+ * 1. Command handlers - respond to specific !commands
+ * 2. Message processors - need to see all messages (like alertHandler, askHandler)
  */
 
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
-// Import command handlers (they should export command objects, not register listeners)
-// Example structure: { name: 'createmafia', execute: async (message, args) => {...} }
+// Command handlers map (!command based)
+const commandHandlers = new Map();
 
-const commandMap = new Map();
+// Message processors that need to see all messages
+const messageProcessors = [];
 
 module.exports = (client) => {
-    // Register commands here
-    // commandMap.set('createmafia', require('./mafiaHandler').commands.createmafia);
-    // commandMap.set('help', require('./helpHandler').commands.help);
-    // etc...
+    console.log('📡 Centralized Command Router initializing...');
 
-    console.log('📡 Centralized Command Router initialized');
-
-    // Single messageCreate listener
+    // Single messageCreate listener - processes messages only ONCE
     client.on('messageCreate', async (message) => {
-        // Skip bots
+        // Skip bots (universal check done once)
         if (message.author.bot) return;
 
-        // Guild filter (if needed)
+        // Guild filter (universal check done once)
         if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
 
-        // Check if message starts with command prefix
-        if (!message.content.startsWith('!')) return;
+        // First, run message processors (these need to see all messages)
+        // Examples: alertHandler (keyword monitoring), thinIceHandler (profanity check)
+        for (const processor of messageProcessors) {
+            try {
+                await processor(message);
+            } catch (error) {
+                console.error(`Error in message processor:`, error);
+            }
+        }
 
-        // Parse command and args
-        const args = message.content.slice(1).trim().split(/\s+/);
-        const commandName = args.shift().toLowerCase();
+        // Then, handle commands if message starts with !
+        if (message.content.startsWith('!')) {
+            const args = message.content.slice(1).trim().split(/\s+/);
+            const commandName = args.shift().toLowerCase();
 
-        // Get command from map
-        const command = commandMap.get(commandName);
-        if (!command) return; // Command not found, ignore silently
+            // Check for exact command match
+            const handler = commandHandlers.get(commandName);
 
-        // Execute command
-        try {
-            await command.execute(message, args);
-        } catch (error) {
-            console.error(`Error executing command ${commandName}:`, error);
-            message.reply('There was an error executing that command.');
+            if (handler) {
+                try {
+                    await handler(message, args, commandName);
+                } catch (error) {
+                    console.error(`Error executing command ${commandName}:`, error);
+                    try {
+                        await message.reply('There was an error executing that command.');
+                    } catch (replyError) {
+                        // Ignore if we can't send error message
+                    }
+                }
+            }
         }
     });
 
-    console.log(`✅ Registered ${commandMap.size} commands in centralized router`);
+    console.log(`✅ Centralized Command Router initialized`);
+    console.log(`   - ${commandHandlers.size} command handlers registered`);
+    console.log(`   - ${messageProcessors.length} message processors registered`);
+
+    // Return registration functions for handlers to use
+    return {
+        /**
+         * Register a command handler
+         * @param {string|string[]} commands - Command name(s) without the ! prefix
+         * @param {function} handler - Handler function (message, args, commandName) => Promise<void>
+         */
+        registerCommand: (commands, handler) => {
+            const commandArray = Array.isArray(commands) ? commands : [commands];
+            for (const cmd of commandArray) {
+                commandHandlers.set(cmd.toLowerCase(), handler);
+            }
+        },
+
+        /**
+         * Register multiple commands at once
+         * @param {Object} handlers - Object mapping command names to handler functions
+         */
+        registerCommands: (handlers) => {
+            for (const [command, handler] of Object.entries(handlers)) {
+                commandHandlers.set(command.toLowerCase(), handler);
+            }
+        },
+
+        /**
+         * Register a message processor that needs to see ALL messages
+         * Use this for handlers like alertHandler that monitor for keywords
+         * @param {function} processor - Processor function (message) => Promise<void>
+         */
+        registerMessageProcessor: (processor) => {
+            messageProcessors.push(processor);
+        },
+
+        /**
+         * Get registered command count
+         */
+        getCommandCount: () => commandHandlers.size,
+
+        /**
+         * Get registered processor count
+         */
+        getProcessorCount: () => messageProcessors.length
+    };
 };

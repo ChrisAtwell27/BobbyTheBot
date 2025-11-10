@@ -18,7 +18,9 @@
       "Bash(curl:*)",
       "Bash(taskkill:*)",
       "Bash(tasklist:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(if not exist \"e:\\BobbyTheBot\\BobbyTheBot\\commands\" mkdir \"e:\\BobbyTheBot\\BobbyTheBot\\commands\")",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

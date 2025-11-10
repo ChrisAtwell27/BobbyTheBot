@@ -60,9 +60,12 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
-// Increase max listeners to prevent warnings
-client.setMaxListeners(process.env.MAX_EVENT_LISTENERS || 50);
+// Initialize centralized routers FIRST to reduce CPU usage
+// This replaces 33+ individual messageCreate listeners with 1 central router
+const commandRouter = require('./events/commandRouter')(client);
+const interactionRouter = require('./events/interactionRouter')(client);
 
+<<<<<<< Updated upstream
 // Discord client error handlers
 client.on('error', (error) => {
   console.error('[DISCORD] Client error:', error);
@@ -252,6 +255,11 @@ require('./events/changelogHandler')(client, changelogChannelId);
 // Initialize Valorant API handler separately to prevent conflicts
 const valorantApiHandler = require('./events/valorantApiHandler');
 valorantApiHandler.init(client);
+=======
+// Initialize all handlers through the registry
+// Handlers will register with the routers instead of creating individual listeners
+const { mafiaHandler } = require('./events/handlerRegistry')(client, commandRouter, interactionRouter);
+>>>>>>> Stashed changes
 
 // Create HTTP server that proxies webhook API requests
 // This starts IMMEDIATELY so App Platform health checks pass
