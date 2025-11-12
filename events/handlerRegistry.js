@@ -35,6 +35,12 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Birthday handler
     require('./birthdayHandler')(client);
 
+    // Wordle handler - needs its own listener to receive bot messages
+    require('./wordleHandler')(client);
+
+    // Bump handler - needs its own listener to receive bot messages from DISBOARD
+    require('./bumpHandler')(client);
+
     // ==========================================
     // MESSAGE PROCESSORS
     // (These need to see ALL messages, not just commands)
@@ -52,13 +58,6 @@ module.exports = (client, commandRouter, interactionRouter) => {
     const thinIceProcessor = createMessageProcessor(client, thinIceHandler);
     if (thinIceProcessor) {
         commandRouter.registerMessageProcessor(thinIceProcessor);
-    }
-
-    // Bump handler - monitors for DISBOARD bot messages
-    const bumpHandler = require('./bumpHandler');
-    const bumpProcessor = createMessageProcessor(client, bumpHandler);
-    if (bumpProcessor) {
-        commandRouter.registerMessageProcessor(bumpProcessor);
     }
 
     // Ask handler - responds when messages contain "bobby" (includes AI chat + command suggestions)
@@ -86,8 +85,19 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Debug emoji handler - !emojis, !testemoji
     registerCommandHandler(client, commandRouter, interactionRouter, './debugEmojiHandler');
 
-    // Eggbuck handler - !balance, !daily, !give, etc.
-    registerCommandHandler(client, commandRouter, interactionRouter, './eggbuckHandler');
+    // Eggbuck handler - !balance, !beg, !give, etc. (with donation button interactions)
+    const eggbuckHandler = require('./eggbuckHandler');
+    const eggbuckWrapper = createHandlerWrapper(client, () => eggbuckHandler);
+    if (eggbuckWrapper.messageHandler) {
+        commandRouter.registerMessageProcessor(eggbuckWrapper.messageHandler);
+    }
+    if (eggbuckWrapper.interactionHandler) {
+        // Register donate button handler (donate_userId_messageId)
+        interactionRouter.registerButton('donate_', eggbuckWrapper.interactionHandler);
+        // Register confirm/cancel buttons for clearhoney command
+        interactionRouter.registerButton('confirm_reset_', eggbuckWrapper.interactionHandler);
+        interactionRouter.registerButton('cancel_reset_', eggbuckWrapper.interactionHandler);
+    }
 
     // Gambling handler - !flip, !roulette, !dice, !slots
     registerCommandHandler(client, commandRouter, interactionRouter, './gamblingHandler');
@@ -116,8 +126,7 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Valorant in-house handler - !inhouse
     registerCommandHandler(client, commandRouter, interactionRouter, './valorantInhouseHandler');
 
-    // Wordle handler - !wordle, !guess
-    registerCommandHandler(client, commandRouter, interactionRouter, './wordleHandler');
+    // Note: wordleHandler registered above with direct listener (needs to see bot messages)
 
     // Trivia handler - !trivia
     registerCommandHandler(client, commandRouter, interactionRouter, './triviaHandler');
