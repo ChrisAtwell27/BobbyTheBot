@@ -11,7 +11,7 @@ BobbyTheBot Mafia is a Discord-based social deduction game where players are div
 
 ## 📚 Documentation
 
-Visit our [full documentation site](https://your-username.github.io/BobbyTheBot/) to learn more:
+Visit our [full documentation site](https://chrisatwell27.github.io/BobbyTheBot/) to learn more:
 
 - **[Overview](index.html)**: Game introduction and quick start guide
 - **[All Roles](roles.html)**: Complete list of roles with abilities and strategies
