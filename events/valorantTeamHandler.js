@@ -583,6 +583,9 @@ module.exports = (client) => {
                 });
             }
 
+            // Defer immediately to prevent timeout (canvas generation can take >3s)
+            await interaction.deferUpdate().catch(() => {});
+
             team.members.push(userInfo);
 
             try {
@@ -590,7 +593,7 @@ module.exports = (client) => {
                 const updatedEmbed = await createTeamEmbed(team);
                 const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
 
-                await safeInteractionResponse(interaction, 'update', {
+                await interaction.editReply({
                     embeds: [updatedEmbed.embed],
                     files: updatedEmbed.files,
                     components: updatedComponents
@@ -666,6 +669,9 @@ module.exports = (client) => {
                 });
             }
 
+            // Defer immediately to prevent timeout
+            await interaction.deferUpdate().catch(() => {});
+
             team.members.splice(memberIndex, 1);
 
             try {
@@ -673,7 +679,7 @@ module.exports = (client) => {
                 const updatedEmbed = await createTeamEmbed(team);
                 const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
 
-                await safeInteractionResponse(interaction, 'update', {
+                await interaction.editReply({
                     embeds: [updatedEmbed.embed],
                     files: updatedEmbed.files,
                     components: updatedComponents
