@@ -13,6 +13,7 @@ const {
 
 // Import functions from the API handler (with persistent storage)
 const apiHandler = require('./valorantApiHandler');
+const { saveTeamToHistory } = require('../database/helpers/teamHistoryHelpers');
 
 // Configuration
 const VALORANT_ROLE_ID = '1058201257338228757';
@@ -96,7 +97,8 @@ async function createTeamVisualization(team) {
     createAccentBorder(ctx, 700, 220, '#ff4654', 6);
 
     // Title with glow
-    drawGlowText(ctx, '🎯 VALORANT TEAM BUILDER', 350, 40, {
+    const titleText = team.name ? `🎯 ${team.name.toUpperCase()}` : '🎯 VALORANT TEAM BUILDER';
+    drawGlowText(ctx, titleText, 350, 40, {
         font: 'bold 28px Arial',
         glowColor: '#ff4654'
     });
@@ -159,20 +161,20 @@ async function createTeamVisualization(team) {
             if (avatar) {
                 ctx.save();
                 ctx.beginPath();
-                ctx.arc(x + slotWidth/2, y + 40, 30, 0, Math.PI * 2);
+                ctx.arc(x + slotWidth / 2, y + 40, 30, 0, Math.PI * 2);
                 ctx.clip();
-                ctx.drawImage(avatar, x + slotWidth/2 - 30, y + 10, 60, 60);
+                ctx.drawImage(avatar, x + slotWidth / 2 - 30, y + 10, 60, 60);
                 ctx.restore();
             } else {
                 // Fallback avatar
                 ctx.fillStyle = '#5865f2';
                 ctx.beginPath();
-                ctx.arc(x + slotWidth/2, y + 40, 30, 0, Math.PI * 2);
+                ctx.arc(x + slotWidth / 2, y + 40, 30, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.fillStyle = '#ffffff';
                 ctx.font = '30px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText('👤', x + slotWidth/2, y + 50);
+                ctx.fillText('👤', x + slotWidth / 2, y + 50);
             }
             ctx.shadowBlur = 0;
 
@@ -183,7 +185,7 @@ async function createTeamVisualization(team) {
                 ctx.shadowColor = '#ffd700';
                 ctx.shadowBlur = 5;
                 ctx.textAlign = 'center';
-                ctx.fillText('👑', x + slotWidth/2, y - 5);
+                ctx.fillText('👑', x + slotWidth / 2, y - 5);
                 ctx.shadowBlur = 0;
             }
 
@@ -193,7 +195,7 @@ async function createTeamVisualization(team) {
             ctx.textAlign = 'center';
             const displayName = member.displayName || member.username;
             const truncatedName = displayName.length > 12 ? displayName.substring(0, 11) + '…' : displayName;
-            ctx.fillText(truncatedName, x + slotWidth/2, y + 85);
+            ctx.fillText(truncatedName, x + slotWidth / 2, y + 85);
 
             // Rank info (from batch fetch)
             const userRankInfo = rankInfoMap.get(member.id);
@@ -216,24 +218,24 @@ async function createTeamVisualization(team) {
                 if (userRankInfo.rr !== undefined) {
                     ctx.font = 'bold 10px Arial';
                     ctx.fillStyle = rankColor;
-                    ctx.fillText(`${userRankInfo.rr} RR`, x + slotWidth/2, y + 102);
+                    ctx.fillText(`${userRankInfo.rr} RR`, x + slotWidth / 2, y + 102);
                 }
             } else {
                 // Not registered indicator
                 ctx.font = 'bold 9px Arial';
                 ctx.fillStyle = '#666';
                 ctx.textAlign = 'center';
-                ctx.fillText('!valstats', x + slotWidth/2, y + 102);
+                ctx.fillText('!valstats', x + slotWidth / 2, y + 102);
             }
         } else {
             // Empty slot
             ctx.fillStyle = '#555';
             ctx.font = 'bold 13px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('OPEN', x + slotWidth/2, y + slotHeight/2 - 5);
+            ctx.fillText('OPEN', x + slotWidth / 2, y + slotHeight / 2 - 5);
             ctx.font = '11px Arial';
             ctx.fillStyle = '#888';
-            ctx.fillText('Click Join', x + slotWidth/2, y + slotHeight/2 + 12);
+            ctx.fillText('Click Join', x + slotWidth / 2, y + slotHeight / 2 + 12);
 
             // Dashed border for empty
             ctx.strokeStyle = 'rgba(255, 70, 84, 0.4)';
@@ -247,7 +249,7 @@ async function createTeamVisualization(team) {
         ctx.fillStyle = '#aaa';
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(`${i + 1}`, x + slotWidth/2, y + slotHeight + 15);
+        ctx.fillText(`${i + 1}`, x + slotWidth / 2, y + slotHeight + 15);
     }
 
     return canvas.toBuffer();
@@ -264,18 +266,33 @@ async function createTeamEmbed(team) {
     const attachment = new AttachmentBuilder(teamImageBuffer, { name: 'team.png' });
 
     // Get leader rank from cache
-    const rankInfoMap = await batchGetUserRankInfo([team.leader.id]);
+    const rankInfoMap = await batchGetUserRankInfo([team.leader, ...team.members].map(m => m.id));
     const leaderRankInfo = rankInfoMap.get(team.leader.id);
     const leaderRankText = leaderRankInfo ?
         `${leaderRankInfo.name} (${leaderRankInfo.rr ?? 0} RR)` :
         '❓ Use !valstats to register';
 
+    // Calculate average rank
+    let totalTier = 0;
+    let rankedCount = 0;
+    for (const member of [team.leader, ...team.members]) {
+        const rank = rankInfoMap.get(member.id);
+        if (rank) {
+            totalTier += rank.tier;
+            rankedCount++;
+        }
+    }
+    const avgRank = rankedCount > 0 ?
+        (apiHandler.RANK_MAPPING[Math.round(totalTier / rankedCount)]?.name || 'Unknown') :
+        'N/A';
+
     const embed = new EmbedBuilder()
         .setColor(isFull ? '#00ff88' : '#ff4654')
-        .setTitle('🎯 Valorant Team Builder')
+        .setTitle(team.name ? `🎯 ${team.name}` : '🎯 Valorant Team Builder')
         .setDescription([
             `**Leader:** ${team.leader.displayName}`,
             `**Rank:** ${leaderRankText}`,
+            `**Avg Rank:** ${avgRank}`,
             `**Status:** ${totalMembers}/5 Players`
         ].join('\n'))
         .setImage('attachment://team.png')
@@ -296,7 +313,7 @@ function createTeamButtons(teamId, isFull, team = null) {
     const messageId = teamId.replace('valorant_team_', '');
     const teamCount = team ? getTotalMembers(team) : '?';
 
-    const row = new ActionRowBuilder().addComponents(
+    const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId(`valorant_join_${messageId}`)
             .setLabel(isFull ? 'Full (5/5)' : `Join (${teamCount}/5)`)
@@ -307,12 +324,22 @@ function createTeamButtons(teamId, isFull, team = null) {
             .setCustomId(`valorant_leave_${messageId}`)
             .setLabel('Leave')
             .setStyle(ButtonStyle.Danger)
-            .setEmoji('🚪'),
-        new ButtonBuilder()
-            .setCustomId(`valorant_reassign_${messageId}`)
-            .setLabel('Transfer')
-            .setStyle(ButtonStyle.Primary)
-            .setEmoji('👑'),
+            .setEmoji('🚪')
+    );
+
+    // Add Close button if 2-4 players
+    if (teamCount >= 2 && teamCount < 5) {
+        row1.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`valorant_close_${messageId}`)
+                .setLabel('Close Team')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('🔒')
+        );
+    }
+
+    // Add Disband button
+    row1.addComponents(
         new ButtonBuilder()
             .setCustomId(`valorant_disband_${messageId}`)
             .setLabel('Disband')
@@ -320,7 +347,25 @@ function createTeamButtons(teamId, isFull, team = null) {
             .setEmoji('🗑️')
     );
 
-    return [row];
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`valorant_reassign_${messageId}`)
+            .setLabel('Transfer')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('👑'),
+        new ButtonBuilder()
+            .setCustomId(`valorant_invite_${messageId}`)
+            .setLabel('Invite')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('📨'),
+        new ButtonBuilder()
+            .setCustomId(`valorant_setname_${messageId}`)
+            .setLabel('Set Name')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('✏️')
+    );
+
+    return [row1, row2];
 }
 
 /**
@@ -442,7 +487,9 @@ module.exports = (client) => {
             members: [],
             channelId: message.channel.id,
             messageId: null,
-            resendTimer: null
+            resendTimer: null,
+            name: null, // Custom team name
+            createdAt: new Date()
         };
 
         try {
@@ -459,7 +506,7 @@ module.exports = (client) => {
             });
 
             // Delete loading message
-            loadingMsg.delete().catch(() => {});
+            loadingMsg.delete().catch(() => { });
 
             team.messageId = teamMessage.id;
             activeTeams.set(teamId, team);
@@ -474,18 +521,59 @@ module.exports = (client) => {
                     try {
                         const ch = await client.channels.fetch(currentTeam.channelId);
                         await ch.send(`⏰ Team will auto-disband in **5 minutes** if not filled! (${getTotalMembers(currentTeam)}/5)`);
-                    } catch {}
+                    } catch { }
                 }
             }, 25 * 60 * 1000);
 
         } catch (error) {
             console.error('[Team] Creation error:', error);
-            message.reply('❌ Failed to create team. Try again.').catch(() => {});
+            message.reply('❌ Failed to create team. Try again.').catch(() => { });
         }
     });
 
     // Interaction handler
     client.on('interactionCreate', async (interaction) => {
+        const { ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+
+        // Handle Modal Submits
+        if (interaction.isModalSubmit() && interaction.customId.startsWith('valorant_name_modal_')) {
+            const teamId = interaction.customId.replace('valorant_name_modal_', '');
+            const fullTeamId = `valorant_team_${teamId}`;
+            const team = activeTeams.get(fullTeamId);
+
+            if (!team) {
+                return safeInteractionResponse(interaction, 'reply', {
+                    content: '❌ Team no longer exists.',
+                    ephemeral: true
+                });
+            }
+
+            const newName = interaction.fields.getTextInputValue('teamNameInput');
+            team.name = newName;
+
+            try {
+                const isFull = getTotalMembers(team) >= 5;
+                const updatedEmbed = await createTeamEmbed(team);
+                const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
+
+                const channel = await client.channels.fetch(team.channelId);
+                const message = await channel.messages.fetch(team.messageId);
+                await message.edit({
+                    embeds: [updatedEmbed.embed],
+                    files: updatedEmbed.files,
+                    components: updatedComponents
+                });
+
+                await safeInteractionResponse(interaction, 'reply', {
+                    content: `✅ Team name set to **${newName}**!`,
+                    ephemeral: true
+                });
+            } catch (error) {
+                console.error('[Team] Set name error:', error);
+            }
+            return;
+        }
+
         // Handle leader selection menu
         if (interaction.isStringSelectMenu() && interaction.customId.startsWith('valorant_selectleader_')) {
             const teamId = interaction.customId.split('_').slice(2).join('_');
@@ -584,7 +672,7 @@ module.exports = (client) => {
             }
 
             // Defer immediately to prevent timeout (canvas generation can take >3s)
-            await interaction.deferUpdate().catch(() => {});
+            await interaction.deferUpdate().catch(() => { });
 
             team.members.push(userInfo);
 
@@ -639,13 +727,21 @@ module.exports = (client) => {
                     try {
                         const channel = await client.channels.fetch(team.channelId);
                         await channel.send({ embeds: [celebrationEmbed] });
-                    } catch {}
+                    } catch { }
 
                     // Auto-cleanup after 10 minutes
                     team.deleteTimer = setTimeout(() => {
                         activeTeams.delete(fullTeamId);
-                        interaction.message?.delete().catch(() => {});
+                        interaction.message?.delete().catch(() => { });
                     }, 10 * 60 * 1000);
+
+                    // Save to history
+                    saveTeamToHistory({
+                        ...team,
+                        guildId: interaction.guildId,
+                        createdAt: new Date(Date.now() - (RESEND_INTERVAL * 0.1)), // Approximate creation time
+                        status: 'completed'
+                    }).catch(console.error);
                 }
             } catch (error) {
                 console.error('[Team] Join error:', error);
@@ -670,7 +766,7 @@ module.exports = (client) => {
             }
 
             // Defer immediately to prevent timeout
-            await interaction.deferUpdate().catch(() => {});
+            await interaction.deferUpdate().catch(() => { });
 
             team.members.splice(memberIndex, 1);
 
@@ -727,6 +823,113 @@ module.exports = (client) => {
             });
         }
 
+        // INVITE
+        else if (action === 'invite') {
+            if (userId !== team.leader.id) {
+                return safeInteractionResponse(interaction, 'reply', {
+                    content: '❌ Only the leader can invite players!',
+                    ephemeral: true
+                });
+            }
+
+            return safeInteractionResponse(interaction, 'reply', {
+                content: `📨 **Invite Players:**\nShare this command: \`!valorantteam\` or tell them to click the **Join** button above!\n\n(Direct invites coming soon)`,
+                ephemeral: true
+            });
+        }
+
+        // SET NAME
+        else if (action === 'setname') {
+            if (userId !== team.leader.id) {
+                return safeInteractionResponse(interaction, 'reply', {
+                    content: '❌ Only the leader can set the team name!',
+                    ephemeral: true
+                });
+            }
+
+            const modal = new ModalBuilder()
+                .setCustomId(`valorant_name_modal_${teamId}`)
+                .setTitle('Set Team Name');
+
+            const nameInput = new TextInputBuilder()
+                .setCustomId('teamNameInput')
+                .setLabel("Enter team name")
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('e.g., The Dream Team')
+                .setMaxLength(30)
+                .setMinLength(2)
+                .setRequired(true);
+
+            const firstActionRow = new ActionRowBuilder().addComponents(nameInput);
+            modal.addComponents(firstActionRow);
+
+            await interaction.showModal(modal);
+        }
+
+        // CLOSE TEAM
+        else if (action === 'close') {
+            if (userId !== team.leader.id) {
+                return safeInteractionResponse(interaction, 'reply', {
+                    content: '❌ Only the leader can close the team!',
+                    ephemeral: true
+                });
+            }
+
+            if (getTotalMembers(team) < 2) {
+                return safeInteractionResponse(interaction, 'reply', {
+                    content: '❌ Need at least 2 players to close the team!',
+                    ephemeral: true
+                });
+            }
+
+            // Defer update
+            await interaction.deferUpdate().catch(() => { });
+
+            // Mark as closed/full effectively
+            if (team.resendTimer) clearTimeout(team.resendTimer);
+            if (team.warningTimer) clearTimeout(team.warningTimer);
+
+            const closedEmbed = new EmbedBuilder()
+                .setColor('#ffaa00')
+                .setTitle(team.name ? `🔒 ${team.name} (Closed)` : '🔒 Team Closed')
+                .setDescription(`Team closed by leader with ${getTotalMembers(team)} players.`)
+                .setTimestamp();
+
+            try {
+                // Update original message to show closed state
+                const channel = await client.channels.fetch(team.channelId);
+                const message = await channel.messages.fetch(team.messageId);
+
+                // Disable all buttons
+                const disabledRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('disabled_1').setLabel('Team Closed').setStyle(ButtonStyle.Secondary).setDisabled(true)
+                );
+
+                await message.edit({
+                    embeds: [closedEmbed],
+                    components: [disabledRow],
+                    files: [] // Remove image to save space/indicate closure
+                });
+
+                // Auto-cleanup
+                team.deleteTimer = setTimeout(() => {
+                    activeTeams.delete(fullTeamId);
+                    message.delete().catch(() => { });
+                }, 5 * 60 * 1000);
+
+                // Save to history
+                saveTeamToHistory({
+                    ...team,
+                    guildId: interaction.guildId,
+                    createdAt: new Date(Date.now() - (RESEND_INTERVAL * 0.1)), // Approximate
+                    status: 'completed' // Closed teams count as completed for history
+                }).catch(console.error);
+
+            } catch (error) {
+                console.error('[Team] Close error:', error);
+            }
+        }
+
         // DISBAND
         else if (action === 'disband') {
             if (userId !== team.leader.id) {
@@ -751,7 +954,7 @@ module.exports = (client) => {
 
             // Delete after 5 seconds
             setTimeout(() => {
-                interaction.message?.delete().catch(() => {});
+                interaction.message?.delete().catch(() => { });
             }, 5000);
         }
     });
