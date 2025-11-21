@@ -384,8 +384,6 @@ function createDisbandedEmbed() {
  */
 async function safeInteractionResponse(interaction, type, data) {
     try {
-        if (!interaction.isRepliable()) return false;
-
         switch (type) {
             case 'reply':
                 if (interaction.replied || interaction.deferred) {
@@ -396,6 +394,8 @@ async function safeInteractionResponse(interaction, type, data) {
                 break;
             case 'update':
                 if (interaction.replied) {
+                    await interaction.editReply(data);
+                } else if (interaction.deferred) {
                     await interaction.editReply(data);
                 } else {
                     await interaction.update(data);
@@ -533,12 +533,112 @@ module.exports = (client) => {
 
     // Interaction handler
     client.on('interactionCreate', async (interaction) => {
-        const { ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+        try {
+            const { ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
-        // Handle Modal Submits
-        if (interaction.isModalSubmit() && interaction.customId.startsWith('valorant_name_modal_')) {
-            const teamId = interaction.customId.replace('valorant_name_modal_', '');
+            // Handle Modal Submits
+            if (interaction.isModalSubmit() && interaction.customId.startsWith('valorant_name_modal_')) {
+                const teamId = interaction.customId.replace('valorant_name_modal_', '');
+                const fullTeamId = `valorant_team_${teamId}`;
+                const team = activeTeams.get(fullTeamId);
+
+                if (!team) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Team no longer exists.',
+                        ephemeral: true
+                    });
+                }
+
+                const newName = interaction.fields.getTextInputValue('teamNameInput');
+                team.name = newName;
+
+                try {
+                    const isFull = getTotalMembers(team) >= 5;
+                    const updatedEmbed = await createTeamEmbed(team);
+                    const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
+
+                    const channel = await client.channels.fetch(team.channelId);
+                    const message = await channel.messages.fetch(team.messageId);
+                    await message.edit({
+                        embeds: [updatedEmbed.embed],
+                        files: updatedEmbed.files,
+                        components: updatedComponents
+                    });
+
+                    await safeInteractionResponse(interaction, 'reply', {
+                        content: `✅ Team name set to **${newName}**!`,
+                        ephemeral: true
+                    });
+                } catch (error) {
+                    console.error('[Team] Set name error:', error);
+                }
+                return;
+            }
+
+            // Handle leader selection menu
+            if (interaction.isStringSelectMenu() && interaction.customId.startsWith('valorant_selectleader_')) {
+                const teamId = interaction.customId.split('_').slice(2).join('_');
+                const fullTeamId = `valorant_team_${teamId}`;
+                const team = activeTeams.get(fullTeamId);
+
+                if (!team) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Team no longer exists.',
+                        ephemeral: true
+                    });
+                }
+
+                const newLeaderId = interaction.values[0];
+                const memberIndex = team.members.findIndex(m => m.id === newLeaderId);
+
+                if (memberIndex === -1) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Player not found in team.',
+                        ephemeral: true
+                    });
+                }
+
+                // Swap leader
+                const newLeader = team.members[memberIndex];
+                team.members[memberIndex] = team.leader;
+                team.leader = newLeader;
+
+                try {
+                    const isFull = getTotalMembers(team) >= 5;
+                    const updatedEmbed = await createTeamEmbed(team);
+                    const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
+
+                    const channel = await client.channels.fetch(team.channelId);
+                    const message = await channel.messages.fetch(team.messageId);
+                    await message.edit({
+                        embeds: [updatedEmbed.embed],
+                        files: updatedEmbed.files,
+                        components: updatedComponents
+                    });
+
+                    await safeInteractionResponse(interaction, 'reply', {
+                        content: `✅ ${newLeader.displayName} is now team leader!`,
+                        ephemeral: true
+                    });
+                } catch (error) {
+                    console.error('[Team] Leader transfer error:', error);
+                    await safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Failed to transfer leadership.',
+                        ephemeral: true
+                    });
+                }
+                return;
+            }
+
+            // Handle button interactions
+            if (!interaction.isButton()) return;
+            if (!interaction.customId.startsWith('valorant_')) return;
+
+            const parts = interaction.customId.split('_');
+            const action = parts[1];
+            const teamId = parts.slice(2).join('_');
             const fullTeamId = `valorant_team_${teamId}`;
+
             const team = activeTeams.get(fullTeamId);
 
             if (!team) {
@@ -548,414 +648,318 @@ module.exports = (client) => {
                 });
             }
 
-            const newName = interaction.fields.getTextInputValue('teamNameInput');
-            team.name = newName;
+            const userId = interaction.user.id;
+            const userInfo = {
+                id: userId,
+                username: interaction.user.username,
+                displayName: interaction.user.displayName || interaction.user.username,
+                avatarURL: interaction.user.displayAvatarURL({ extension: 'png', size: 128 })
+            };
 
-            try {
-                const isFull = getTotalMembers(team) >= 5;
-                const updatedEmbed = await createTeamEmbed(team);
-                const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
+            // JOIN
+            if (action === 'join') {
+                if (userId === team.leader.id || team.members.some(m => m.id === userId)) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ You\'re already in this team!',
+                        ephemeral: true
+                    });
+                }
 
-                const channel = await client.channels.fetch(team.channelId);
-                const message = await channel.messages.fetch(team.messageId);
-                await message.edit({
-                    embeds: [updatedEmbed.embed],
-                    files: updatedEmbed.files,
-                    components: updatedComponents
-                });
+                if (getTotalMembers(team) >= 5) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Team is full!',
+                        ephemeral: true
+                    });
+                }
 
-                await safeInteractionResponse(interaction, 'reply', {
-                    content: `✅ Team name set to **${newName}**!`,
-                    ephemeral: true
-                });
-            } catch (error) {
-                console.error('[Team] Set name error:', error);
-            }
-            return;
-        }
+                // Defer immediately to prevent timeout (canvas generation can take >3s)
+                await interaction.deferUpdate().catch(() => { });
 
-        // Handle leader selection menu
-        if (interaction.isStringSelectMenu() && interaction.customId.startsWith('valorant_selectleader_')) {
-            const teamId = interaction.customId.split('_').slice(2).join('_');
-            const fullTeamId = `valorant_team_${teamId}`;
-            const team = activeTeams.get(fullTeamId);
+                team.members.push(userInfo);
 
-            if (!team) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ Team no longer exists.',
-                    ephemeral: true
-                });
-            }
+                try {
+                    const isFull = getTotalMembers(team) >= 5;
+                    const updatedEmbed = await createTeamEmbed(team);
+                    const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
 
-            const newLeaderId = interaction.values[0];
-            const memberIndex = team.members.findIndex(m => m.id === newLeaderId);
+                    await interaction.editReply({
+                        embeds: [updatedEmbed.embed],
+                        files: updatedEmbed.files,
+                        components: updatedComponents
+                    });
 
-            if (memberIndex === -1) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ Player not found in team.',
-                    ephemeral: true
-                });
-            }
+                    // Team complete celebration
+                    if (isFull) {
+                        if (team.resendTimer) clearTimeout(team.resendTimer);
+                        if (team.warningTimer) clearTimeout(team.warningTimer);
 
-            // Swap leader
-            const newLeader = team.members[memberIndex];
-            team.members[memberIndex] = team.leader;
-            team.leader = newLeader;
+                        const rankInfoMap = await batchGetUserRankInfo([team.leader, ...team.members].map(m => m.id));
 
-            try {
-                const isFull = getTotalMembers(team) >= 5;
-                const updatedEmbed = await createTeamEmbed(team);
-                const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
+                        let roster = '';
+                        let totalTier = 0;
+                        let rankedCount = 0;
 
-                const channel = await client.channels.fetch(team.channelId);
-                const message = await channel.messages.fetch(team.messageId);
-                await message.edit({
-                    embeds: [updatedEmbed.embed],
-                    files: updatedEmbed.files,
-                    components: updatedComponents
-                });
+                        for (const member of [team.leader, ...team.members]) {
+                            const rank = rankInfoMap.get(member.id);
+                            const isLeader = member.id === team.leader.id;
+                            const badge = isLeader ? ' 👑' : '';
 
-                await safeInteractionResponse(interaction, 'reply', {
-                    content: `✅ ${newLeader.displayName} is now team leader!`,
-                    ephemeral: true
-                });
-            } catch (error) {
-                console.error('[Team] Leader transfer error:', error);
-                await safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ Failed to transfer leadership.',
-                    ephemeral: true
-                });
-            }
-            return;
-        }
-
-        // Handle button interactions
-        if (!interaction.isButton()) return;
-        if (!interaction.customId.startsWith('valorant_')) return;
-
-        const parts = interaction.customId.split('_');
-        const action = parts[1];
-        const teamId = parts.slice(2).join('_');
-        const fullTeamId = `valorant_team_${teamId}`;
-
-        const team = activeTeams.get(fullTeamId);
-
-        if (!team) {
-            return safeInteractionResponse(interaction, 'reply', {
-                content: '❌ Team no longer exists.',
-                ephemeral: true
-            });
-        }
-
-        const userId = interaction.user.id;
-        const userInfo = {
-            id: userId,
-            username: interaction.user.username,
-            displayName: interaction.user.displayName || interaction.user.username,
-            avatarURL: interaction.user.displayAvatarURL({ extension: 'png', size: 128 })
-        };
-
-        // JOIN
-        if (action === 'join') {
-            if (userId === team.leader.id || team.members.some(m => m.id === userId)) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ You\'re already in this team!',
-                    ephemeral: true
-                });
-            }
-
-            if (getTotalMembers(team) >= 5) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ Team is full!',
-                    ephemeral: true
-                });
-            }
-
-            // Defer immediately to prevent timeout (canvas generation can take >3s)
-            await interaction.deferUpdate().catch(() => { });
-
-            team.members.push(userInfo);
-
-            try {
-                const isFull = getTotalMembers(team) >= 5;
-                const updatedEmbed = await createTeamEmbed(team);
-                const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
-
-                await interaction.editReply({
-                    embeds: [updatedEmbed.embed],
-                    files: updatedEmbed.files,
-                    components: updatedComponents
-                });
-
-                // Team complete celebration
-                if (isFull) {
-                    if (team.resendTimer) clearTimeout(team.resendTimer);
-                    if (team.warningTimer) clearTimeout(team.warningTimer);
-
-                    const rankInfoMap = await batchGetUserRankInfo([team.leader, ...team.members].map(m => m.id));
-
-                    let roster = '';
-                    let totalTier = 0;
-                    let rankedCount = 0;
-
-                    for (const member of [team.leader, ...team.members]) {
-                        const rank = rankInfoMap.get(member.id);
-                        const isLeader = member.id === team.leader.id;
-                        const badge = isLeader ? ' 👑' : '';
-
-                        if (rank) {
-                            roster += `• **${member.displayName}**${badge} - ${rank.name} (${rank.rr} RR)\n`;
-                            totalTier += rank.tier;
-                            rankedCount++;
-                        } else {
-                            roster += `• **${member.displayName}**${badge} - Unranked\n`;
+                            if (rank) {
+                                roster += `• **${member.displayName}**${badge} - ${rank.name} (${rank.rr} RR)\n`;
+                                totalTier += rank.tier;
+                                rankedCount++;
+                            } else {
+                                roster += `• **${member.displayName}**${badge} - Unranked\n`;
+                            }
                         }
+
+                        const avgRank = rankedCount > 0 ?
+                            (apiHandler.RANK_MAPPING[Math.round(totalTier / rankedCount)]?.name || 'Unknown') :
+                            'N/A';
+
+                        const celebrationEmbed = new EmbedBuilder()
+                            .setColor('#00ff88')
+                            .setTitle('🎉 Team Complete!')
+                            .setDescription(`Queue up and dominate!\n\n**Average Rank:** ${avgRank}`)
+                            .addFields({ name: '👥 Roster', value: roster || 'No players', inline: false })
+                            .setFooter({ text: 'GLHF!' })
+                            .setTimestamp();
+
+                        try {
+                            const channel = await client.channels.fetch(team.channelId);
+                            await channel.send({ embeds: [celebrationEmbed] });
+                        } catch { }
+
+                        // Auto-cleanup after 10 minutes
+                        team.deleteTimer = setTimeout(() => {
+                            activeTeams.delete(fullTeamId);
+                            interaction.message?.delete().catch(() => { });
+                        }, 10 * 60 * 1000);
+
+                        // Save to history
+                        saveTeamToHistory({
+                            ...team,
+                            guildId: interaction.guildId,
+                            createdAt: new Date(Date.now() - (RESEND_INTERVAL * 0.1)), // Approximate creation time
+                            status: 'completed'
+                        }).catch(console.error);
                     }
+                } catch (error) {
+                    console.error('[Team] Join error:', error);
+                }
+            }
 
-                    const avgRank = rankedCount > 0 ?
-                        (apiHandler.RANK_MAPPING[Math.round(totalTier / rankedCount)]?.name || 'Unknown') :
-                        'N/A';
+            // LEAVE
+            else if (action === 'leave') {
+                if (userId === team.leader.id) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Leaders cannot leave. Use Disband or Transfer leadership first.',
+                        ephemeral: true
+                    });
+                }
 
-                    const celebrationEmbed = new EmbedBuilder()
-                        .setColor('#00ff88')
-                        .setTitle('🎉 Team Complete!')
-                        .setDescription(`Queue up and dominate!\n\n**Average Rank:** ${avgRank}`)
-                        .addFields({ name: '👥 Roster', value: roster || 'No players', inline: false })
-                        .setFooter({ text: 'GLHF!' })
-                        .setTimestamp();
+                const memberIndex = team.members.findIndex(m => m.id === userId);
+                if (memberIndex === -1) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ You\'re not in this team!',
+                        ephemeral: true
+                    });
+                }
 
-                    try {
-                        const channel = await client.channels.fetch(team.channelId);
-                        await channel.send({ embeds: [celebrationEmbed] });
-                    } catch { }
+                // Defer immediately to prevent timeout
+                await interaction.deferUpdate().catch(() => { });
 
-                    // Auto-cleanup after 10 minutes
+                team.members.splice(memberIndex, 1);
+
+                try {
+                    const isFull = getTotalMembers(team) >= 5;
+                    const updatedEmbed = await createTeamEmbed(team);
+                    const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
+
+                    await interaction.editReply({
+                        embeds: [updatedEmbed.embed],
+                        files: updatedEmbed.files,
+                        components: updatedComponents
+                    });
+
+                    // Restart refresh timer if needed
+                    if (!isFull && !team.resendTimer) {
+                        team.resendTimer = setTimeout(() => updateTeamMessage(fullTeamId), RESEND_INTERVAL);
+                    }
+                } catch (error) {
+                    console.error('[Team] Leave error:', error);
+                }
+            }
+
+            // REASSIGN LEADER
+            else if (action === 'reassign') {
+                if (userId !== team.leader.id) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Only the leader can transfer leadership!',
+                        ephemeral: true
+                    });
+                }
+
+                if (team.members.length === 0) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ No members to transfer to!',
+                        ephemeral: true
+                    });
+                }
+
+                const selectMenu = new StringSelectMenuBuilder()
+                    .setCustomId(`valorant_selectleader_${teamId}`)
+                    .setPlaceholder('Select new leader')
+                    .addOptions(
+                        team.members.map(m => ({
+                            label: m.displayName || m.username,
+                            value: m.id
+                        }))
+                    );
+
+                return safeInteractionResponse(interaction, 'reply', {
+                    content: '👑 Select the new team leader:',
+                    components: [new ActionRowBuilder().addComponents(selectMenu)],
+                    ephemeral: true
+                });
+            }
+
+            // INVITE
+            else if (action === 'invite') {
+                if (userId !== team.leader.id) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Only the leader can invite players!',
+                        ephemeral: true
+                    });
+                }
+
+                return safeInteractionResponse(interaction, 'reply', {
+                    content: `📨 **Invite Players:**\nShare this command: \`!valorantteam\` or tell them to click the **Join** button above!\n\n(Direct invites coming soon)`,
+                    ephemeral: true
+                });
+            }
+
+            // SET NAME
+            else if (action === 'setname') {
+                if (userId !== team.leader.id) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Only the leader can set the team name!',
+                        ephemeral: true
+                    });
+                }
+
+                const modal = new ModalBuilder()
+                    .setCustomId(`valorant_name_modal_${teamId}`)
+                    .setTitle('Set Team Name');
+
+                const nameInput = new TextInputBuilder()
+                    .setCustomId('teamNameInput')
+                    .setLabel("Enter team name")
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('e.g., The Dream Team')
+                    .setMaxLength(30)
+                    .setMinLength(2)
+                    .setRequired(true);
+
+                const firstActionRow = new ActionRowBuilder().addComponents(nameInput);
+                modal.addComponents(firstActionRow);
+
+                await interaction.showModal(modal);
+            }
+
+            // CLOSE TEAM
+            else if (action === 'close') {
+                if (userId !== team.leader.id) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Only the leader can close the team!',
+                        ephemeral: true
+                    });
+                }
+
+                if (getTotalMembers(team) < 2) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Need at least 2 players to close the team!',
+                        ephemeral: true
+                    });
+                }
+
+                // Defer update
+                await interaction.deferUpdate().catch(() => { });
+
+                // Mark as closed/full effectively
+                if (team.resendTimer) clearTimeout(team.resendTimer);
+                if (team.warningTimer) clearTimeout(team.warningTimer);
+
+                const closedEmbed = new EmbedBuilder()
+                    .setColor('#ffaa00')
+                    .setTitle(team.name ? `🔒 ${team.name} (Closed)` : '🔒 Team Closed')
+                    .setDescription(`Team closed by leader with ${getTotalMembers(team)} players.`)
+                    .setTimestamp();
+
+                try {
+                    // Update original message to show closed state
+                    const channel = await client.channels.fetch(team.channelId);
+                    const message = await channel.messages.fetch(team.messageId);
+
+                    // Disable all buttons
+                    const disabledRow = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('disabled_1').setLabel('Team Closed').setStyle(ButtonStyle.Secondary).setDisabled(true)
+                    );
+
+                    await message.edit({
+                        embeds: [closedEmbed],
+                        components: [disabledRow],
+                        files: [] // Remove image to save space/indicate closure
+                    });
+
+                    // Auto-cleanup
                     team.deleteTimer = setTimeout(() => {
                         activeTeams.delete(fullTeamId);
-                        interaction.message?.delete().catch(() => { });
-                    }, 10 * 60 * 1000);
+                        message.delete().catch(() => { });
+                    }, 5 * 60 * 1000);
 
                     // Save to history
                     saveTeamToHistory({
                         ...team,
                         guildId: interaction.guildId,
-                        createdAt: new Date(Date.now() - (RESEND_INTERVAL * 0.1)), // Approximate creation time
-                        status: 'completed'
+                        createdAt: new Date(Date.now() - (RESEND_INTERVAL * 0.1)), // Approximate
+                        status: 'completed' // Closed teams count as completed for history
                     }).catch(console.error);
+
+                } catch (error) {
+                    console.error('[Team] Close error:', error);
                 }
-            } catch (error) {
-                console.error('[Team] Join error:', error);
-            }
-        }
-
-        // LEAVE
-        else if (action === 'leave') {
-            if (userId === team.leader.id) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ Leaders cannot leave. Use Disband or Transfer leadership first.',
-                    ephemeral: true
-                });
             }
 
-            const memberIndex = team.members.findIndex(m => m.id === userId);
-            if (memberIndex === -1) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ You\'re not in this team!',
-                    ephemeral: true
-                });
-            }
-
-            // Defer immediately to prevent timeout
-            await interaction.deferUpdate().catch(() => { });
-
-            team.members.splice(memberIndex, 1);
-
-            try {
-                const isFull = getTotalMembers(team) >= 5;
-                const updatedEmbed = await createTeamEmbed(team);
-                const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
-
-                await interaction.editReply({
-                    embeds: [updatedEmbed.embed],
-                    files: updatedEmbed.files,
-                    components: updatedComponents
-                });
-
-                // Restart refresh timer if needed
-                if (!isFull && !team.resendTimer) {
-                    team.resendTimer = setTimeout(() => updateTeamMessage(fullTeamId), RESEND_INTERVAL);
+            // DISBAND
+            else if (action === 'disband') {
+                if (userId !== team.leader.id) {
+                    return safeInteractionResponse(interaction, 'reply', {
+                        content: '❌ Only the leader can disband the team!',
+                        ephemeral: true
+                    });
                 }
-            } catch (error) {
-                console.error('[Team] Leave error:', error);
-            }
-        }
 
-        // REASSIGN LEADER
-        else if (action === 'reassign') {
-            if (userId !== team.leader.id) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ Only the leader can transfer leadership!',
-                    ephemeral: true
-                });
-            }
+                // Clear all timers
+                if (team.resendTimer) clearTimeout(team.resendTimer);
+                if (team.warningTimer) clearTimeout(team.warningTimer);
+                if (team.deleteTimer) clearTimeout(team.deleteTimer);
 
-            if (team.members.length === 0) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ No members to transfer to!',
-                    ephemeral: true
-                });
-            }
+                activeTeams.delete(fullTeamId);
 
-            const selectMenu = new StringSelectMenuBuilder()
-                .setCustomId(`valorant_selectleader_${teamId}`)
-                .setPlaceholder('Select new leader')
-                .addOptions(
-                    team.members.map(m => ({
-                        label: m.displayName || m.username,
-                        value: m.id
-                    }))
-                );
-
-            return safeInteractionResponse(interaction, 'reply', {
-                content: '👑 Select the new team leader:',
-                components: [new ActionRowBuilder().addComponents(selectMenu)],
-                ephemeral: true
-            });
-        }
-
-        // INVITE
-        else if (action === 'invite') {
-            if (userId !== team.leader.id) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ Only the leader can invite players!',
-                    ephemeral: true
-                });
-            }
-
-            return safeInteractionResponse(interaction, 'reply', {
-                content: `📨 **Invite Players:**\nShare this command: \`!valorantteam\` or tell them to click the **Join** button above!\n\n(Direct invites coming soon)`,
-                ephemeral: true
-            });
-        }
-
-        // SET NAME
-        else if (action === 'setname') {
-            if (userId !== team.leader.id) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ Only the leader can set the team name!',
-                    ephemeral: true
-                });
-            }
-
-            const modal = new ModalBuilder()
-                .setCustomId(`valorant_name_modal_${teamId}`)
-                .setTitle('Set Team Name');
-
-            const nameInput = new TextInputBuilder()
-                .setCustomId('teamNameInput')
-                .setLabel("Enter team name")
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder('e.g., The Dream Team')
-                .setMaxLength(30)
-                .setMinLength(2)
-                .setRequired(true);
-
-            const firstActionRow = new ActionRowBuilder().addComponents(nameInput);
-            modal.addComponents(firstActionRow);
-
-            await interaction.showModal(modal);
-        }
-
-        // CLOSE TEAM
-        else if (action === 'close') {
-            if (userId !== team.leader.id) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ Only the leader can close the team!',
-                    ephemeral: true
-                });
-            }
-
-            if (getTotalMembers(team) < 2) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ Need at least 2 players to close the team!',
-                    ephemeral: true
-                });
-            }
-
-            // Defer update
-            await interaction.deferUpdate().catch(() => { });
-
-            // Mark as closed/full effectively
-            if (team.resendTimer) clearTimeout(team.resendTimer);
-            if (team.warningTimer) clearTimeout(team.warningTimer);
-
-            const closedEmbed = new EmbedBuilder()
-                .setColor('#ffaa00')
-                .setTitle(team.name ? `🔒 ${team.name} (Closed)` : '🔒 Team Closed')
-                .setDescription(`Team closed by leader with ${getTotalMembers(team)} players.`)
-                .setTimestamp();
-
-            try {
-                // Update original message to show closed state
-                const channel = await client.channels.fetch(team.channelId);
-                const message = await channel.messages.fetch(team.messageId);
-
-                // Disable all buttons
-                const disabledRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('disabled_1').setLabel('Team Closed').setStyle(ButtonStyle.Secondary).setDisabled(true)
-                );
-
-                await message.edit({
-                    embeds: [closedEmbed],
-                    components: [disabledRow],
-                    files: [] // Remove image to save space/indicate closure
+                await safeInteractionResponse(interaction, 'update', {
+                    embeds: [createDisbandedEmbed()],
+                    components: [],
+                    files: []
                 });
 
-                // Auto-cleanup
-                team.deleteTimer = setTimeout(() => {
-                    activeTeams.delete(fullTeamId);
-                    message.delete().catch(() => { });
-                }, 5 * 60 * 1000);
-
-                // Save to history
-                saveTeamToHistory({
-                    ...team,
-                    guildId: interaction.guildId,
-                    createdAt: new Date(Date.now() - (RESEND_INTERVAL * 0.1)), // Approximate
-                    status: 'completed' // Closed teams count as completed for history
-                }).catch(console.error);
-
-            } catch (error) {
-                console.error('[Team] Close error:', error);
+                // Delete after 5 seconds
+                setTimeout(() => {
+                    interaction.message?.delete().catch(() => { });
+                }, 5000);
             }
-        }
-
-        // DISBAND
-        else if (action === 'disband') {
-            if (userId !== team.leader.id) {
-                return safeInteractionResponse(interaction, 'reply', {
-                    content: '❌ Only the leader can disband the team!',
-                    ephemeral: true
-                });
-            }
-
-            // Clear all timers
-            if (team.resendTimer) clearTimeout(team.resendTimer);
-            if (team.warningTimer) clearTimeout(team.warningTimer);
-            if (team.deleteTimer) clearTimeout(team.deleteTimer);
-
-            activeTeams.delete(fullTeamId);
-
-            await safeInteractionResponse(interaction, 'update', {
-                embeds: [createDisbandedEmbed()],
-                components: [],
-                files: []
-            });
-
-            // Delete after 5 seconds
-            setTimeout(() => {
-                interaction.message?.delete().catch(() => { });
-            }, 5000);
+        } catch (error) {
+            console.error('[Team] Handler error:', error);
         }
     });
 
