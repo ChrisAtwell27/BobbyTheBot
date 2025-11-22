@@ -56,11 +56,11 @@ async function batchGetUserRankInfo(userIds) {
                 const rankData = await apiHandler.getUserRankData(userId);
                 if (!rankData) return { userId, data: null };
 
-                const rankInfo = apiHandler.RANK_MAPPING[rankData.currenttier] || apiHandler.RANK_MAPPING[0];
+                const rankInfo = apiHandler.RANK_MAPPING[rankData.tier] || apiHandler.RANK_MAPPING[0];
                 const data = {
                     ...rankInfo,
-                    tier: rankData.currenttier,
-                    rr: rankData.ranking_in_tier
+                    tier: rankData.tier,
+                    rr: rankData.rr
                 };
                 return { userId, data };
             } catch {
