@@ -109,7 +109,16 @@ module.exports = (client, commandRouter, interactionRouter) => {
     registerCommandHandler(client, commandRouter, interactionRouter, './clipHandler');
 
     // Valorant team handler - !team, !createteam
-    registerCommandHandler(client, commandRouter, interactionRouter, './valorantTeamHandler');
+    const valorantTeamHandler = require('./valorantTeamHandler');
+    const valorantTeamWrapper = createHandlerWrapper(client, () => valorantTeamHandler);
+    if (valorantTeamWrapper.messageHandler) {
+        commandRouter.registerMessageProcessor(valorantTeamWrapper.messageHandler);
+    }
+    if (valorantTeamWrapper.interactionHandler) {
+        interactionRouter.registerButton('valorant_', valorantTeamWrapper.interactionHandler);
+        interactionRouter.registerModal('valorant_', valorantTeamWrapper.interactionHandler);
+        interactionRouter.registerSelectMenu('valorant_', valorantTeamWrapper.interactionHandler);
+    }
 
     // Russian roulette handler - !roulette, !spin
     registerCommandHandler(client, commandRouter, interactionRouter, './russianRouletteHandler');
@@ -181,7 +190,7 @@ function createMessageProcessor(client, handlerModule, ...args) {
             }
         },
         once: client.once.bind(client),
-        setMaxListeners: () => {},
+        setMaxListeners: () => { },
         // Pass through other client properties
         user: client.user,
         users: client.users,
@@ -216,7 +225,7 @@ function createHandlerWrapper(client, handlerGetter) {
             }
         },
         once: client.once.bind(client),
-        setMaxListeners: () => {},
+        setMaxListeners: () => { },
         user: client.user,
         users: client.users,
         guilds: client.guilds,
