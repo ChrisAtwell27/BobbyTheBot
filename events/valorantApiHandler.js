@@ -187,6 +187,85 @@ async function handleRegistrationSubmission(interaction) {
     }
 }
 
+// Handle updating registration
+async function handleUpdateRegistration(message, args) {
+    if (args.length < 1) {
+        return await message.channel.send('❌ Usage: `!valupdate <Name#Tag> [region]`\nExample: `!valupdate NewName#Tag na`');
+    }
+
+    const username = args[0];
+    let region = args[1] ? args[1].toLowerCase() : null;
+
+    // Extract name and tag from username
+    if (!username.includes('#')) {
+        return await message.channel.send('❌ Invalid username format! Please use the format: Username#Tag (e.g., Player#1234)');
+    }
+
+    const [name, tag] = username.split('#');
+
+    // If region not provided, try to get from existing registration
+    if (!region) {
+        const existing = getUserRegistration(message.author.id);
+        if (existing) {
+            region = existing.region;
+        } else {
+            return await message.channel.send('❌ Region is required for new registrations or if I cannot find your old one.\nUsage: `!valupdate <Name#Tag> <region>`');
+        }
+    }
+
+    // Validate inputs
+    const validation = validateValorantRegistration({
+        name: name,
+        tag: tag,
+        region: region
+    });
+
+    if (!validation.valid) {
+        const errorMessages = Object.values(validation.errors).join('\n');
+        return await message.channel.send(`❌ Validation failed:\n${errorMessages}`);
+    }
+
+    // Use sanitized values
+    const { name: cleanName, tag: cleanTag, region: cleanRegion } = validation.sanitized;
+
+    const loadingMsg = await message.channel.send('🔄 Verifying new Valorant account...');
+
+    try {
+        const accountData = await getAccountData(cleanName, cleanTag);
+
+        if (accountData.status !== 200) {
+            return await loadingMsg.edit(`❌ Could not find account **${cleanName}#${cleanTag}**. Please check spelling and try again.`);
+        }
+
+        const userData = {
+            name: cleanName,
+            tag: cleanTag,
+            region: cleanRegion,
+            puuid: accountData.data.puuid,
+            registeredAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+
+        addUserRegistration(message.author.id, userData);
+
+        const successEmbed = new EmbedBuilder()
+            .setTitle('✅ Valorant Tag Updated!')
+            .setColor('#00ff00')
+            .setDescription(`Successfully updated your Valorant account to: **${cleanName}#${cleanTag}**`)
+            .addFields(
+                { name: '🌍 Region', value: cleanRegion.toUpperCase(), inline: true },
+                { name: '🆔 PUUID', value: accountData.data.puuid.substring(0, 8) + '...', inline: true }
+            )
+            .setTimestamp();
+
+        await loadingMsg.edit({ content: null, embeds: [successEmbed] });
+
+    } catch (error) {
+        console.error('Update error:', error);
+        await loadingMsg.edit(`❌ Error updating account: ${error.message}`);
+    }
+}
+
 // Show user stats with comprehensive visualization
 async function showUserStats(message, registration) {
     const loadingEmbed = new EmbedBuilder()
@@ -278,16 +357,28 @@ async function showUserStats(message, registration) {
 
     } catch (error) {
         console.error('Error displaying stats:', error);
+        
+        let errorDesc = 'There was an error fetching your Valorant statistics.';
+        let isAccountError = false;
+
+        // Check if it's likely a changed tag issue
+        if (error.message.includes('404') || error.message.includes('Could not fetch account data')) {
+            errorDesc = `**Could not find your Valorant account.**\n\nDid you change your Riot ID/Tag recently?\nUse \`!valupdate <NewName#Tag>\` to update it!`;
+            isAccountError = true;
+        }
+
         const errorEmbed = new EmbedBuilder()
             .setTitle('❌ Error Fetching Stats')
             .setColor('#ff0000')
-            .setDescription('There was an error fetching your Valorant statistics.')
-            .addFields({
+            .setDescription(errorDesc);
+
+        if (!isAccountError) {
+            errorEmbed.addFields({
                 name: 'Error Details',
                 value: `\`\`\`${error.message}\`\`\``,
                 inline: false
-            })
-            .setTimestamp();
+            });
+        }
 
         await loadingMessage.edit({ embeds: [errorEmbed] });
     }
@@ -368,16 +459,30 @@ async function showUserMatches(message, registration) {
 
     } catch (error) {
         console.error('Error displaying matches:', error);
+
+        let errorDesc = 'There was an error fetching your match history.';
+        let isAccountError = false;
+
+        // Check if it's likely a changed tag issue
+        if (error.message.includes('404') || error.message.includes('Could not fetch') || error.message.includes('Account not found')) {
+            errorDesc = `**Could not find your Valorant account.**\n\nDid you change your Riot ID/Tag recently?\nUse \`!valupdate <NewName#Tag>\` to update it!`;
+            isAccountError = true;
+        }
+
         const errorEmbed = new EmbedBuilder()
             .setTitle('❌ Error Fetching Matches')
             .setColor('#ff0000')
-            .setDescription('There was an error fetching your match history.')
-            .addFields({
+            .setDescription(errorDesc);
+
+        if (!isAccountError) {
+            errorEmbed.addFields({
                 name: 'Error Details',
                 value: `\`\`\`${error.message}\`\`\``,
                 inline: false
-            })
-            .setTimestamp();
+            });
+        }
+        
+        errorEmbed.setTimestamp();
 
         await loadingMessage.edit({ embeds: [errorEmbed] });
     }
@@ -732,6 +837,12 @@ module.exports = {
                     } else {
                         await showUserStats(message, registration);
                     }
+                }
+
+                // !valupdate command
+                if (command === '!valupdate') {
+                    const args = message.content.split(' ').slice(1);
+                    await handleUpdateRegistration(message, args);
                 }
 
                 // !valmatches command

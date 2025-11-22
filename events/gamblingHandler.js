@@ -1,10 +1,94 @@
-const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+﻿const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
 const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 const Challenge = require('../database/models/Challenge');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
 const { CleanupMap, LimitedMap } = require('../utils/memoryUtils');
+const { insufficientFundsMessage, invalidUsageMessage, processingMessage } = require('../utils/errorMessages');
+
+// Auto-cleanup cooldowns after 5 minutes (way longer than needed)
+const cooldowns = new CleanupMap(5 * 60 * 1000, 1 * 60 * 1000);
+
+// Auto-cleanup challenges after timeout period
+const challenges = new CleanupMap(5 * 60 * 1000, 1 * 60 * 1000);
+
+// Limited active games to prevent memory leak (max 100 concurrent games)
+const activeGames = new LimitedMap(100);
+
+const COOLDOWN_SECONDS = 3; // Cooldown in seconds
+const CHALLENGE_TIMEOUT = 5 * 60 * 1000; // 5 minute timeout for challenges
+
+// Load active challenges from database on startup
+async function loadActiveChallenges() {
+    try {
+        const activeChallenges = await Challenge.find({});
+        console.log(`[GAMBLING] Loaded ${activeChallenges.length} active challenges from database`);
+
+        for (const challenge of activeChallenges) {
+            challenges.set(challenge.challengeId, {
+                type: challenge.type,
+                creator: challenge.creator,
+                creatorName: challenge.creatorName,
+                challenged: challenge.challenged,
+                challengedName: challenge.challengedName,
+                amount: challenge.amount,
+                channelId: challenge.channelId,
+                gladiatorClass: challenge.gladiatorClass,
+                challengerAvatarURL: challenge.challengerAvatarURL,
+                challengedAvatarURL: challenge.challengedAvatarURL,
+                timestamp: challenge.createdAt.getTime()
+            });
+        }
+    } catch (error) {
+        console.error('[GAMBLING] Error loading challenges from database:', error);
+    }
+}
+
+// ==========================================
+// HELPER FUNCTIONS
+// ==========================================
+
+// Generic challenge creation function
+async function createChallenge(message, args, type, options) {
+    if (args.length !== 2 || isNaN(parseInt(args[1], 10)) || parseInt(args[1], 10) <= 0) {
+        return message.channel.send(invalidUsageMessage(type, `!${type} [amount]`, `!${type} 100`));
+    }
+
+    const betAmount = parseInt(args[1], 10);
+    const userId = message.author.id;
+    const balance = await getBobbyBucks(userId);
+
+    if (balance < betAmount) {
+        return message.channel.send(insufficientFundsMessage(message.author.username, balance, betAmount));
+    }
+
+    // Show processing message
+    const processingMsg = await message.channel.send(processingMessage('we create your challenge'));
+
+    const challengeId = `${type}_${Date.now()}_${userId}`;
+    const challenge = {
+        type,
+        creator: userId,
+        creatorName: message.author.username,
+        amount: betAmount,
+        channelId: message.channel.id,
+        timestamp: Date.now()
+    };
+
+    challenges.set(challengeId, challenge);
+    await updateBobbyBucks(userId, -betAmount); // Lock the bet
+
+    // Save to database
+    try {
+        await Challenge.create({
+            challengeId,
+            type,
+            creator: userId,
+            creatorName: message.author.username,
+            amount: betAmount,
+            channelId: message.channel.id
+        });
 const { insufficientFundsMessage, invalidUsageMessage, processingMessage } = require('../utils/errorMessages');
 
 // Auto-cleanup cooldowns after 5 minutes (way longer than needed)
@@ -101,9 +185,9 @@ async function createChallenge(message, args, type, options) {
         .setColor(options.color)
         .setDescription(options.description.replace('{user}', message.author.username))
         .addFields(
-            { name: '?? Pot', value: `??${betAmount * 2} (minus 5% house cut)`, inline: true },
-            { name: '?? To Accept', value: `Click the button below!`, inline: true },
-            { name: '? Expires', value: '<t:' + Math.floor((Date.now() + CHALLENGE_TIMEOUT) / 1000) + ':R>', inline: true }
+            { name: '💰 Pot', value: `🍯${betAmount * 2} (minus 5% house cut)`, inline: true },
+            { name: '✅ To Accept', value: `Click the button below!`, inline: true },
+            { name: '⏳ Expires', value: '<t:' + Math.floor((Date.now() + CHALLENGE_TIMEOUT) / 1000) + ':R>', inline: true }
         );
 
     if (options.extraFields) {
@@ -119,7 +203,7 @@ async function createChallenge(message, args, type, options) {
                 .setCustomId(`accept_${challengeId}`)
                 .setLabel(options.buttonLabel || 'Accept Challenge!')
                 .setStyle(ButtonStyle.Success)
-                .setEmoji(options.buttonEmoji || '??')
+                .setEmoji(options.buttonEmoji || '✅')
         );
 
     const challengeMessage = await message.channel.send({ embeds: [embed], components: [acceptButton] });
@@ -150,7 +234,7 @@ async function createChallenge(message, args, type, options) {
                         .setLabel('Challenge Expired')
                         .setStyle(ButtonStyle.Secondary)
                         .setDisabled(true)
-                        .setEmoji('?')
+                        .setEmoji('⚠️')
                 );
 
             // Fetch channel and message fresh instead of using stale references
@@ -159,7 +243,7 @@ async function createChallenge(message, args, type, options) {
                 if (channel) {
                     const msg = await channel.messages.fetch(messageId);
                     await msg.edit({ components: [disabledButton] });
-                    await channel.send(`? ${options.title} by **${authorUsername}** has expired and been refunded.`);
+                    await channel.send(`⚠️ ${options.title} by **${authorUsername}** has expired and been refunded.`);
                 }
             } catch (error) {
                 // Message may have been deleted, ignore
@@ -200,7 +284,7 @@ async function handleChallengeAccept(interaction) {
 
     if (!challenge) {
         return interaction.reply({
-            content: "? This challenge is no longer active. It may have expired.\n\n?? **Tip:** Ask the challenger to create a new challenge!",
+            content: "⚠️ This challenge is no longer active. It may have expired.\n\n💡 **Tip:** Ask the challenger to create a new challenge!",
             ephemeral: true
         }).catch(err => {
             if (err.code !== 10062 && err.code !== 40060) {
@@ -210,12 +294,12 @@ async function handleChallengeAccept(interaction) {
     }
 
     if (challenge.creator === userId) {
-        return interaction.reply({ content: "? You can't accept your own challenge!", ephemeral: true });
+        return interaction.reply({ content: "⚠️ You can't accept your own challenge!", ephemeral: true });
     }
 
     const balance = await getBobbyBucks(userId);
     if (balance < challenge.amount) {
-        return interaction.reply({ content: `? You don't have enough Honey. You need ??${challenge.amount}. Your balance: ??${balance}`, ephemeral: true });
+        return interaction.reply({ content: `⚠️ You don't have enough Honey. You need 🍯${challenge.amount}. Your balance: 🍯${balance}`, ephemeral: true });
     }
 
     // Lock opponent's bet
@@ -250,7 +334,7 @@ async function handleChallengeAccept(interaction) {
 
     activeGames.set(gameId, game);
 
-    await interaction.reply({ content: `? Challenge accepted! Starting **${challenge.type.toUpperCase()}** game...`, ephemeral: true });
+    await interaction.reply({ content: `✅ Challenge accepted! Starting **${challenge.type.toUpperCase()}** game...`, ephemeral: true });
 
     return { gameId, game, type: challenge.type };
 }
@@ -275,18 +359,18 @@ async function handleGameMove(interaction, client) {
         }
 
         if (!foundGame) {
-            return interaction.reply({ content: "? No active RPS game found for you. The game may have expired.", ephemeral: true });
+            return interaction.reply({ content: "⚠️ No active RPS game found for you. The game may have expired.", ephemeral: true });
         }
 
         // Use the found game
         const game = foundGame;
 
         if (game.moves[userId]) {
-            return interaction.reply({ content: "? You've already made your move!", ephemeral: true });
+            return interaction.reply({ content: "⚠️ You've already made your move!", ephemeral: true });
         }
 
         game.moves[userId] = move;
-        await interaction.reply({ content: `? Your move (${move}) has been recorded! Waiting for your opponent...`, ephemeral: true });
+        await interaction.reply({ content: `✅ Your move (${move}) has been recorded! Waiting for your opponent...`, ephemeral: true });
 
         if (Object.keys(game.moves).length === 2) {
             resolveRPSGame(client, foundGameId, game);
@@ -297,15 +381,15 @@ async function handleGameMove(interaction, client) {
     const game = activeGames.get(gameId);
 
     if (userId !== game.player1 && userId !== game.player2) {
-        return interaction.reply({ content: "? You're not part of this game!", ephemeral: true });
+        return interaction.reply({ content: "⚠️ You're not part of this game!", ephemeral: true });
     }
 
     if (game.moves[userId]) {
-        return interaction.reply({ content: "? You've already made your move!", ephemeral: true });
+        return interaction.reply({ content: "⚠️ You've already made your move!", ephemeral: true });
     }
 
     game.moves[userId] = move;
-    await interaction.reply({ content: `? Your move (${move}) has been recorded! Waiting for your opponent...`, ephemeral: true });
+    await interaction.reply({ content: `✅ Your move (${move}) has been recorded! Waiting for your opponent...`, ephemeral: true });
 
     if (Object.keys(game.moves).length === 2) {
         resolveRPSGame(client, gameId, game);
@@ -370,13 +454,13 @@ module.exports = (client) => {
             } else if (command === '!help' || command === '!commands') {
                 // Help command in DMs
                 const helpEmbed = new EmbedBuilder()
-                    .setTitle('?? Casino Bot DM Commands')
+                    .setTitle('🎲 Casino Bot DM Commands')
                     .setColor('#3498db')
                     .setDescription('Available commands in Direct Messages:')
                     .addFields(
-                        { name: '?? Number Duel', value: '`!play [game_id] [number]`\nSubmit your guess (1-100)', inline: false },
-                        { name: '?? Example', value: '`!play game_456 42`', inline: false },
-                        { name: '?? Tip', value: 'All other games use buttons in the main chat now!', inline: false }
+                        { name: '🎮 Number Duel', value: '`!play [game_id] [number]`\nSubmit your guess (1-100)', inline: false },
+                        { name: '📋 Example', value: '`!play game_456 42`', inline: false },
+                        { name: '💡 Tip', value: 'All other games use buttons in the main chat now!', inline: false }
                     )
                     .setFooter({ text: 'Go back to the server to start new games!' });
 
@@ -386,7 +470,7 @@ module.exports = (client) => {
                 return message.reply("Unknown command! Use `!help` for available DM commands, or go back to the server to use casino games with buttons.");
             } else {
                 // Non-command message in DM
-                return message.reply("Hi! I'm the Casino Bot ??\n\nTo play games, use commands in the server. All games use buttons for easy interaction!\n\nType `!help` for DM commands or go back to the server to start gambling!");
+                return message.reply("Hi! I'm the Casino Bot 🎰\n\nTo play games, use commands in the server. All games use buttons for easy interaction!\n\nType `!help` for DM commands or go back to the server to start gambling!");
             }
             return; // Exit early for DM messages
         }
@@ -409,19 +493,19 @@ module.exports = (client) => {
             const balance = await getBobbyBucks(userId);
             const houseBalance = await getHouseBalance();
             const gameList = new EmbedBuilder()
-                .setTitle('?? CASINO GAMES')
+                .setTitle('🎰 CASINO GAMES')
                 .setColor('#ffd700')
-                .setDescription('**Welcome to the Honey Casino!** ??\nChoose your game and test your luck!')
+                .setDescription('**Welcome to the Honey Casino!** 🎲\nChoose your game and test your luck!')
                 .addFields(
-                    { name: '?? **HOUSE GAMES** (Solo Play)', value: '`!dice [amount] [guess (1-6)]` - **6x payout**\n`!flip [amount]` - **2x payout**\n`!roulette [amount] [red/black/number]` - **2x/36x payout**\n`!blackjack [amount]` - Beat the dealer!', inline: false },
-                    { name: '?? **PVP GAMES** (Player vs Player)', value: '`!rps [amount]` - Rock Paper Scissors duel\n`!highercard [amount]` - Higher card wins\n`!quickdraw [amount]` - Type random word fastest\n`!numberduel [amount]` - Closest number guess wins', inline: false },
-                    { name: '?? **CHALLENGE SYSTEM**', value: 'Create challenges with buttons - just click to accept!\nWinner takes the pot! ??', inline: false }
+                    { name: '🏠 **HOUSE GAMES** (Solo Play)', value: '`!dice [amount] [guess (1-6)]` - **6x payout**\n`!flip [amount]` - **2x payout**\n`!roulette [amount] [red/black/number]` - **2x/36x payout**\n`!blackjack [amount]` - Beat the dealer!', inline: false },
+                    { name: '⚔️ **PVP GAMES** (Player vs Player)', value: '`!rps [amount]` - Rock Paper Scissors duel\n`!highercard [amount]` - Higher card wins\n`!quickdraw [amount]` - Type random word fastest\n`!numberduel [amount]` - Closest number guess wins', inline: false },
+                    { name: '🎯 **CHALLENGE SYSTEM**', value: 'Create challenges with buttons - just click to accept!\nWinner takes the pot! ðŸ†', inline: false }
                 )
                 .addFields(
-                    { name: '?? Your Stats', value: `**Balance:** ??${balance}\n**House:** ??${houseBalance}`, inline: true },
-                    { name: '?? Payouts', value: '**Solo:** Various multipliers\n**PvP:** Winner takes all!\n**House Cut:** 5% of pot', inline: true }
+                    { name: '💰 Your Stats', value: `**Balance:** 🍯${balance}\n**House:** 🍯${houseBalance}`, inline: true },
+                    { name: '🎯 Payouts', value: '**Solo:** Various multipliers\n**PvP:** Winner takes all!\n**House Cut:** 5% of pot', inline: true }
                 )
-                .setFooter({ text: '?? Good luck and gamble responsibly!' })
+                .setFooter({ text: '🍀 Good luck and gamble responsibly!' })
                 .setTimestamp();
             return message.channel.send({ embeds: [gameList] });
         }
@@ -437,51 +521,51 @@ module.exports = (client) => {
         // PvP games
         else if (command === '!rps') {
             createChallenge(message, args, 'rps', {
-                title: '?? Rock Paper Scissors Challenge!',
+                title: '⚔️ Rock Paper Scissors Challenge!',
                 color: '#ff6b6b',
                 description: '**{user}** challenges someone to Rock Paper Scissors!',
                 buttonLabel: 'Accept Challenge!',
-                buttonEmoji: '??',
+                buttonEmoji: '⚔️',
                 extraFields: [
-                    { name: '?? Game Play', value: 'Once accepted, both players use buttons in this channel!', inline: false }
+                    { name: '🎮 Game Play', value: 'Once accepted, both players use buttons in this channel!', inline: false }
                 ],
-                footer: 'Rock ?? | Paper ?? | Scissors ??'
+                footer: 'Rock 🪨 | Paper 📄 | Scissors ✂️'
             });
         } else if (command === '!highercard') {
             createChallenge(message, args, 'highercard', {
-                title: '?? Higher Card Challenge!',
+                title: '🃏 Higher Card Challenge!',
                 color: '#4ecdc4',
                 description: '**{user}** challenges someone to Higher Card!',
                 buttonLabel: 'Accept Challenge!',
-                buttonEmoji: '??',
+                buttonEmoji: '🃏',
                 extraFields: [
-                    { name: '?? Rules', value: 'Both draw a card - highest wins!', inline: true }
+                    { name: '📋 Rules', value: 'Both draw a card - highest wins!', inline: true }
                 ],
                 footer: 'Ace=1, Jack=11, Queen=12, King=13'
             });
         } else if (command === '!quickdraw') {
             createChallenge(message, args, 'quickdraw', {
-                title: '? Quick Draw Challenge!',
+                title: '⚡ Quick Draw Challenge!',
                 color: '#f39c12',
                 description: '**{user}** challenges someone to Quick Draw!',
                 buttonLabel: 'Accept Challenge!',
-                buttonEmoji: '?',
+                buttonEmoji: '⚡',
                 extraFields: [
-                    { name: '?? Rules', value: 'First to type the random word when prompted wins!', inline: true }
+                    { name: '📋 Rules', value: 'First to type the random word when prompted wins!', inline: true }
                 ],
-                footer: '? Speed and reflexes matter! Word will be random!'
+                footer: '⚡ Speed and reflexes matter! Word will be random!'
             });
         } else if (command === '!numberduel') {
             createChallenge(message, args, 'numberduel', {
-                title: '?? Number Duel Challenge!',
+                title: '🎯 Number Duel Challenge!',
                 color: '#9b59b6',
                 description: '**{user}** challenges someone to Number Duel!',
                 buttonLabel: 'Accept Challenge!',
-                buttonEmoji: '??',
+                buttonEmoji: '🎯',
                 extraFields: [
-                    { name: '?? Rules', value: 'Guess 1-100, closest to target wins!', inline: true }
+                    { name: '📋 Rules', value: 'Guess 1-100, closest to target wins!', inline: true }
                 ],
-                footer: '?? Precision beats luck!'
+                footer: '🎯 Precision beats luck!'
             });
         } else if (command === '!challenges') {
             listChallenges(message);
@@ -534,16 +618,16 @@ async function startRPSGame(interaction, gameId, game) {
 
     // Create main channel embed with buttons
     const gameEmbed = new EmbedBuilder()
-        .setTitle('?? Rock Paper Scissors Battle!')
+        .setTitle('⚔️ Rock Paper Scissors Battle!')
         .setColor('#ff6b6b')
         .setDescription(`**${game.player1Name}** vs **${game.player2Name}**`)
         .addFields(
-            { name: '?? Total Pot', value: `??${game.amount * 2}`, inline: true },
-            { name: '?? How to Play', value: `Both players click your move below!`, inline: true },
-            { name: '?? Privacy', value: 'Your moves will be hidden until both choose!', inline: false },
-            { name: '?? Game ID', value: `\`${gameId}\``, inline: true }
+            { name: '💰 Total Pot', value: `🍯${game.amount * 2}`, inline: true },
+            { name: '🎯 How to Play', value: `Both players click your move below!`, inline: true },
+            { name: 'ðŸ”’ Privacy', value: 'Your moves will be hidden until both choose!', inline: false },
+            { name: 'ðŸ†” Game ID', value: `\`${gameId}\``, inline: true }
         )
-        .setFooter({ text: 'Rock ?? beats Scissors ?? | Paper ?? beats Rock ?? | Scissors ?? beats Paper ??' })
+        .setFooter({ text: 'Rock 🪨 beats Scissors ✂️ | Paper 📄 beats Rock 🪨 | Scissors ✂️ beats Paper 📄' })
         .setTimestamp();
 
     const moveButtons = new ActionRowBuilder()
@@ -552,17 +636,17 @@ async function startRPSGame(interaction, gameId, game) {
                 .setCustomId(`rps_${gameId}_rock`)
                 .setLabel('Rock')
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji('??'),
+                .setEmoji('🪨'),
             new ButtonBuilder()
                 .setCustomId(`rps_${gameId}_paper`)
                 .setLabel('Paper')
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji('??'),
+                .setEmoji('📄'),
             new ButtonBuilder()
                 .setCustomId(`rps_${gameId}_scissors`)
                 .setLabel('Scissors')
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji('??')
+                .setEmoji('✂️')
         );
 
     // Send to main channel with buttons
@@ -574,7 +658,7 @@ async function startRPSGame(interaction, gameId, game) {
 // Start Higher Card game
 async function startHigherCardGame(interaction, gameId, game) {
     // Automatically draw cards for both players
-    const suits = ['??', '??', '??', '??'];
+    const suits = ['â™ ï¸', 'â™¥ï¸', 'â™¦ï¸', 'â™£ï¸'];
     const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
     const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
 
@@ -600,13 +684,13 @@ async function startHigherCardGame(interaction, gameId, game) {
         activeGames.delete(gameId);
 
         const embed = new EmbedBuilder()
-            .setTitle('?? Higher Card - TIE!')
+            .setTitle('🃏 Higher Card - TIE!')
             .setColor('#95a5a6')
             .setDescription('Both players drew the same value!')
             .addFields(
                 { name: `${game.player1Name}'s Card`, value: `${player1Card.rank}${player1Card.suit} (${player1Card.value})`, inline: true },
                 { name: `${game.player2Name}'s Card`, value: `${player2Card.rank}${player2Card.suit} (${player2Card.value})`, inline: true },
-                { name: '?? Result', value: 'Both players refunded!', inline: false }
+                { name: '💰 Result', value: 'Both players refunded!', inline: false }
             );
 
         return interaction.channel.send({ embeds: [embed] });
@@ -621,13 +705,13 @@ async function startHigherCardGame(interaction, gameId, game) {
 
     const winnerName = winner === game.player1 ? game.player1Name : game.player2Name;
     const embed = new EmbedBuilder()
-        .setTitle('?? Higher Card Results!')
+        .setTitle('🃏 Higher Card Results!')
         .setColor('#2ecc71')
         .setDescription(`**${winnerName}** wins the duel!`)
         .addFields(
             { name: `${game.player1Name}'s Card`, value: `${player1Card.rank}${player1Card.suit} (${player1Card.value})`, inline: true },
             { name: `${game.player2Name}'s Card`, value: `${player2Card.rank}${player2Card.suit} (${player2Card.value})`, inline: true },
-            { name: '?? Winnings', value: `??${winnings} (after 5% house cut)`, inline: false }
+            { name: '💰 Winnings', value: `🍯${winnings} (after 5% house cut)`, inline: false }
         )
         .setTimestamp();
 
@@ -651,13 +735,13 @@ async function startQuickDrawGame(interaction, gameId, game) {
     game.targetWord = randomWord; // Store the word in the game object
 
     const embed = new EmbedBuilder()
-        .setTitle('? Quick Draw Duel!')
+        .setTitle('⚡ Quick Draw Duel!')
         .setColor('#f39c12')
         .setDescription(`**${game.player1Name}** vs **${game.player2Name}**`)
         .addFields(
-            { name: '?? Total Pot', value: `??${game.amount * 2}`, inline: true },
-            { name: '?? Get Ready!', value: 'Wait for the signal...', inline: false },
-            { name: '?? Instructions', value: 'When prompted, type the **exact word** shown to win!', inline: false }
+            { name: '💰 Total Pot', value: `🍯${game.amount * 2}`, inline: true },
+            { name: '🎯 Get Ready!', value: 'Wait for the signal...', inline: false },
+            { name: 'ðŸ“ Instructions', value: 'When prompted, type the **exact word** shown to win!', inline: false }
         )
         .setTimestamp();
 
@@ -668,12 +752,12 @@ async function startQuickDrawGame(interaction, gameId, game) {
 
     game.drawTimer = setTimeout(() => {
         const drawEmbed = new EmbedBuilder()
-            .setTitle(`? TYPE: ${randomWord}`)
+            .setTitle(`⚡ TYPE: ${randomWord}`)
             .setColor('#e74c3c')
             .setDescription(`**First to type "${randomWord}" wins!**`)
             .addFields(
-                { name: '?? Target Word', value: `**${randomWord}**`, inline: true },
-                { name: '? Case Sensitive?', value: 'No - any case works', inline: true }
+                { name: '🎯 Target Word', value: `**${randomWord}**`, inline: true },
+                { name: '⚡ Case Sensitive?', value: 'No - any case works', inline: true }
             )
             .setTimestamp();
 
@@ -699,14 +783,14 @@ async function startQuickDrawGame(interaction, gameId, game) {
             activeGames.delete(gameId);
 
             const resultEmbed = new EmbedBuilder()
-                .setTitle('? Quick Draw Results!')
+                .setTitle('⚡ Quick Draw Results!')
                 .setColor('#2ecc71')
                 .setDescription(`**${winnerName}** was fastest on the draw!`)
                 .addFields(
-                    { name: '?? Winner', value: winnerName, inline: true },
-                    { name: '?? Target Word', value: randomWord, inline: true },
-                    { name: '?? Winnings', value: `??${winnings}`, inline: true },
-                    { name: '? Victory Message', value: `"${msg.content}" - Lightning fast!`, inline: false }
+                    { name: 'ðŸ† Winner', value: winnerName, inline: true },
+                    { name: '🎯 Target Word', value: randomWord, inline: true },
+                    { name: '💰 Winnings', value: `🍯${winnings}`, inline: true },
+                    { name: '⚡ Victory Message', value: `"${msg.content}" - Lightning fast!`, inline: false }
                 )
                 .setTimestamp();
 
@@ -721,12 +805,12 @@ async function startQuickDrawGame(interaction, gameId, game) {
                 activeGames.delete(gameId);
 
                 const timeoutEmbed = new EmbedBuilder()
-                    .setTitle('? Quick Draw Timeout!')
+                    .setTitle('â° Quick Draw Timeout!')
                     .setColor('#95a5a6')
                     .setDescription('Nobody typed the word in time!')
                     .addFields(
-                        { name: '?? Target Word Was', value: randomWord, inline: true },
-                        { name: '?? Result', value: 'Both players refunded', inline: true }
+                        { name: '🎯 Target Word Was', value: randomWord, inline: true },
+                        { name: '💰 Result', value: 'Both players refunded', inline: true }
                     )
                     .setTimestamp();
 
@@ -742,14 +826,14 @@ async function startNumberDuelGame(interaction, gameId, game) {
     game.targetNumber = targetNumber;
 
     const embed = new EmbedBuilder()
-        .setTitle('?? Number Duel Battle!')
+        .setTitle('🎯 Number Duel Battle!')
         .setColor('#9b59b6')
         .setDescription(`**${game.player1Name}** vs **${game.player2Name}**`)
         .addFields(
-            { name: '?? Total Pot', value: `??${game.amount * 2}`, inline: true },
-            { name: '?? How to Play', value: `**DM the bot your guess:** \`!play ${gameId} [1-100]\``, inline: false },
-            { name: '?? Rules', value: 'Closest to the secret number wins!', inline: false },
-            { name: '?? Important', value: 'Both players must send their guesses via **Direct Message**!', inline: false }
+            { name: '💰 Total Pot', value: `🍯${game.amount * 2}`, inline: true },
+            { name: '🎯 How to Play', value: `**DM the bot your guess:** \`!play ${gameId} [1-100]\``, inline: false },
+            { name: '📋 Rules', value: 'Closest to the secret number wins!', inline: false },
+            { name: '📩 Important', value: 'Both players must send their guesses via **Direct Message**!', inline: false }
         )
         .setFooter({ text: 'Good luck guessing the secret number!' })
         .setTimestamp();
@@ -762,12 +846,12 @@ async function startNumberDuelGame(interaction, gameId, game) {
         const player2 = await interaction.client.users.fetch(game.player2);
 
         const dmEmbed = new EmbedBuilder()
-            .setTitle('?? Number Duel - Your Turn!')
+            .setTitle('🎯 Number Duel - Your Turn!')
             .setColor('#9b59b6')
             .setDescription(`Send your guess: \`!play ${gameId} [number]\``)
             .addFields(
-                { name: '?? Range', value: '1 to 100', inline: true },
-                { name: '?? Pot', value: `??${game.amount * 2}`, inline: true }
+                { name: '🎯 Range', value: '1 to 100', inline: true },
+                { name: '💰 Pot', value: `🍯${game.amount * 2}`, inline: true }
             )
             .setFooter({ text: 'Closest to the secret number wins!' });
 
@@ -791,7 +875,7 @@ async function resolveRPSGame(client, gameId, game) {
         channel.send({
             embeds: [
                 new EmbedBuilder()
-                    .setTitle('?? Rock Paper Scissors Error')
+                    .setTitle('⚔️ Rock Paper Scissors Error')
                     .setColor('#e74c3c')
                     .setDescription('Game could not be resolved due to invalid or missing moves.')
             ]
@@ -814,19 +898,19 @@ async function resolveRPSGame(client, gameId, game) {
     }
 
     const channel = client.channels.cache.get(game.channelId);
-    const moveEmojis = { rock: '??', paper: '??', scissors: '??' };
+    const moveEmojis = { rock: '🪨', paper: '📄', scissors: '✂️' };
 
     if (result === 'tie') {
         await updateBobbyBucks(game.player1, game.amount);
         await updateBobbyBucks(game.player2, game.amount);
         const embed = new EmbedBuilder()
-            .setTitle('?? Rock Paper Scissors - TIE!')
+            .setTitle('⚔️ Rock Paper Scissors - TIE!')
             .setColor('#95a5a6')
             .setDescription('Both players chose the same move!')
             .addFields(
                 { name: game.player1Name, value: `${moveEmojis[move1]} ${move1}`, inline: true },
                 { name: game.player2Name, value: `${moveEmojis[move2]} ${move2}`, inline: true },
-                { name: '?? Result', value: 'Both players refunded!', inline: false }
+                { name: '💰 Result', value: 'Both players refunded!', inline: false }
             );
         channel.send({ embeds: [embed] });
     } else {
@@ -839,13 +923,13 @@ async function resolveRPSGame(client, gameId, game) {
         await updateHouse(houseCut);
 
         const embed = new EmbedBuilder()
-            .setTitle('?? Rock Paper Scissors Results!')
+            .setTitle('⚔️ Rock Paper Scissors Results!')
             .setColor('#2ecc71')
             .setDescription(`**${winnerName}** wins the battle!`)
             .addFields(
                 { name: game.player1Name, value: `${moveEmojis[move1]} ${move1}`, inline: true },
                 { name: game.player2Name, value: `${moveEmojis[move2]} ${move2}`, inline: true },
-                { name: '?? Winnings', value: `??${winnings} (after 5% house cut)`, inline: false }
+                { name: '💰 Winnings', value: `🍯${winnings} (after 5% house cut)`, inline: false }
             );
 
         channel.send({ embeds: [embed] });
@@ -870,14 +954,14 @@ async function resolveNumberDuelGame(client, gameId, game) {
         await updateBobbyBucks(game.player2, game.amount);
 
         const embed = new EmbedBuilder()
-            .setTitle('?? Number Duel - TIE!')
+            .setTitle('🎯 Number Duel - TIE!')
             .setColor('#95a5a6')
             .setDescription('Both players were equally close!')
             .addFields(
-                { name: '?? Target Number', value: target.toString(), inline: true },
+                { name: '🎯 Target Number', value: target.toString(), inline: true },
                 { name: game.player1Name, value: `${guess1} (off by ${diff1})`, inline: true },
                 { name: game.player2Name, value: `${guess2} (off by ${diff2})`, inline: true },
-                { name: '?? Result', value: 'Both players refunded!', inline: false }
+                { name: '💰 Result', value: 'Both players refunded!', inline: false }
             );
 
         channel.send({ embeds: [embed] });
@@ -891,14 +975,14 @@ async function resolveNumberDuelGame(client, gameId, game) {
         await updateHouse(houseCut);
 
         const embed = new EmbedBuilder()
-            .setTitle('?? Number Duel Results!')
+            .setTitle('🎯 Number Duel Results!')
             .setColor('#2ecc71')
             .setDescription(`**${winnerName}** had the closest guess!`)
             .addFields(
-                { name: '?? Target Number', value: target.toString(), inline: true },
+                { name: '🎯 Target Number', value: target.toString(), inline: true },
                 { name: game.player1Name, value: `${guess1} (off by ${diff1})`, inline: true },
                 { name: game.player2Name, value: `${guess2} (off by ${diff2})`, inline: true },
-                { name: '?? Winnings', value: `??${winnings} (after 5% house cut)`, inline: false }
+                { name: '💰 Winnings', value: `🍯${winnings} (after 5% house cut)`, inline: false }
             );
 
         channel.send({ embeds: [embed] });
@@ -916,21 +1000,21 @@ async function listChallenges(message) {
     }
 
     const embed = new EmbedBuilder()
-        .setTitle('?? Active Challenges')
+        .setTitle('🎲 Active Challenges')
         .setColor('#3498db')
         .setDescription('Accept challenges by clicking their buttons!');
 
     for (const [id, challenge] of currentChallenges) {
         const gameNames = {
-            rps: '?? Rock Paper Scissors',
-            highercard: '?? Higher Card',
-            quickdraw: '? Quick Draw',
-            numberduel: '?? Number Duel'
+            rps: '⚔️ Rock Paper Scissors',
+            highercard: '🃏 Higher Card',
+            quickdraw: '⚡ Quick Draw',
+            numberduel: '🎯 Number Duel'
         };
 
         embed.addFields({
             name: gameNames[challenge.type],
-            value: `**By:** ${challenge.creatorName}\n**Bet:** ??${challenge.amount}\n**Status:** Click button to accept`,
+            value: `**By:** ${challenge.creatorName}\n**Bet:** 🍯${challenge.amount}\n**Status:** Click button to accept`,
             inline: true
         });
     }
@@ -958,12 +1042,12 @@ async function createCoinFlipAnimation(result, playerName, betAmount, winnings) 
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 24px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('?? COIN FLIP', 200, 30);
+    ctx.fillText('ðŸª™ COIN FLIP', 200, 30);
 
     // Player info
     ctx.fillStyle = '#ffffff';
     ctx.font = '16px Arial';
-    ctx.fillText(`${playerName} - Bet: ??${betAmount}`, 200, 50);
+    ctx.fillText(`${playerName} - Bet: 🍯${betAmount}`, 200, 50);
 
     // Coin
     ctx.save();
@@ -994,11 +1078,11 @@ async function createCoinFlipAnimation(result, playerName, betAmount, winnings) 
     ctx.font = 'bold 20px Arial';
     ctx.textAlign = 'center';
     if (result === 'heads') {
-        ctx.fillText('??', 0, 8);
+        ctx.fillText('👑', 0, 8);
         ctx.font = '12px Arial';
         ctx.fillText('HEADS', 0, 25);
     } else {
-        ctx.fillText('???', 0, 8);
+        ctx.fillText('🏛️', 0, 8);
         ctx.font = '12px Arial';
         ctx.fillText('TAILS', 0, 25);
     }
@@ -1010,7 +1094,7 @@ async function createCoinFlipAnimation(result, playerName, betAmount, winnings) 
     ctx.fillStyle = isWin ? '#00ff00' : '#ff0000';
     ctx.font = 'bold 20px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(isWin ? `YOU WIN ??${winnings}!` : `YOU LOSE ??${Math.abs(winnings)}!`, 200, 250);
+    ctx.fillText(isWin ? `YOU WIN 🍯${winnings}!` : `YOU LOSE 🍯${Math.abs(winnings)}!`, 200, 250);
 
     return canvas;
 }
@@ -1031,12 +1115,12 @@ async function createRouletteWheel(chosenNumber, chosenColor, userChoice, player
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 24px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('?? ROULETTE WHEEL', 250, 30);
+    ctx.fillText('🎰 ROULETTE WHEEL', 250, 30);
 
     // Player info
     ctx.fillStyle = '#ffffff';
     ctx.font = '14px Arial';
-    ctx.fillText(`${playerName} bet ??${betAmount} on ${userChoice.toUpperCase()}`, 250, 50);
+    ctx.fillText(`${playerName} bet 🍯${betAmount} on ${userChoice.toUpperCase()}`, 250, 50);
 
     // Roulette wheel base
     ctx.save();
@@ -1110,7 +1194,7 @@ async function createRouletteWheel(chosenNumber, chosenColor, userChoice, player
     const isWin = winnings > 0;
     ctx.fillStyle = isWin ? '#00ff00' : '#ff0000';
     ctx.font = 'bold 20px Arial';
-    ctx.fillText(isWin ? `YOU WIN ??${winnings}!` : `YOU LOSE ??${Math.abs(winnings)}!`, 250, 350);
+    ctx.fillText(isWin ? `YOU WIN 🍯${winnings}!` : `YOU LOSE 🍯${Math.abs(winnings)}!`, 250, 350);
 
     return canvas;
 }
@@ -1135,12 +1219,12 @@ async function createDiceRoll(diceResult, userGuess, playerName, betAmount, winn
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 24px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('?? DICE ROLL', 200, 30);
+    ctx.fillText('🎲 DICE ROLL', 200, 30);
 
     // Player info
     ctx.fillStyle = '#ffffff';
     ctx.font = '16px Arial';
-    ctx.fillText(`${playerName} guessed ${userGuess} - Bet: ??${betAmount}`, 200, 50);
+    ctx.fillText(`${playerName} guessed ${userGuess} - Bet: 🍯${betAmount}`, 200, 50);
 
     // Dice
     ctx.save();
@@ -1186,7 +1270,7 @@ async function createDiceRoll(diceResult, userGuess, playerName, betAmount, winn
     ctx.fillStyle = isWin ? '#00ff00' : '#ff0000';
     ctx.font = 'bold 20px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(isWin ? `YOU WIN ??${winnings}!` : `YOU LOSE ??${Math.abs(winnings)}!`, 200, 250);
+    ctx.fillText(isWin ? `YOU WIN 🍯${winnings}!` : `YOU LOSE 🍯${Math.abs(winnings)}!`, 200, 250);
 
     return canvas;
 }
@@ -1201,7 +1285,7 @@ async function playFlipGame(message, args) {
     const balance = await getBobbyBucks(userId);
 
     if (balance < betAmount) {
-        return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is ??${balance}.`);
+        return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
     }
 
     const result = Math.random() < 0.5 ? 'heads' : 'tails';
@@ -1216,16 +1300,16 @@ async function playFlipGame(message, args) {
     const attachment = new AttachmentBuilder(coinCanvas.toBuffer(), { name: 'coin-flip.png' });
 
     const embed = new EmbedBuilder()
-        .setTitle('?? Coin Flip Casino')
+        .setTitle('ðŸª™ Coin Flip Casino')
         .setColor(result === 'heads' ? '#ffd700' : '#ff4500')
         .setDescription(`**${message.author.username}** flipped the coin!`)
         .setImage('attachment://coin-flip.png')
         .addFields(
-            { name: '?? Result', value: `**${result.toUpperCase()}**`, inline: true },
-            { name: '?? Outcome', value: netGain > 0 ? `Won ??${netGain}` : `Lost ??${Math.abs(netGain)}`, inline: true },
-            { name: '?? New Balance', value: `??${await getBobbyBucks(userId)}`, inline: true }
+            { name: '🎯 Result', value: `**${result.toUpperCase()}**`, inline: true },
+            { name: '💰 Outcome', value: netGain > 0 ? `Won 🍯${netGain}` : `Lost 🍯${Math.abs(netGain)}`, inline: true },
+            { name: 'ðŸ¦ New Balance', value: `🍯${await getBobbyBucks(userId)}`, inline: true }
         )
-        .setFooter({ text: result === 'heads' ? '?? Lady Luck smiles upon you!' : '?? Better luck next time!' })
+        .setFooter({ text: result === 'heads' ? '🍀 Lady Luck smiles upon you!' : '😔 Better luck next time!' })
         .setTimestamp();
 
     return message.channel.send({ embeds: [embed], files: [attachment] });
@@ -1241,7 +1325,7 @@ async function playRouletteGame(message, args) {
     const balance = await getBobbyBucks(userId);
 
     if (balance < betAmount) {
-        return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is ??${balance}.`);
+        return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
     }
 
     const redNumbers = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
@@ -1262,21 +1346,21 @@ async function playRouletteGame(message, args) {
     const attachment = new AttachmentBuilder(rouletteCanvas.toBuffer(), { name: 'roulette-wheel.png' });
 
     const embed = new EmbedBuilder()
-        .setTitle('?? Roulette Casino')
+        .setTitle('🎰 Roulette Casino')
         .setColor(chosenColor === 'red' ? '#ff0000' : chosenColor === 'black' ? '#2c2c2c' : '#00ff00')
         .setDescription(`**${message.author.username}** spun the wheel!`)
         .setImage('attachment://roulette-wheel.png')
         .addFields(
-            { name: '?? Result', value: `**${chosenColor.toUpperCase()} ${chosenNumber}**`, inline: true },
-            { name: '?? Your Bet', value: `**${userChoice.toUpperCase()}**`, inline: true },
-            { name: '?? Outcome', value: netGain > 0 ? `Won ??${netGain}` : `Lost ??${Math.abs(netGain)}`, inline: true }
+            { name: '🎯 Result', value: `**${chosenColor.toUpperCase()} ${chosenNumber}**`, inline: true },
+            { name: '🎲 Your Bet', value: `**${userChoice.toUpperCase()}**`, inline: true },
+            { name: '💰 Outcome', value: netGain > 0 ? `Won 🍯${netGain}` : `Lost 🍯${Math.abs(netGain)}`, inline: true }
         )
         .addFields(
-            { name: '?? New Balance', value: `??${await getBobbyBucks(userId)}`, inline: true },
-            { name: '??? House Edge', value: `??${await getHouseBalance()}`, inline: true },
-            { name: '?? Payout Rate', value: userChoice === String(chosenNumber) ? '36:1' : '2:1', inline: true }
+            { name: 'ðŸ¦ New Balance', value: `🍯${await getBobbyBucks(userId)}`, inline: true },
+            { name: '🏛️ House Edge', value: `🍯${await getHouseBalance()}`, inline: true },
+            { name: '🎰 Payout Rate', value: userChoice === String(chosenNumber) ? '36:1' : '2:1', inline: true }
         )
-        .setFooter({ text: netGain > 0 ? '?? The wheel of fortune favors you!' : '?? The house always wins... sometimes!' })
+        .setFooter({ text: netGain > 0 ? '🎉 The wheel of fortune favors you!' : '🎲 The house always wins... sometimes!' })
         .setTimestamp();
 
     return message.channel.send({ embeds: [embed], files: [attachment] });
@@ -1292,7 +1376,7 @@ async function playDiceGame(message, args) {
     const balance = await getBobbyBucks(userId);
 
     if (balance < betAmount) {
-        return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is ??${balance}.`);
+        return message.channel.send(`Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`);
     }
 
     const diceRoll = Math.ceil(Math.random() * 6);
@@ -1308,21 +1392,21 @@ async function playDiceGame(message, args) {
     const attachment = new AttachmentBuilder(diceCanvas.toBuffer(), { name: 'dice-roll.png' });
 
     const embed = new EmbedBuilder()
-        .setTitle('?? Dice Roll Casino')
+        .setTitle('🎲 Dice Roll Casino')
         .setColor(netGain > 0 ? '#00ff00' : '#ff0000')
         .setDescription(`**${message.author.username}** rolled the dice!`)
         .setImage('attachment://dice-roll.png')
         .addFields(
-            { name: '?? Roll Result', value: `**${diceRoll}**`, inline: true },
-            { name: '?? Your Guess', value: `**${userGuess}**`, inline: true },
-            { name: '?? Match?', value: userGuess === diceRoll ? '? **WINNER!**' : '? **Miss**', inline: true }
+            { name: '🎯 Roll Result', value: `**${diceRoll}**`, inline: true },
+            { name: '🎲 Your Guess', value: `**${userGuess}**`, inline: true },
+            { name: '🎰 Match?', value: userGuess === diceRoll ? '✅ **WINNER!**' : '❌ **Miss**', inline: true }
         )
         .addFields(
-            { name: '?? Outcome', value: netGain > 0 ? `Won ??${netGain}` : `Lost ??${Math.abs(netGain)}`, inline: true },
-            { name: '?? New Balance', value: `??${await getBobbyBucks(userId)}`, inline: true },
-            { name: '?? Odds', value: '1 in 6 (16.7%)', inline: true }
+            { name: '💰 Outcome', value: netGain > 0 ? `Won 🍯${netGain}` : `Lost 🍯${Math.abs(netGain)}`, inline: true },
+            { name: 'ðŸ¦ New Balance', value: `🍯${await getBobbyBucks(userId)}`, inline: true },
+            { name: '📊 Odds', value: '1 in 6 (16.7%)', inline: true }
         )
-        .setFooter({ text: netGain > 0 ? '?? Perfect prediction! You nailed it!' : '?? Close call! Try again!' })
+        .setFooter({ text: netGain > 0 ? '🎉 Perfect prediction! You nailed it!' : '🎲 Close call! Try again!' })
         .setTimestamp();
 
     return message.channel.send({ embeds: [embed], files: [attachment] });
