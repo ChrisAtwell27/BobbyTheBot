@@ -6,7 +6,7 @@ const { insufficientFundsMessage, invalidUsageMessage, permissionDeniedMessage }
 
 // Configuration
 const MIN_BOUNTY = 50;
-const MAX_BOUNTY = 10000;
+const MAX_BOUNTY = 1000000;
 const BOUNTY_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 const CLEANUP_INTERVAL = 5 * 60 * 1000; // Check every 5 minutes
 

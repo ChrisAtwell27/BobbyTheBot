@@ -114,8 +114,8 @@ module.exports = {
             const args = message.content.slice(1).trim().split(/ +/);
             const command = args.shift().toLowerCase();
 
-            // !createmafia
-            if (command === 'createmafia') {
+            // !createmafia or !createmafiadebug
+            if (command === 'createmafia' || command === 'createmafiadebug') {
                 if (message.channel.id !== MAFIA_TEXT_CHANNEL_ID && message.channel.id !== TARGET_GUILD_ID) {
                     // Allow in mafia channel or guild root (for testing)
                     // Actually, usually restricted to specific channels
@@ -147,6 +147,12 @@ module.exports = {
                 let randomMode = false;
                 let preset = null;
                 let specifiedRoles = [];
+
+                // Default settings for debug command
+                if (command === 'createmafiadebug') {
+                    botCount = 5;
+                    debugMode = true;
+                }
 
                 // Parse args
                 args.forEach(arg => {
