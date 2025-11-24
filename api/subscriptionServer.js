@@ -155,6 +155,7 @@ class SubscriptionServer {
 
     /**
      * Fetch user's guilds from Discord API using their access token
+     * Requires 'guilds' scope in Discord OAuth
      */
     async fetchUserGuilds(accessToken) {
         const response = await fetch(`${this.discordApiBase}/users/@me/guilds`, {
@@ -165,6 +166,15 @@ class SubscriptionServer {
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
+            console.error('[Subscription API] Discord guilds fetch failed:', {
+                status: response.status,
+                error: error,
+                tokenPreview: accessToken ? `${accessToken.substring(0, 10)}...` : 'empty'
+            });
+
+            if (response.status === 401) {
+                throw new Error('Discord API error: 401 - Token invalid or expired. Ensure Clerk has "guilds" scope enabled for Discord OAuth.');
+            }
             throw new Error(error.message || `Discord API error: ${response.status}`);
         }
 
@@ -173,6 +183,7 @@ class SubscriptionServer {
 
     /**
      * Fetch user info from Discord API
+     * Requires 'identify' scope in Discord OAuth
      */
     async fetchUserInfo(accessToken) {
         const response = await fetch(`${this.discordApiBase}/users/@me`, {
@@ -183,6 +194,15 @@ class SubscriptionServer {
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
+            console.error('[Subscription API] Discord user fetch failed:', {
+                status: response.status,
+                error: error,
+                tokenPreview: accessToken ? `${accessToken.substring(0, 10)}...` : 'empty'
+            });
+
+            if (response.status === 401) {
+                throw new Error('Discord API error: 401 - Token invalid or expired. Ensure Clerk has "identify" scope enabled for Discord OAuth.');
+            }
             throw new Error(error.message || `Discord API error: ${response.status}`);
         }
 

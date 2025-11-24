@@ -20,7 +20,8 @@
       "Bash(tasklist:*)",
       "Bash(node:*)",
       "Bash(if not exist \"e:\\BobbyTheBot\\BobbyTheBot\\commands\" mkdir \"e:\\BobbyTheBot\\BobbyTheBot\\commands\")",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []
