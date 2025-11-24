@@ -16,11 +16,11 @@ This document outlines the feature breakdown across the three subscription tiers
 
 ## Tier Overview
 
-| Tier         | Price       | Best For                                                                                              |
-| ------------ | ----------- | ----------------------------------------------------------------------------------------------------- |
-| **Free**     | $0/month    | Economy, basic gambling, Wordle, Trivia, Valorant stats, Bounties, Clips, Moderation, Server engagement |
-| **Plus**     | $4.99/month | Blackjack, PvP games, Mafia, Bobby AI, Valorant team builder, Activity tracking                        |
-| **Ultimate** | $9.99/month | Audit logs, Advanced auto-mod, API access, Priority support                                            |
+| Tier         | Price        | Best For                                                                                                |
+| ------------ | ------------ | ------------------------------------------------------------------------------------------------------- |
+| **Free**     | $0/month     | Economy, basic gambling, Wordle, Trivia, Valorant stats, Bounties, Clips, Moderation, Server engagement |
+| **Plus**     | $14.99/month | Blackjack, PvP games, Mafia, Bobby AI, Valorant team builder, Activity tracking                         |
+| **Ultimate** | $19.99/month | Audit logs, Advanced auto-mod, API access, Priority support                                             |
 
 ---
 
@@ -30,6 +30,7 @@ This document outlines the feature breakdown across the three subscription tiers
 **Target:** Casual users, community members, server admins
 
 ### Economy & Currency
+
 - Full economy system with balance tracking and leaderboards
 - Transfer Honey between users
 - Earn free Honey through begging
@@ -38,23 +39,27 @@ This document outlines the feature breakdown across the three subscription tiers
 - Canvas-based visual cards and displays
 
 ### Basic Gambling
+
 - Coin flip games
 - Dice roll betting
 - Roulette wheel (colors and numbers)
 - Gambling menu overview
 
 ### Wordle
+
 - Daily Wordle puzzles
 - Full statistics tracking
 - Monthly leaderboard eligibility
 - Honey rewards for solving
 
 ### Trivia
+
 - Daily trivia questions
 - Personal statistics tracking
 - Answer submission and validation
 
 ### Valorant Stats
+
 - View competitive rank and stats
 - Match history tracking
 - Profile updates
@@ -62,37 +67,44 @@ This document outlines the feature breakdown across the three subscription tiers
 - Admin tools for player management and API testing
 
 ### Bounty System
+
 - Post challenge bounties for other users
 - View and claim active bounties
 - Admin tools for bounty management
 
 ### Clips
+
 - Submit video clips for biweekly contests
 - Check submission status and deadlines
 
 ### Moderation
+
 - Thin Ice warning system for violations
 - Spam detection and auto-moderation
 - Profanity filtering
 - Basic message tracking
 
 ### Alert System
+
 - Keyword monitoring and detection
 - Custom alert triggers
 - Real-time notifications
 
 ### Dead Role Management
+
 - Inactive member detection
 - Automatic dead role assignment
 - Activity-based role management
 
 ### Server Engagement
+
 - Birthday announcements and tracking
 - Server booster role automation
 - Bump detection and announcements
 - Member welcome messages
 
 ### Help & Info
+
 - Command help system
 - Interactive category menus
 
@@ -100,16 +112,18 @@ This document outlines the feature breakdown across the three subscription tiers
 
 ## Plus Plan
 
-**Price:** $4.99/month
+**Price:** $14.99/month
 **Target:** Active players, competitive users
 
 > Includes everything in the Free plan, plus:
 
 ### Advanced Gambling
+
 - Blackjack with full hit/stand mechanics
 - Enhanced game visualizations
 
 ### PvP Games
+
 - Rock Paper Scissors duels
 - Higher card challenges
 - Typing speed quickdraw competitions
@@ -119,9 +133,11 @@ This document outlines the feature breakdown across the three subscription tiers
 - Challenge management system
 
 ### High-Stakes Games
+
 - Russian Roulette (all-or-nothing winner-takes-all duels)
 
 ### Valorant Team Features
+
 - Automatic team builder with rank balancing
 - Team formation and management
 - In-house matchmaking system
@@ -129,6 +145,7 @@ This document outlines the feature breakdown across the three subscription tiers
 - Team history tracking
 
 ### Bee Mafia (Social Deduction Game)
+
 - Host Mafia games (Town of Salem style)
 - Full access to all roles and abilities
 - Chaos mode with randomized roles
@@ -136,6 +153,7 @@ This document outlines the feature breakdown across the three subscription tiers
 - Admin debug tools for game management
 
 ### Bobby AI (Conversational AI)
+
 - Full conversational AI powered by GPT
 - Personalized responses based on context
 - Memory system to remember information about users
@@ -143,11 +161,13 @@ This document outlines the feature breakdown across the three subscription tiers
 - Question answering capabilities
 
 ### Activity System
+
 - Daily activity tracking and statistics
 - Activity leaderboards
 - Eligibility for 5,000 Honey daily winner prize
 
 ### King of the Hill
+
 - Challenge the current king for their throne
 - Throne holder status tracking
 - Accept/decline challenge mechanics
@@ -156,7 +176,7 @@ This document outlines the feature breakdown across the three subscription tiers
 
 ## Ultimate Plan
 
-**Price:** $9.99/month
+**Price:** $19.99/month
 **Target:** Power users, dedicated supporters
 
 > Includes everything in the Plus plan, plus:
@@ -164,6 +184,7 @@ This document outlines the feature breakdown across the three subscription tiers
 ### Advanced Moderation & Logging
 
 **Audit Logs:**
+
 - Message deletion logging
 - Message edit history tracking
 - User ban logging
@@ -171,11 +192,13 @@ This document outlines the feature breakdown across the three subscription tiers
 - Full audit trail for server events
 
 **Advanced Auto-Moderation:**
+
 - Channel-specific spam detection rules
 - Custom rate limiting configuration
 - Role-based exemption system
 
 ### Server Benefits
+
 - Custom command prefix for your server
 - Priority support from developers
 - No promotional messages in bot responses
@@ -183,6 +206,7 @@ This document outlines the feature breakdown across the three subscription tiers
 - Beta feature testing privileges
 
 ### Exclusive Perks
+
 - Monthly Honey bonus (10,000)
 - Exclusive badge and role recognition
 - API access for custom integrations
@@ -241,6 +265,7 @@ This document outlines the feature breakdown across the three subscription tiers
 ### Admin Commands Philosophy
 
 Admin commands follow the tier of their parent feature:
+
 - Economy admin commands → Free (Economy is free)
 - Valorant admin commands → Free (Valorant stats are free)
 - Bounty admin commands → Free (Bounties are free)
@@ -255,7 +280,9 @@ const { checkSubscription } = require("../utils/subscriptionUtils");
 
 // Example: Plus-tier command
 if (!(await checkSubscription(userId, "plus"))) {
-  return message.reply("This feature requires a Plus subscription! Upgrade at https://your-site.com");
+  return message.reply(
+    "This feature requires a Plus subscription! Upgrade at https://your-site.com"
+  );
 }
 ```
 
@@ -270,6 +297,7 @@ if (!(await checkSubscription(userId, "plus"))) {
 When free users attempt Plus/Ultimate features, show friendly upgrade prompts with feature benefits rather than error messages.
 
 **Example:**
+
 ```
 ❌ This feature requires Bobby Plus!
 

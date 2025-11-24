@@ -15,6 +15,7 @@ const { TARGET_GUILD_ID } = require('../config/guildConfig');
 // Import utilities
 const { validateValorantRegistration, VALID_REGIONS } = require('../utils/validators');
 const { safeInteractionResponse } = require('../utils/interactionUtils');
+const { checkSubscription, createUpgradeEmbed, TIERS } = require('../utils/subscriptionUtils');
 
 // Import Valorant API modules
 const { getAccountData, getMMRData, getStoredMatches, getMatches } = require('../valorantApi/apiClient');
@@ -870,8 +871,16 @@ module.exports = {
                     }
                 }
 
-                // !createteams command (admin only)
+                // !createteams command (admin only) - PLUS TIER REQUIRED
                 if (command === '!createteams' && message.member.permissions.has('ADMINISTRATOR')) {
+                    // Check subscription tier (guild-based)
+                    const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+                    if (!subCheck.hasAccess) {
+                        const upgradeEmbed = createUpgradeEmbed('Valorant Team Builder', TIERS.PLUS, subCheck.guildTier);
+                        await message.channel.send({ embeds: [upgradeEmbed] });
+                        return;
+                    }
+
                     const args = message.content.split(' ').slice(1);
                     if (args.length === 0) {
                         const helpEmbed = new EmbedBuilder()

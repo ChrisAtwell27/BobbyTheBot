@@ -5,6 +5,7 @@ const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelp
 const Challenge = require('../database/models/Challenge');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
 const { CleanupMap, LimitedMap } = require('../utils/memoryUtils');
+const { checkSubscription, createUpgradeEmbed, TIERS } = require('../utils/subscriptionUtils');
 
 const { insufficientFundsMessage, invalidUsageMessage, processingMessage } = require('../utils/errorMessages');
 
@@ -427,7 +428,7 @@ module.exports = (client) => {
             return message.channel.send({ embeds: [gameList] });
         }
 
-        // House games
+        // House games (FREE TIER)
         if (command === '!flip') {
             playFlipGame(message, args);
         } else if (command === '!roulette') {
@@ -435,8 +436,14 @@ module.exports = (client) => {
         } else if (command === '!dice') {
             playDiceGame(message, args);
         }
-        // PvP games
+        // PvP games (PLUS TIER REQUIRED)
         else if (command === '!rps') {
+            // Check subscription tier for PvP games (guild-based)
+            const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+            if (!subCheck.hasAccess) {
+                const upgradeEmbed = createUpgradeEmbed('PvP Casino Games', TIERS.PLUS, subCheck.guildTier);
+                return message.channel.send({ embeds: [upgradeEmbed] });
+            }
             createChallenge(message, args, 'rps', {
                 title: '⚔️ Rock Paper Scissors Challenge!',
                 color: '#ff6b6b',
@@ -449,6 +456,12 @@ module.exports = (client) => {
                 footer: 'Rock 🪨 | Paper 📄 | Scissors ✂️'
             });
         } else if (command === '!highercard') {
+            // Check subscription tier for PvP games (guild-based)
+            const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+            if (!subCheck.hasAccess) {
+                const upgradeEmbed = createUpgradeEmbed('PvP Casino Games', TIERS.PLUS, subCheck.guildTier);
+                return message.channel.send({ embeds: [upgradeEmbed] });
+            }
             createChallenge(message, args, 'highercard', {
                 title: '🃏 Higher Card Challenge!',
                 color: '#4ecdc4',
@@ -461,6 +474,12 @@ module.exports = (client) => {
                 footer: 'Ace=1, Jack=11, Queen=12, King=13'
             });
         } else if (command === '!quickdraw') {
+            // Check subscription tier for PvP games (guild-based)
+            const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+            if (!subCheck.hasAccess) {
+                const upgradeEmbed = createUpgradeEmbed('PvP Casino Games', TIERS.PLUS, subCheck.guildTier);
+                return message.channel.send({ embeds: [upgradeEmbed] });
+            }
             createChallenge(message, args, 'quickdraw', {
                 title: '⚡ Quick Draw Challenge!',
                 color: '#f39c12',
@@ -473,6 +492,12 @@ module.exports = (client) => {
                 footer: '⚡ Speed and reflexes matter! Word will be random!'
             });
         } else if (command === '!numberduel') {
+            // Check subscription tier for PvP games (guild-based)
+            const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+            if (!subCheck.hasAccess) {
+                const upgradeEmbed = createUpgradeEmbed('PvP Casino Games', TIERS.PLUS, subCheck.guildTier);
+                return message.channel.send({ embeds: [upgradeEmbed] });
+            }
             createChallenge(message, args, 'numberduel', {
                 title: '🎯 Number Duel Challenge!',
                 color: '#9b59b6',
