@@ -345,6 +345,23 @@ if (process.env.MAFIA_WEBHOOK_ENABLED !== 'false') {
   });
 }
 
+// Initialize Subscription Verification API server on port 3002
+let subscriptionServer = null;
+if (process.env.SUBSCRIPTION_API_ENABLED !== 'false') {
+  const SubscriptionServer = require('./api/subscriptionServer');
+  const subscriptionPort = process.env.SUBSCRIPTION_API_PORT || 3002;
+
+  // Wait for client to be ready before starting subscription server
+  client.once('ready', () => {
+    try {
+      subscriptionServer = new SubscriptionServer(client);
+      subscriptionServer.start(subscriptionPort);
+    } catch (error) {
+      console.error('Failed to start Subscription API:', error);
+    }
+  });
+}
+
 // Start the bot
 const { setupVerificationChannel, handleMemberJoin, handleReactionAdd } = require('./verification');
 
@@ -400,6 +417,16 @@ function gracefulShutdown(signal) {
             console.log('Mafia webhook server stopped');
         } catch (error) {
             console.error('Error stopping mafia webhook server:', error);
+        }
+    }
+
+    // Stop subscription server
+    if (subscriptionServer) {
+        try {
+            subscriptionServer.stop();
+            console.log('Subscription server stopped');
+        } catch (error) {
+            console.error('Error stopping subscription server:', error);
         }
     }
 
