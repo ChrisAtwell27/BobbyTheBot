@@ -146,6 +146,83 @@ async function postBounty(message, args) {
     }
 }
 
+// Post a new admin bounty (unlimited, no cost)
+async function postAdminBounty(message, args) {
+    try {
+        // Check permissions
+        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return message.reply(permissionDeniedMessage());
+        }
+
+        // Parse command: !postadminbounty <amount> <description>
+        if (args.length < 2) {
+            return message.reply(invalidUsageMessage('postadminbounty', '!postadminbounty <amount> <description>', '!postadminbounty 1000000 Server Event Grand Prize'));
+        }
+
+        const amount = parseInt(args[0], 10);
+        const description = args.slice(1).join(' ');
+
+        // Validate amount (only check if positive)
+        if (isNaN(amount) || amount <= 0) {
+            return message.reply(`❌ **Invalid Amount**\n\nAmount must be a positive number.`);
+        }
+
+        // Validate description length
+        if (description.length < 10) {
+            return message.reply('❌ **Description Too Short**\n\nBounty description must be at least 10 characters. Be specific!');
+        }
+
+        if (description.length > 500) {
+            return message.reply('❌ **Description Too Long**\n\nBounty description must be under 500 characters.');
+        }
+
+        // Create bounty (NO COST TO ADMIN)
+        const bountyId = generateBountyId();
+        const expiresAt = new Date(Date.now() + BOUNTY_DURATION);
+
+        const bounty = await Bounty.create({
+            bountyId,
+            creatorId: message.author.id,
+            creatorName: message.author.username + ' (ADMIN)', // Mark as admin bounty
+            description,
+            reward: amount,
+            status: 'active',
+            channelId: message.channel.id,
+            guildId: message.guild.id,
+            expiresAt
+        });
+
+        // Send bounty announcement
+        const embed = formatBountyEmbed(bounty);
+        embed.setDescription(`**${description}**\n\n🚨 **ADMIN BOUNTY** 🚨\n✅ Bounty posted! First person to complete this and provide proof wins **🍯${amount.toLocaleString()}**!`);
+        embed.setColor('#ff0000'); // Red for admin bounties
+
+        const buttons = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`claim_bounty_${bountyId}`)
+                .setLabel('Claim Bounty')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🎯')
+        );
+
+        const announcementMsg = await message.channel.send({
+            content: '🚨 **ADMIN BOUNTY POSTED!** 🚨',
+            embeds: [embed],
+            components: [buttons]
+        });
+
+        // Save message ID for future updates
+        bounty.messageId = announcementMsg.id;
+        await bounty.save();
+
+        console.log(`[BOUNTY] Created ADMIN bounty ${bountyId} by ${message.author.username} for ${amount} honey`);
+
+    } catch (error) {
+        console.error('[BOUNTY] Error posting admin bounty:', error);
+        message.reply('❌ Failed to post admin bounty. Please try again.');
+    }
+}
+
 // List active bounties
 async function listBounties(message) {
     try {
@@ -327,9 +404,9 @@ module.exports = (client) => {
 
         // EARLY RETURN: Skip if not a bounty command
         const content = message.content.toLowerCase();
-        if (!content.startsWith('!postbounty') && !content.startsWith('!bounties') &&
-            !content.startsWith('!bounty') && !content.startsWith('!claimbounty') &&
-            !content.startsWith('!cancelbounty')) return;
+        if (!content.startsWith('!postbounty') && !content.startsWith('!postadminbounty') &&
+            !content.startsWith('!bounties') && !content.startsWith('!bounty') &&
+            !content.startsWith('!claimbounty') && !content.startsWith('!cancelbounty')) return;
 
         const args = message.content.slice(1).trim().split(/ +/);
         const command = args.shift().toLowerCase();
@@ -337,6 +414,11 @@ module.exports = (client) => {
         // !postbounty <amount> <description>
         if (command === 'postbounty') {
             await postBounty(message, args);
+        }
+
+        // !postadminbounty <amount> <description>
+        if (command === 'postadminbounty') {
+            await postAdminBounty(message, args);
         }
 
         // !bounties - list all active
