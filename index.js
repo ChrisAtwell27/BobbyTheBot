@@ -231,13 +231,14 @@ console.log('[INIT] ✅ All handlers registered with centralized routers (97% CP
 // This starts IMMEDIATELY so App Platform health checks pass
 const PORT = process.env.PORT || 8080;
 const WEBHOOK_PORT = process.env.MAFIA_WEBHOOK_PORT || 3001;
+const SUBSCRIPTION_PORT = process.env.SUBSCRIPTION_API_PORT || 3002;
 
 const server = http.createServer((req, res) => {
   // Add CORS headers for all requests
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Webhook-Signature',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Webhook-Signature, X-API-Key, X-Discord-Token',
     'Access-Control-Max-Age': '86400'
   };
 
@@ -262,19 +263,29 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Proxy /api/* requests to the webhook API on port 3001
+  // Determine which internal API to proxy to based on path
+  let targetPort = WEBHOOK_PORT;
+  let apiName = 'Webhook API';
+
+  // Route /api/subscription/* to the Subscription API on port 3002
+  if (req.url.startsWith('/api/subscription')) {
+    targetPort = SUBSCRIPTION_PORT;
+    apiName = 'Subscription API';
+  }
+
+  // Proxy /api/* requests to the appropriate internal API
   if (req.url.startsWith('/api/')) {
-    // Forward the request to the webhook API
+    // Forward the request to the target API
     const options = {
       hostname: 'localhost',
-      port: WEBHOOK_PORT,
+      port: targetPort,
       path: req.url,
       method: req.method,
       headers: req.headers
     };
 
     const proxyReq = http.request(options, (proxyRes) => {
-      // Get headers from webhook API but REMOVE any CORS headers to avoid duplicates
+      // Get headers from API but REMOVE any CORS headers to avoid duplicates
       const responseHeaders = { ...proxyRes.headers };
       delete responseHeaders['access-control-allow-origin'];
       delete responseHeaders['access-control-allow-methods'];
@@ -291,15 +302,15 @@ const server = http.createServer((req, res) => {
     });
 
     proxyReq.on('error', (error) => {
-      console.error('Proxy error:', error);
+      console.error(`Proxy error (${apiName}):`, error);
       res.writeHead(502, {
         'Content-Type': 'application/json',
         ...corsHeaders
       });
       res.end(JSON.stringify({
         success: false,
-        error: 'Webhook API not available',
-        message: 'The webhook API server is not running yet. Please wait for Discord client to connect.'
+        error: `${apiName} not available`,
+        message: `The ${apiName} server is not running yet. Please wait for Discord client to connect.`
       }));
     });
 
@@ -312,7 +323,7 @@ const server = http.createServer((req, res) => {
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     error: 'Not Found',
-    hint: 'Use /health for health checks or /api/* for webhook API endpoints'
+    hint: 'Use /health for health checks, /api/subscription/* for subscription API, or /api/* for webhook API endpoints'
   }));
 });
 
