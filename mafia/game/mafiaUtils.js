@@ -24,6 +24,17 @@ function getPlayerTeam(player) {
 }
 
 /**
+ * Check if a player is a mute variant
+ * @param {Object} player - Player object
+ * @returns {boolean} True if player is mute
+ */
+function isMutePlayer(player) {
+    if (!player) return false;
+    const role = ROLES[player.role];
+    return role && role.isMuteBee === true;
+}
+
+/**
  * Get role distribution based on player count
  * @param {number} playerCount - Number of players
  * @param {boolean} randomMode - If true, uses fully random distribution (only wasp count and queen guaranteed)
@@ -372,5 +383,6 @@ module.exports = {
     countVotes,
     determineWinners,
     checkWinConditions,
-    initializePlayerRole
+    initializePlayerRole,
+    isMutePlayer
 };

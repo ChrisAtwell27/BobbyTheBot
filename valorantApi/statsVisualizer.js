@@ -54,7 +54,7 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 36px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('🎯 VALORANT PLAYER PROFILE', 500, 50);
+    ctx.fillText('VALORANT PLAYER PROFILE', 500, 50);
 
     // Subtitle
     ctx.font = '16px Arial';
@@ -109,7 +109,9 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
         ctx.fillStyle = '#ffffff';
         ctx.font = '36px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('👤', 150, 165);
+        // Use initials instead of emoji
+        const initials = accountData.name.substring(0, 2).toUpperCase();
+        ctx.fillText(initials, 150, 165);
     }
 
     // Enhanced player name and info
@@ -120,8 +122,8 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
 
     ctx.font = '16px Arial';
     ctx.fillStyle = '#e0e0e0';
-    ctx.fillText(`🎮 Level ${accountData.account_level} • 🌍 Region: ${accountData.region.toUpperCase()}`, 220, 160);
-    ctx.fillText(`📅 Last Updated: ${new Date(accountData.updated_at).toLocaleDateString()}`, 220, 180);
+    ctx.fillText(`Level ${accountData.account_level} • Region: ${accountData.region.toUpperCase()}`, 220, 160);
+    ctx.fillText(`Last Updated: ${new Date(accountData.updated_at).toLocaleDateString()}`, 220, 180);
 
     // Enhanced current rank section
     if (mmrData && mmrData.current_data) {
@@ -141,7 +143,7 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 24px Arial';
         ctx.textAlign = 'left';
-        ctx.fillText('🏆 CURRENT COMPETITIVE RANK', 80, 250);
+        ctx.fillText('CURRENT COMPETITIVE RANK', 80, 250);
 
         // Load and display rank image
         const rankImage = await loadRankImage(currentRank.currenttier);
@@ -173,7 +175,7 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
             const peakRank = RANK_MAPPING[mmrData.highest_rank.tier] || RANK_MAPPING[0];
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 18px Arial';
-            ctx.fillText('🌟 Peak Rank:', 600, 280);
+            ctx.fillText('Peak Rank:', 600, 280);
 
             const peakRankImage = await loadRankImage(mmrData.highest_rank.tier);
             if (peakRankImage) {
@@ -206,7 +208,7 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 22px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText('📊 RECENT COMPETITIVE MATCHES', 80, 390);
+            ctx.fillText('RECENT COMPETITIVE MATCHES', 80, 390);
 
             const recentMatches = competitiveMatches.slice(0, 6);
             recentMatches.forEach((match, index) => {
@@ -233,46 +235,46 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
                 ctx.lineWidth = 2;
                 ctx.strokeRect(50, y - 25, 900, 50);
 
-                // Match result with enhanced styling using emojis
+                // Match result with text
                 ctx.fillStyle = won ? '#00ff88' : '#ff4444';
                 ctx.font = 'bold 16px Arial';
-                ctx.fillText(won ? '🔱 WIN' : '❌ LOSS', 80, y);
+                ctx.fillText(won ? 'WIN' : 'LOSS', 80, y);
 
-                // Map name with icon
+                // Map name
                 ctx.fillStyle = '#ffffff';
                 ctx.font = 'bold 14px Arial';
-                ctx.fillText(`🗺️ ${match.metadata.map.name}`, 160, y);
+                ctx.fillText(match.metadata.map.name, 160, y);
 
                 // Agent name
-                ctx.fillText(`👤 ${player.agent.name}`, 320, y);
+                ctx.fillText(player.agent.name, 320, y);
 
                 // Enhanced KDA display
                 const kda = `${player.stats.kills}/${player.stats.deaths}/${player.stats.assists}`;
                 const kdRatio = player.stats.deaths > 0 ? (player.stats.kills / player.stats.deaths).toFixed(2) : player.stats.kills.toFixed(2);
-                ctx.fillText(`⚔️ ${kda} (${kdRatio} K/D)`, 450, y);
+                ctx.fillText(`${kda} (${kdRatio} K/D)`, 450, y);
 
                 // Score with color coding
                 const acs = player.stats.score;
                 ctx.fillStyle = acs >= 250 ? '#00ff88' : acs >= 200 ? '#ffff00' : acs >= 150 ? '#ff8800' : '#ff4444';
-                ctx.fillText(`📈 ${acs} ACS`, 600, y);
+                ctx.fillText(`${acs} ACS`, 600, y);
 
                 // Date
                 const matchDate = new Date(match.metadata.started_at);
                 ctx.fillStyle = '#cccccc';
-                ctx.fillText(`📅 ${matchDate.toLocaleDateString()}`, 720, y);
+                ctx.fillText(matchDate.toLocaleDateString(), 720, y);
 
                 // Enhanced headshot percentage
                 const totalShots = player.stats.headshots + player.stats.bodyshots + player.stats.legshots;
                 const hsPercent = totalShots > 0 ? Math.round((player.stats.headshots / totalShots) * 100) : 0;
                 ctx.fillStyle = hsPercent >= 30 ? '#00ff88' : hsPercent >= 20 ? '#ffff00' : '#ff8800';
-                ctx.fillText(`🎯 ${hsPercent}%`, 820, y);
+                ctx.fillText(`HS: ${hsPercent}%`, 820, y);
             });
         } else {
             // No competitive matches found
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 22px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText('📊 NO RECENT COMPETITIVE MATCHES FOUND', 80, 420);
+            ctx.fillText('NO RECENT COMPETITIVE MATCHES FOUND', 80, 420);
 
             ctx.font = '16px Arial';
             ctx.fillStyle = '#cccccc';
