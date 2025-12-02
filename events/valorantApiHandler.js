@@ -47,6 +47,7 @@ const {
   getRankInfo,
   calculateMMR,
 } = require("../valorantApi/rankUtils");
+const {
   getUserRegistration,
   getAllRegisteredUsers,
   addUserRegistration,
