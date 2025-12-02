@@ -333,6 +333,11 @@ async function createTeamEmbed(team) {
         team.targetTime
           ? `**Event Time:** <t:${Math.floor(team.targetTime / 1000)}:R>`
           : "",
+        team.waitlist && team.waitlist.length > 0
+          ? `**Waitlist:** ${team.waitlist
+              .map((u) => u.displayName)
+              .join(", ")}`
+          : "",
       ]
         .filter(Boolean)
         .join("\n")
@@ -361,13 +366,31 @@ function createTeamButtons(teamId, isFull, team = null) {
       .setLabel(isFull ? "Full (5/5)" : `Join (${teamCount}/5)`)
       .setStyle(isFull ? ButtonStyle.Secondary : ButtonStyle.Success)
       .setEmoji(isFull ? "✅" : "➕")
-      .setDisabled(isFull),
+      .setDisabled(
+        isFull && team && team.waitlist && team.waitlist.length >= 5
+      ), // Cap waitlist at 5
     new ButtonBuilder()
       .setCustomId(`valorant_leave_${messageId}`)
       .setLabel("Leave")
       .setStyle(ButtonStyle.Danger)
       .setEmoji("🚪")
   );
+
+  // Add Waitlist buttons if full
+  if (isFull) {
+    row1.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`valorant_joinwaitlist_${messageId}`)
+        .setLabel(`Join Waitlist (${team.waitlist ? team.waitlist.length : 0})`)
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji("⏳"),
+      new ButtonBuilder()
+        .setCustomId(`valorant_leavewaitlist_${messageId}`)
+        .setLabel("Leave Waitlist")
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji("📤")
+    );
+  }
 
   // Add Close button if 2-4 players
   if (teamCount >= 2 && teamCount < 5) {
@@ -547,6 +570,7 @@ module.exports = (client) => {
       name: name,
       createdAt: new Date(),
       targetTime: timerHours ? Date.now() + timerHours * 60 * 60 * 1000 : null,
+      waitlist: [],
     };
 
     try {
@@ -1001,6 +1025,13 @@ module.exports = (client) => {
 
         team.members.splice(memberIndex, 1);
 
+        // Auto-promote from waitlist
+        let promotedUser = null;
+        if (team.waitlist && team.waitlist.length > 0) {
+          promotedUser = team.waitlist.shift();
+          team.members.push(promotedUser);
+        }
+
         try {
           const isFull = getTotalMembers(team) >= 5;
           const updatedEmbed = await createTeamEmbed(team);
@@ -1011,6 +1042,13 @@ module.exports = (client) => {
             files: updatedEmbed.files,
             components: updatedComponents,
           });
+
+          if (promotedUser) {
+            const channel = await client.channels.fetch(team.channelId);
+            await channel.send(
+              `🎉 <@${promotedUser.id}> has been promoted from the waitlist!`
+            );
+          }
 
           // Restart refresh timer if needed
           if (!isFull && !team.resendTimer) {

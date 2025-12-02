@@ -124,8 +124,52 @@ function removeUserRegistration(userId) {
  * @param {string} userId - Discord user ID
  * @returns {Object|null} - User data or null if not found
  */
-function getUserRegistration(userId) {
     return userRegistrations.get(userId) || null;
+}
+
+/**
+ * Finds a user registration by ID, or attempts to find by username/displayName and migrate to ID
+ * @param {User} discordUser - The Discord user object
+ * @returns {Object|null} - User data or null if not found
+ */
+function findOrMigrateUser(discordUser) {
+    // 1. Check if registered by ID (Best case)
+    if (userRegistrations.has(discordUser.id)) {
+        return userRegistrations.get(discordUser.id);
+    }
+
+    // 2. Search for legacy registration by username or display name
+    let foundKey = null;
+    let userData = null;
+
+    for (const [key, data] of userRegistrations.entries()) {
+        // Skip if key is already a snowflake (ID)
+        if (/^\d{17,19}$/.test(key)) continue;
+
+        if (key === discordUser.username || key === discordUser.displayName) {
+            foundKey = key;
+            userData = data;
+            break;
+        }
+    }
+
+    // 3. If found, migrate to ID
+    if (foundKey && userData) {
+        console.log(`[Registration Manager] Migrating user ${foundKey} to ID ${discordUser.id}`);
+        
+        // Remove old entry
+        userRegistrations.delete(foundKey);
+        
+        // Add new entry with ID
+        userRegistrations.set(discordUser.id, userData);
+        
+        // Save changes
+        saveUserRegistrations();
+        
+        return userData;
+    }
+
+    return null;
 }
 
 /**
@@ -226,5 +270,7 @@ module.exports = {
     isUserRegistered,
     updateUserRegistration,
     getRegistrationCount,
+    getRegistrationCount,
+    findOrMigrateUser,
     USERS_FILE
 };
