@@ -644,83 +644,12 @@ module.exports = (client) => {
     }
 
     const success = await client.createValorantTeam({
-        leader: message.author,
-        channel: message.channel,
-        timerHours
+      leader: message.author,
+      channel: message.channel,
+      timerHours,
     });
 
     if (!success) {
-        message.reply('❌ Failed to create team. Try again.').catch(() => { });
-    }
-  });
-
-    try {
-      // Send "Creating team..." message for immediate feedback
-      const loadingMsg = await message.channel.send("⏳ Creating team...");
-
-      const embed = await createTeamEmbed(team);
-      const components = createTeamButtons(teamId, false, team);
-
-      const teamMessage = await message.channel.send({
-        embeds: [embed.embed],
-        files: embed.files,
-        components,
-      });
-
-      // Delete loading message
-      loadingMsg.delete().catch(() => {});
-
-      team.messageId = teamMessage.id;
-      activeTeams.set(teamId, team);
-
-      // Set up periodic refresh
-      team.resendTimer = setTimeout(
-        () => updateTeamMessage(teamId),
-        RESEND_INTERVAL
-      );
-
-      // Set up event start timer if applicable
-      if (team.targetTime) {
-        const timeUntil = team.targetTime - Date.now();
-        if (timeUntil > 0) {
-          team.eventTimer = setTimeout(async () => {
-            const currentTeam = activeTeams.get(teamId);
-            if (currentTeam) {
-              try {
-                const ch = await client.channels.fetch(currentTeam.channelId);
-                const memberPings = [currentTeam.leader, ...currentTeam.members]
-                  .map((m) => `<@${m.id}>`)
-                  .join(" ");
-                await ch.send(
-                  `🚨 **EVENT STARTING NOW!** 🚨\n${memberPings}\n\nGood luck! 🎮`
-                );
-              } catch (err) {
-                console.error("[Team] Event timer error:", err);
-              }
-            }
-          }, timeUntil);
-        }
-      }
-
-      // Auto-disband warning at 25 minutes (only if no timer set, or if timer is far out)
-      // If timer is set, we probably want to keep the team alive until the event
-      if (!team.targetTime) {
-        team.warningTimer = setTimeout(async () => {
-          const currentTeam = activeTeams.get(teamId);
-          if (currentTeam && getTotalMembers(currentTeam) < 5) {
-            try {
-              const ch = await client.channels.fetch(currentTeam.channelId);
-              await ch.send(
-                `⏰ Team will auto-disband in **5 minutes** if not filled! (${getTotalMembers(
-                  currentTeam
-                )}/5)`
-              );
-            } catch {}
-          }
-        }, 25 * 60 * 1000);
-      }
-    } catch (error) {
-      console.error("[Team] Creation error:", error);
       message.reply("❌ Failed to create team. Try again.").catch(() => {});
     }
   });
@@ -781,7 +710,10 @@ module.exports = (client) => {
         interaction.isModalSubmit() &&
         interaction.customId.startsWith("valorant_timer_modal_")
       ) {
-        const teamId = interaction.customId.replace("valorant_timer_modal_", "");
+        const teamId = interaction.customId.replace(
+          "valorant_timer_modal_",
+          ""
+        );
         const fullTeamId = `valorant_team_${teamId}`;
         const team = activeTeams.get(fullTeamId);
 
@@ -796,30 +728,35 @@ module.exports = (client) => {
         const hours = parseFloat(timerInput);
 
         if (isNaN(hours) || hours <= 0) {
-            return safeInteractionResponse(interaction, "reply", {
-                content: "❌ Invalid time. Please enter a positive number of hours (e.g., 0.5 or 2).",
-                ephemeral: true,
-            });
+          return safeInteractionResponse(interaction, "reply", {
+            content:
+              "❌ Invalid time. Please enter a positive number of hours (e.g., 0.5 or 2).",
+            ephemeral: true,
+          });
         }
 
         // Update team timer
-        team.targetTime = Date.now() + (hours * 60 * 60 * 1000);
+        team.targetTime = Date.now() + hours * 60 * 60 * 1000;
 
         // Reset event timer
         if (team.eventTimer) clearTimeout(team.eventTimer);
-        
+
         const timeUntil = team.targetTime - Date.now();
         team.eventTimer = setTimeout(async () => {
-            const currentTeam = activeTeams.get(fullTeamId);
-            if (currentTeam) {
-                try {
-                    const ch = await client.channels.fetch(currentTeam.channelId);
-                    const memberPings = [currentTeam.leader, ...currentTeam.members].map(m => `<@${m.id}>`).join(' ');
-                    await ch.send(`🚨 **EVENT STARTING NOW!** 🚨\n${memberPings}\n\nGood luck! 🎮`);
-                } catch (err) {
-                    console.error('[Team] Event timer error:', err);
-                }
+          const currentTeam = activeTeams.get(fullTeamId);
+          if (currentTeam) {
+            try {
+              const ch = await client.channels.fetch(currentTeam.channelId);
+              const memberPings = [currentTeam.leader, ...currentTeam.members]
+                .map((m) => `<@${m.id}>`)
+                .join(" ");
+              await ch.send(
+                `🚨 **EVENT STARTING NOW!** 🚨\n${memberPings}\n\nGood luck! 🎮`
+              );
+            } catch (err) {
+              console.error("[Team] Event timer error:", err);
             }
+          }
         }, timeUntil);
 
         // Clear warning timer if it exists (since we now have a set time)
