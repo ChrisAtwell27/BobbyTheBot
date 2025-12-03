@@ -120,6 +120,17 @@ module.exports = (client, commandRouter, interactionRouter) => {
         interactionRouter.registerSelectMenu('valorant_', valorantTeamWrapper.interactionHandler);
     }
 
+    // RaW Valorant team handler - !rawteam
+    const rawValorantTeamHandler = require('./rawValorantTeamHandler');
+    const rawValorantTeamWrapper = createHandlerWrapper(client, () => rawValorantTeamHandler);
+    if (rawValorantTeamWrapper.messageHandler) {
+        commandRouter.registerMessageProcessor(rawValorantTeamWrapper.messageHandler);
+    }
+    if (rawValorantTeamWrapper.interactionHandler) {
+        interactionRouter.registerButton('raw_valorant_', rawValorantTeamWrapper.interactionHandler);
+        interactionRouter.registerSelectMenu('raw_valorant_', rawValorantTeamWrapper.interactionHandler);
+    }
+
     // Russian roulette handler - !roulette, !spin
     registerCommandHandler(client, commandRouter, interactionRouter, './russianRouletteHandler');
 
