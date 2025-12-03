@@ -613,6 +613,18 @@ module.exports = (client) => {
                 await ch.send(
                   `🚨 **EVENT STARTING NOW!** 🚨\n${memberPings}\n\nGood luck! 🎮`
                 );
+
+                // Auto-cleanup 10 minutes AFTER event starts
+                if (currentTeam.deleteTimer)
+                  clearTimeout(currentTeam.deleteTimer);
+                currentTeam.deleteTimer = setTimeout(() => {
+                  activeTeams.delete(teamId);
+                  // Try to fetch message to delete it
+                  ch.messages
+                    .fetch(currentTeam.messageId)
+                    .then((msg) => msg.delete())
+                    .catch(() => {});
+                }, 10 * 60 * 1000);
               } catch (err) {
                 console.error("[Team] Event timer error:", err);
               }
@@ -777,6 +789,17 @@ module.exports = (client) => {
               await ch.send(
                 `🚨 **EVENT STARTING NOW!** 🚨\n${memberPings}\n\nGood luck! 🎮`
               );
+
+              // Auto-cleanup 10 minutes AFTER event starts
+              if (currentTeam.deleteTimer)
+                clearTimeout(currentTeam.deleteTimer);
+              currentTeam.deleteTimer = setTimeout(() => {
+                activeTeams.delete(fullTeamId);
+                ch.messages
+                  .fetch(currentTeam.messageId)
+                  .then((msg) => msg.delete())
+                  .catch(() => {});
+              }, 10 * 60 * 1000);
             } catch (err) {
               console.error("[Team] Event timer error:", err);
             }
@@ -983,11 +1006,13 @@ module.exports = (client) => {
               await channel.send({ embeds: [celebrationEmbed] });
             } catch {}
 
-            // Auto-cleanup after 10 minutes
-            team.deleteTimer = setTimeout(() => {
-              activeTeams.delete(fullTeamId);
-              interaction.message?.delete().catch(() => {});
-            }, 10 * 60 * 1000);
+            // Auto-cleanup after 10 minutes ONLY if no future event is scheduled
+            if (!team.targetTime || team.targetTime < Date.now()) {
+              team.deleteTimer = setTimeout(() => {
+                activeTeams.delete(fullTeamId);
+                interaction.message?.delete().catch(() => {});
+              }, 10 * 60 * 1000);
+            }
 
             // Save to history
             saveTeamToHistory({
