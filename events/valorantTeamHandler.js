@@ -7,7 +7,7 @@ const {
   StringSelectMenuBuilder,
 } = require("discord.js");
 const { createCanvas } = require("canvas");
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
+
 const { LimitedMap } = require("../utils/memoryUtils");
 const {
   loadImageFromURL,
@@ -666,7 +666,9 @@ module.exports = (client) => {
   // Message handler for team creation
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
-    if (message.guild?.id !== TARGET_GUILD_ID) return;
+
+    // Check if message is in a guild
+    if (!message.guild) return;
 
     const valorantRoleMention = `<@&${VALORANT_ROLE_ID}>`;
     const isCommand = message.content.toLowerCase() === "!valorantteam";

@@ -2,9 +2,9 @@ const { getConvexClient } = require("../database/convexClient");
 const { api } = require("../convex/_generated/api");
 const { updateBalance } = require("../database/helpers/convexEconomyHelpers");
 const { topEggRoleId } = require("../data/config");
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
-
-const WORDLE_CHANNEL_ID = "1382796270036586608";
+const { getSetting } = require("../utils/settingsManager");
+// TARGET_GUILD_ID removed
+// WORDLE_CHANNEL_ID removed (dynamic)
 
 // Honey rewards based on score
 const HONEY_REWARDS = {
@@ -19,7 +19,13 @@ const HONEY_REWARDS = {
 
 // Add a score for a user and award honey
 // skipHoney: if true, don't award honey (for backfill operations)
-async function addScore(userId, score, timestamp = null, skipHoney = false) {
+async function addScore(
+  guildId,
+  userId,
+  score,
+  timestamp = null,
+  skipHoney = false
+) {
   try {
     const client = getConvexClient();
     if (!client)
@@ -29,7 +35,7 @@ async function addScore(userId, score, timestamp = null, skipHoney = false) {
 
     // Add score using Convex mutation
     await client.mutation(api.wordle.addScore, {
-      guildId: TARGET_GUILD_ID,
+      guildId: guildId,
       userId,
       score,
       honeyAwarded,
@@ -38,7 +44,7 @@ async function addScore(userId, score, timestamp = null, skipHoney = false) {
 
     // Award honey to user's balance (only if not skipping)
     if (!skipHoney && honeyAwarded > 0) {
-      await updateBalance(TARGET_GUILD_ID, userId, honeyAwarded);
+      await updateBalance(guildId, userId, honeyAwarded);
     }
 
     return { success: true, honeyAwarded };
@@ -145,7 +151,7 @@ async function forceEndCurrentMonth(channel) {
 
     // Check if we've already announced this month's winner
     const existingWinner = await client.query(api.wordle.getMonthlyWinner, {
-      guildId: TARGET_GUILD_ID,
+      guildId: channel.guild.id,
       month: currentMonthStr,
     });
 
@@ -158,7 +164,7 @@ async function forceEndCurrentMonth(channel) {
 
     // Calculate stats for current month
     const monthBounds = getMonthBounds(currentMonthStr);
-    const stats = await calculateStats(monthBounds);
+    const stats = await calculateStats(channel.guild.id, monthBounds);
 
     if (Object.keys(stats).length === 0) {
       return {
@@ -199,7 +205,7 @@ async function forceEndCurrentMonth(channel) {
 
     // Save monthly winner
     await client.mutation(api.wordle.saveMonthlyWinner, {
-      guildId: TARGET_GUILD_ID,
+      guildId: channel.guild.id,
       month: currentMonthStr,
       winner: {
         userId: winnerId,
@@ -300,7 +306,7 @@ async function checkAndAnnounceMonthlyWinner(channel) {
 
     // Check if we've already announced this month's winner
     const existingWinner = await client.query(api.wordle.getMonthlyWinner, {
-      guildId: TARGET_GUILD_ID,
+      guildId: channel.guild.id,
       month: lastMonthStr,
     });
 
@@ -310,7 +316,7 @@ async function checkAndAnnounceMonthlyWinner(channel) {
 
     // Calculate stats for last month
     const monthBounds = getMonthBounds(lastMonthStr);
-    const stats = await calculateStats(monthBounds);
+    const stats = await calculateStats(channel.guild.id, monthBounds);
 
     if (Object.keys(stats).length === 0) {
       return false; // No games played last month
@@ -348,7 +354,7 @@ async function checkAndAnnounceMonthlyWinner(channel) {
 
     // Save monthly winner
     await client.mutation(api.wordle.saveMonthlyWinner, {
-      guildId: TARGET_GUILD_ID,
+      guildId: channel.guild.id,
       month: lastMonthStr,
       winner: {
         userId: winnerId,
@@ -432,14 +438,14 @@ async function checkAndAnnounceMonthlyWinner(channel) {
 
 // Calculate statistics for leaderboard
 // timeFilter: optional object with { start: Date, end: Date } to filter by time range
-async function calculateStats(timeFilter = null) {
+async function calculateStats(guildId, timeFilter = null) {
   try {
     const client = getConvexClient();
     if (!client) return {};
 
     // Get all user Wordle documents for the guild
     const allUserWordles = await client.query(api.wordle.getAllScores, {
-      guildId: TARGET_GUILD_ID,
+      guildId: guildId,
     });
     const result = {};
 
@@ -488,11 +494,15 @@ async function calculateStats(timeFilter = null) {
 module.exports = (client) => {
   // Listen for messages from the Wordle bot
   client.on("messageCreate", async (message) => {
-    // Only run in target guild
-    if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+    // Only run in guilds
+    if (!message.guild) return;
 
-    // Only process messages in the Wordle channel
-    if (message.channel.id !== WORDLE_CHANNEL_ID) return;
+    // Check if this is the correct channel
+    const wordleChannelId = await getSetting(
+      message.guild.id,
+      "channels.wordle"
+    );
+    if (message.channel.id !== wordleChannelId) return;
 
     // Ignore messages that say "{user} was playing"
     if (message.content.includes("was playing")) return;
@@ -541,7 +551,11 @@ module.exports = (client) => {
         }
 
         if (member) {
-          const scoreResult = await addScore(member.id, result.score);
+          const scoreResult = await addScore(
+            message.guild.id,
+            member.id,
+            result.score
+          );
           if (scoreResult.success) {
             console.log(
               `✓ Saved: ${member.user.username} (${member.displayName}) - ${result.score}/6 | +${scoreResult.honeyAwarded} honey`
@@ -592,7 +606,10 @@ module.exports = (client) => {
 
       // After processing scores, send the MONTHLY leaderboard
       const currentMonthBounds = getMonthBounds();
-      const monthlyStats = await calculateStats(currentMonthBounds);
+      const monthlyStats = await calculateStats(
+        message.guild.id,
+        currentMonthBounds
+      );
 
       if (Object.keys(monthlyStats).length > 0) {
         // Sort users by weighted score (lower is better)
@@ -660,7 +677,7 @@ module.exports = (client) => {
 
     // Handle !wordletop command
     if (message.content.toLowerCase() === "!wordletop") {
-      const stats = await calculateStats();
+      const stats = await calculateStats(message.guild.id);
 
       if (Object.keys(stats).length === 0) {
         return await message.channel.send("No Wordle scores recorded yet!");
@@ -735,7 +752,7 @@ module.exports = (client) => {
       const now = new Date();
       const oneWeekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
       const timeFilter = { start: oneWeekAgo, end: now };
-      const stats = await calculateStats(timeFilter);
+      const stats = await calculateStats(message.guild.id, timeFilter);
 
       if (Object.keys(stats).length === 0) {
         return await message.channel.send(

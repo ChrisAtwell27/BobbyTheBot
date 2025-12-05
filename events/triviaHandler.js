@@ -4,9 +4,10 @@ const cron = require("node-cron");
 // const TriviaSession = require("../database/models/TriviaSession"); // REMOVED: Migrated to Convex
 const { getConvexClient } = require("../database/convexClient");
 const { api } = require("../convex/_generated/api");
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
+// TARGET_GUILD_ID removed
+const { getSetting } = require("../utils/settingsManager");
 
-const TRIVIA_CHANNEL_ID = "701308905434644512"; // #General
+// TRIVIA_CHANNEL_ID removed (dynamic)
 const CATEGORY_VIDEO_GAMES = 15;
 
 // Decode HTML entities
@@ -35,11 +36,11 @@ function decodeHTML(text) {
 }
 
 // Get or create session token
-async function getSessionToken() {
+async function getSessionToken(guildId) {
   try {
     const client = getConvexClient();
     let session = await client.query(api.trivia.getSession, {
-      guildId: TARGET_GUILD_ID,
+      guildId: guildId,
     });
 
     // Check if token exists and isn't expired (6 hours)
@@ -49,7 +50,7 @@ async function getSessionToken() {
     if (session && session.sessionToken && now - session.lastUsed < sixHours) {
       // Update last used time - using updateSessionToken or upsertSession
       await client.mutation(api.trivia.updateSessionToken, {
-        guildId: TARGET_GUILD_ID,
+        guildId: guildId,
         sessionToken: session.sessionToken,
       });
       return session.sessionToken;
@@ -66,7 +67,7 @@ async function getSessionToken() {
 
       // Create or update session with new token
       await client.mutation(api.trivia.upsertSession, {
-        guildId: TARGET_GUILD_ID,
+        guildId: guildId,
         sessionToken: newToken,
       });
 
@@ -83,7 +84,7 @@ async function getSessionToken() {
 }
 
 // Reset session token if it's exhausted
-async function resetSessionToken(token) {
+async function resetSessionToken(guildId, token) {
   try {
     console.log("[TRIVIA] Resetting exhausted token...");
     const response = await axios.get(
@@ -94,7 +95,7 @@ async function resetSessionToken(token) {
       const client = getConvexClient();
       // Update last used time
       await client.mutation(api.trivia.updateSessionToken, {
-        guildId: TARGET_GUILD_ID,
+        guildId: guildId,
         sessionToken: token,
       });
 
@@ -109,11 +110,11 @@ async function resetSessionToken(token) {
 }
 
 // Fetch a trivia question
-async function fetchTriviaQuestion(retryCount = 0) {
+async function fetchTriviaQuestion(guildId, retryCount = 0) {
   const MAX_RETRIES = 3;
 
   try {
-    const token = await getSessionToken();
+    const token = await getSessionToken(guildId);
     if (!token) {
       console.error("[TRIVIA] No valid session token available");
       return null;
@@ -145,8 +146,8 @@ async function fetchTriviaQuestion(retryCount = 0) {
           return null;
         }
         console.error("[TRIVIA] Token not found, getting new token...");
-        await getSessionToken();
-        return fetchTriviaQuestion(retryCount + 1); // Retry with new token
+        await getSessionToken(guildId);
+        return fetchTriviaQuestion(guildId, retryCount + 1); // Retry with new token
 
       case 4: // Token empty (all questions used)
         if (retryCount >= MAX_RETRIES) {
@@ -154,8 +155,8 @@ async function fetchTriviaQuestion(retryCount = 0) {
           return null;
         }
         console.log("[TRIVIA] Token exhausted, resetting...");
-        await resetSessionToken(token);
-        return fetchTriviaQuestion(retryCount + 1); // Retry after reset
+        await resetSessionToken(guildId, token);
+        return fetchTriviaQuestion(guildId, retryCount + 1); // Retry after reset
 
       case 5: // Rate limit
         console.error("[TRIVIA] Rate limited, please wait");
@@ -174,36 +175,25 @@ async function fetchTriviaQuestion(retryCount = 0) {
   }
 }
 
-const { getSetting } = require("../utils/settingsManager");
+// Removed import line since it was moved to top
 
 // ... imports ...
 
-// Post daily trivia question
-async function postDailyTrivia(client) {
+// Post daily trivia question for a specific guild
+async function postDailyTriviaForGuild(client, guildId, channelId) {
   try {
-    // Check if trivia is enabled
-    const isEnabled = await getSetting(
-      TARGET_GUILD_ID,
-      "features.trivia",
-      true
-    );
-    if (!isEnabled) {
-      console.log("[TRIVIA] Trivia disabled in settings. Skipping daily post.");
-      return;
-    }
-
-    console.log("[TRIVIA] Posting daily trivia question...");
-
-    const channel = await client.channels.fetch(TRIVIA_CHANNEL_ID);
+    const channel = await client.channels.fetch(channelId).catch(() => null);
     if (!channel) {
-      console.error("[TRIVIA] Could not find trivia channel");
+      console.error(
+        `[TRIVIA] Could not find trivia channel ${channelId} for guild ${guildId}`
+      );
       return;
     }
 
     // Check if there's already an unanswered question today
     const convexClient = getConvexClient();
     const session = await convexClient.query(api.trivia.getSession, {
-      guildId: TARGET_GUILD_ID,
+      guildId: guildId,
     });
 
     if (session && session.activeQuestion && !session.activeQuestion.answered) {
@@ -211,19 +201,20 @@ async function postDailyTrivia(client) {
         new Date(session.activeQuestion.postedAt).toDateString() ===
         new Date().toDateString();
       if (postedToday) {
-        console.log("[TRIVIA] Question already posted today");
+        console.log(
+          `[TRIVIA] Question already posted today for guild ${guildId}`
+        );
         return;
       }
     }
 
-    const question = await fetchTriviaQuestion();
+    const question = await fetchTriviaQuestion(guildId);
     if (!question) {
-      await channel.send(
-        "❌ Failed to fetch today's trivia question. Will try again later."
-      );
+      // Quiet fail or notify admin? Quiet for now
       return;
     }
 
+    // ... processing ...
     // Decode HTML entities
     const decodedQuestion = decodeHTML(question.question);
     const decodedCorrectAnswer = decodeHTML(question.correct_answer);
@@ -294,41 +285,63 @@ async function postDailyTrivia(client) {
       answered: false,
     };
 
-    // We update session with the new question and increment totalQuestions
-    // We first need the previous totalQuestions if session exists, else 0
-    // upsertSession handles passing optional args to patch/insert
-
     let totalQuestions = 1;
     if (session) {
       totalQuestions = (session.totalQuestions || 0) + 1;
     }
 
     await convexClient.mutation(api.trivia.upsertSession, {
-      guildId: TARGET_GUILD_ID,
+      guildId: guildId,
       activeQuestion: activeQuestion,
       totalQuestions: totalQuestions,
     });
 
-    console.log("[TRIVIA] Daily trivia posted successfully");
+    console.log(
+      `[TRIVIA] Daily trivia posted successfully for guild ${guildId}`
+    );
   } catch (error) {
-    console.error("[TRIVIA] Error posting daily trivia:", error);
+    console.error(
+      `[TRIVIA] Error posting daily trivia for guild ${guildId}:`,
+      error
+    );
   }
 }
 
-// Reveal the answer to today's trivia
-async function revealAnswer(client) {
+// Iterate all guilds and post trivia
+async function postDailyTrivia(client) {
   try {
-    console.log("[TRIVIA] Revealing trivia answer...");
+    const convex = getConvexClient();
+    if (!convex) return;
 
-    const channel = await client.channels.fetch(TRIVIA_CHANNEL_ID);
-    if (!channel) {
-      console.error("[TRIVIA] Could not find trivia channel");
-      return;
+    const servers = await convex.query(api.servers.getAllServers);
+
+    for (const server of servers) {
+      const guildId = server.guildId;
+
+      // Check if trivia is enabled
+      const isEnabled = await getSetting(guildId, "features.trivia", true);
+      if (!isEnabled) continue;
+
+      // Get trivia channel
+      const channelId = await getSetting(guildId, "channels.trivia");
+      if (!channelId) continue;
+
+      await postDailyTriviaForGuild(client, guildId, channelId);
     }
+  } catch (err) {
+    console.error("[TRIVIA] Error in postDailyTrivia cron:", err);
+  }
+}
+
+// Reveal answer for a specific guild
+async function revealAnswerForGuild(client, guildId, channelId) {
+  try {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) return;
 
     const convexClient = getConvexClient();
     const session = await convexClient.query(api.trivia.getSession, {
-      guildId: TARGET_GUILD_ID,
+      guildId: guildId,
     });
 
     if (
@@ -336,7 +349,6 @@ async function revealAnswer(client) {
       !session.activeQuestion ||
       session.activeQuestion.answered
     ) {
-      console.log("[TRIVIA] No active question to reveal");
       return;
     }
 
@@ -376,13 +388,35 @@ async function revealAnswer(client) {
     };
 
     await convexClient.mutation(api.trivia.updateActiveQuestion, {
-      guildId: TARGET_GUILD_ID,
+      guildId: guildId,
       activeQuestion: updatedActiveQuestion,
     });
-
-    console.log("[TRIVIA] Answer revealed successfully");
   } catch (error) {
-    console.error("[TRIVIA] Error revealing answer:", error);
+    console.error(
+      `[TRIVIA] Error revealing answer for guild ${guildId}:`,
+      error
+    );
+  }
+}
+
+// Iterate all guilds and reveal answer
+async function revealAnswer(client) {
+  try {
+    const convex = getConvexClient();
+    if (!convex) return;
+
+    const servers = await convex.query(api.servers.getAllServers);
+
+    for (const server of servers) {
+      const guildId = server.guildId;
+      // Get trivia channel
+      const channelId = await getSetting(guildId, "channels.trivia");
+      if (!channelId) continue;
+
+      await revealAnswerForGuild(client, guildId, channelId);
+    }
+  } catch (err) {
+    console.error("[TRIVIA] Error in revealAnswer cron:", err);
   }
 }
 
@@ -420,8 +454,12 @@ module.exports = (client) => {
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
 
-    // Only run in target guild
-    if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+    // Only run in guilds
+    if (!message.guild) return;
+
+    // Get enabled status and channel setting
+    const guildId = message.guild.id;
+    const channelId = await getSetting(guildId, "channels.trivia");
 
     // EARLY RETURN: Skip if not a trivia command
     const command = message.content.toLowerCase();
@@ -438,12 +476,12 @@ module.exports = (client) => {
         );
       }
 
-      if (message.channel.id !== TRIVIA_CHANNEL_ID) {
+      if (!channelId || message.channel.id !== channelId) {
         return message.reply(
-          `Trivia questions can only be posted in <#${TRIVIA_CHANNEL_ID}>!`
+          `Trivia questions can only be posted in the configured trivia channel!`
         );
       }
-      await postDailyTrivia(client);
+      await postDailyTriviaForGuild(client, guildId, channelId);
     }
 
     // Manual answer reveal (for testing - Admin only)
@@ -457,12 +495,12 @@ module.exports = (client) => {
         );
       }
 
-      if (message.channel.id !== TRIVIA_CHANNEL_ID) {
+      if (!channelId || message.channel.id !== channelId) {
         return message.reply(
-          `Trivia commands can only be used in <#${TRIVIA_CHANNEL_ID}>!`
+          `Trivia commands can only be used in the configured trivia channel!`
         );
       }
-      await revealAnswer(client);
+      await revealAnswerForGuild(client, guildId, channelId);
     }
 
     // Show current question (Admin only)
@@ -479,7 +517,7 @@ module.exports = (client) => {
       try {
         const convexClient = getConvexClient();
         const session = await convexClient.query(api.trivia.getSession, {
-          guildId: TARGET_GUILD_ID,
+          guildId: guildId,
         });
 
         if (
@@ -544,7 +582,7 @@ module.exports = (client) => {
       try {
         const convexClient = getConvexClient();
         const session = await convexClient.query(api.trivia.getSession, {
-          guildId: TARGET_GUILD_ID,
+          guildId: guildId,
         });
 
         if (!session) {

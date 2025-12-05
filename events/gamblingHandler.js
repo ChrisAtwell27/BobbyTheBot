@@ -17,7 +17,7 @@ const {
 // const Challenge = require('../database/models/Challenge'); // REMOVED: Migrated to Convex
 const { getConvexClient } = require("../database/convexClient");
 const { api } = require("../convex/_generated/api");
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
+// TARGET_GUILD_ID removed
 const { CleanupMap, LimitedMap } = require("../utils/memoryUtils");
 const {
   checkSubscription,
@@ -53,8 +53,7 @@ async function loadActiveChallenges() {
   try {
     const client = getConvexClient();
     const activeChallenges = await client.query(
-      api.challenges.getAllChallenges,
-      { guildId: TARGET_GUILD_ID }
+      api.challenges.getAllActiveChallenges
     );
     console.log(
       `[GAMBLING] Loaded ${activeChallenges.length} active challenges from database`
@@ -129,7 +128,7 @@ async function createChallenge(message, args, type, options) {
   try {
     const client = getConvexClient();
     await client.mutation(api.challenges.createChallenge, {
-      guildId: TARGET_GUILD_ID,
+      guildId: guildId,
       challengeId,
       type,
       creator: userId,
@@ -437,8 +436,8 @@ module.exports = (client) => {
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
 
-    // Only run in target guild
-    if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+    // Only respond in guilds
+    if (!message.guild) return;
 
     const args = message.content.split(" ");
     const command = args[0].toLowerCase();

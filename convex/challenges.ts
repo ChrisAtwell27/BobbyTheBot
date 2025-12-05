@@ -34,6 +34,22 @@ export const getAllChallenges = query({
 });
 
 /**
+ * Get ALL active challenges (Global)
+ */
+export const getAllActiveChallenges = query({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const challenges = await ctx.db
+      .query("challenges")
+      .withIndex("by_expiry")
+      .filter((q) => q.gt(q.field("expiresAt"), now))
+      .collect();
+    return challenges;
+  },
+});
+
+/**
  * Get expired challenges (for cleanup)
  */
 export const getExpiredChallenges = query({

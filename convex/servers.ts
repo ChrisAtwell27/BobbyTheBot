@@ -33,6 +33,17 @@ export const getHouseBalance = query({
   },
 });
 
+/**
+ * Get all servers (for global cron jobs)
+ */
+export const getAllServers = query({
+  args: {},
+  handler: async (ctx) => {
+    const servers = await ctx.db.query("servers").collect();
+    return servers;
+  },
+});
+
 // ============================================================================
 // MUTATIONS
 // ============================================================================

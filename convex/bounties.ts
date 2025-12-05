@@ -85,6 +85,22 @@ export const getExpiredBounties = query({
   },
 });
 
+/**
+ * Get ALL active bounties that have expired (Global)
+ */
+export const getAllExpiredBounties = query({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const bounties = await ctx.db
+      .query("bounties")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .filter((q) => q.lt(q.field("expiresAt"), now))
+      .collect();
+    return bounties;
+  },
+});
+
 // ============================================================================
 // MUTATIONS
 // ============================================================================
@@ -207,6 +223,28 @@ export const expireBounties = mutation({
     }
 
     return expiredBounties.length;
+  },
+});
+
+/**
+ * Expire a single bounty by ID
+ */
+export const expireBounty = mutation({
+  args: { bountyId: v.string() },
+  handler: async (ctx, args) => {
+    const bounty = await ctx.db
+      .query("bounties")
+      .withIndex("by_bounty_id", (q) => q.eq("bountyId", args.bountyId))
+      .first();
+
+    if (bounty && bounty.status === "active") {
+      await ctx.db.patch(bounty._id, {
+        status: "expired",
+        completedAt: Date.now(),
+      });
+      return true;
+    }
+    return false;
   },
 });
 

@@ -1,29 +1,21 @@
 const { EmbedBuilder } = require("discord.js");
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
+
 const { CleanupMap } = require("../utils/memoryUtils");
 const { getSetting } = require("../utils/settingsManager");
 
-module.exports = (client, alertKeywords, alertChannelId) => {
+module.exports = (client, alertKeywords, legacyAlertChannelId) => {
   // Rate limiting: Track alerts to prevent spam with automatic cleanup
   // CleanupMap automatically removes expired entries and auto-registers for graceful shutdown
   const COOLDOWN_MS = 60000; // 1 minute cooldown per user per keyword
   const alertCooldowns = new CleanupMap(COOLDOWN_MS, 60000); // Auto-cleanup every 1 minute
 
   // Validation on initialization
-  let isValidConfig = true;
-
+  // We allow alertChannelId to be missing here if it's configured dynamically per guild
   if (!Array.isArray(alertKeywords) || alertKeywords.length === 0) {
     console.error(
       "⚠️ Alert Handler: alertKeywords must be a non-empty array. Handler disabled."
     );
-    isValidConfig = false;
-  }
-
-  if (!alertChannelId) {
-    console.error(
-      "⚠️ Alert Handler: alertChannelId is not configured. Handler disabled."
-    );
-    isValidConfig = false;
+    return;
   }
 
   console.log(
@@ -31,16 +23,10 @@ module.exports = (client, alertKeywords, alertChannelId) => {
   );
 
   client.on("messageCreate", async (message) => {
-    // Skip if config is invalid
-    if (!isValidConfig) return;
-
     // Ignore messages from bots
     if (message.author.bot) return;
 
-    // Only run in target guild
-    if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
-
-    // Ignore DMs
+    // Only run in guilds
     if (!message.guild) return;
 
     // Ignore empty messages
@@ -51,10 +37,22 @@ module.exports = (client, alertKeywords, alertChannelId) => {
     // Default to true if not specified (legacy behavior)
     if (features.alerts === false) return;
 
-    // Get alert channel (check on each message in case it was created after bot startup)
+    // Get alert channel (prefer dynamic setting, fallback to legacy config)
+    const alertChannelId = await getSetting(
+      message.guild.id,
+      "channels.alerts",
+      legacyAlertChannelId
+    );
+
+    if (!alertChannelId) {
+      // Silent return if no channel configured
+      return;
+    }
+
     const alertChannel = client.channels.cache.get(alertChannelId);
     if (!alertChannel) {
-      console.error(`❌ Alert channel with ID ${alertChannelId} not found.`);
+      // Channel configured but not found (deleted? bot lacks access?)
+      // console.warn(`❌ Alert channel with ID ${alertChannelId} not found in guild ${message.guild.name}.`);
       return;
     }
 

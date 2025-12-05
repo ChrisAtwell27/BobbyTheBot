@@ -1,13 +1,13 @@
 const cron = require("node-cron");
 const { getConvexClient } = require("../database/convexClient");
 const { api } = require("../convex/_generated/api");
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
 
 // Remove direct instantiation to prevent startup crash if env var is missing
 // const client = new ConvexHttpClient(process.env.CONVEX_URL);
+// Update Role ID should be dynamic or configured per guild, but for now keeping hardcoded if global or need config migration
 const UPDATES_ROLE_ID = "1428572559523188746";
 
-module.exports = (discordClient, announcementsChannelId) => {
+module.exports = (discordClient) => {
   const client = getConvexClient();
 
   // Handle !birthday command
@@ -15,8 +15,8 @@ module.exports = (discordClient, announcementsChannelId) => {
     // Ignore bot messages
     if (message.author.bot) return;
 
-    // Only run in target guild
-    if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+    // Only run in a guild
+    if (!message.guild) return;
 
     // EARLY RETURN: Skip if not a birthday command
     if (!message.content.toLowerCase().startsWith("!birthday")) return;
@@ -31,7 +31,7 @@ module.exports = (discordClient, announcementsChannelId) => {
       if (args.length === 1) {
         try {
           const user = await client.query(api.users.getUser, {
-            guildId: TARGET_GUILD_ID,
+            guildId: message.guild.id, // Use dynamic guild ID
             userId: message.author.id,
           });
 
@@ -114,7 +114,7 @@ module.exports = (discordClient, announcementsChannelId) => {
       try {
         // Update or create user with birthday
         await client.mutation(api.users.setBirthday, {
-          guildId: TARGET_GUILD_ID,
+          guildId: message.guild.id, // Dynamic guild ID
           userId: message.author.id,
           month,
           day,
@@ -149,59 +149,79 @@ module.exports = (discordClient, announcementsChannelId) => {
       const currentDay = today.getDate();
       const currentYear = today.getFullYear();
 
-      // Find users with birthdays today who haven't been wished this year
-      const users = await client.query(api.users.getBirthdaysToday, {
-        guildId: TARGET_GUILD_ID,
-        month: currentMonth,
-        day: currentDay,
-        currentYear: currentYear,
-      });
-
-      if (!users || users.length === 0) {
-        console.log("[BIRTHDAY] No birthdays today.");
-        return;
-      }
-
-      console.log(`[BIRTHDAY] Found ${users.length} birthday(s) today!`);
-
-      // Get announcements channel
-      const announcementsChannel = await discordClient.channels.fetch(
-        announcementsChannelId
-      );
-
-      if (!announcementsChannel) {
-        console.error("[BIRTHDAY] Could not find announcements channel!");
-        return;
-      }
-
-      // Send birthday messages
-      for (const user of users) {
+      // Iterate through all guilds the bot is in
+      for (const guild of discordClient.guilds.cache.values()) {
         try {
-          const year = user.birthday?.year || 2000; // Fallback should not happen due to filters
-          const age = currentYear - year;
-
-          await announcementsChannel.send({
-            content: `<@&${UPDATES_ROLE_ID}> Happy Birthday <@${user.userId}>! 🎉🎂🎈\nWishing you an amazing ${age}th birthday!`,
-            allowedMentions: {
-              roles: [UPDATES_ROLE_ID],
-              users: [user.userId],
-            },
+          // Find users with birthdays today for this guild
+          const users = await client.query(api.users.getBirthdaysToday, {
+            guildId: guild.id,
+            month: currentMonth,
+            day: currentDay,
+            currentYear: currentYear,
           });
 
-          // Update lastBirthdayWish to current year
-          await client.mutation(api.users.markBirthdayWished, {
-            guildId: TARGET_GUILD_ID,
-            userId: user.userId,
-            year: currentYear,
-          });
+          if (!users || users.length === 0) {
+            // console.log(`[BIRTHDAY] No birthdays today for guild ${guild.name}.`);
+            continue;
+          }
 
           console.log(
-            `[BIRTHDAY] Sent birthday wish to user ${user.userId} (age ${age})`
+            `[BIRTHDAY] Found ${users.length} birthday(s) today in ${guild.name}!`
           );
-        } catch (error) {
+
+          // TODO: Get dynamic announcements channel from settings
+          // For now, falling back to a default logic or checking if we can find one
+          // Accepting the passed announcementsChannelId might not work if it differs per guild
+          // The original index.js passed a single ID. We should probably look for a channel named 'announcements' or similar if not configured.
+
+          // Simplistic approach: Try to find a channel named 'announcements' or 'general'
+          const announcementsChannel = guild.channels.cache.find(
+            (c) =>
+              c.name.includes("announcements") || c.name.includes("general")
+          );
+
+          if (!announcementsChannel || !announcementsChannel.isTextBased()) {
+            console.error(
+              `[BIRTHDAY] Could not find announcements channel in ${guild.name}!`
+            );
+            continue;
+          }
+
+          // Send birthday messages
+          for (const user of users) {
+            try {
+              const year = user.birthday?.year || 2000;
+              const age = currentYear - year;
+
+              await announcementsChannel.send({
+                content: `<@&${UPDATES_ROLE_ID}> Happy Birthday <@${user.userId}>! 🎉🎂🎈\nWishing you an amazing ${age}th birthday!`,
+                allowedMentions: {
+                  roles: [UPDATES_ROLE_ID], // Note: Role needs to exist in this guild!
+                  users: [user.userId],
+                },
+              });
+
+              // Update lastBirthdayWish to current year
+              await client.mutation(api.users.markBirthdayWished, {
+                guildId: guild.id,
+                userId: user.userId,
+                year: currentYear,
+              });
+
+              console.log(
+                `[BIRTHDAY] Sent birthday wish to user ${user.userId} (age ${age}) in ${guild.name}`
+              );
+            } catch (error) {
+              console.error(
+                `[BIRTHDAY] Error sending birthday message for user ${user.userId} in ${guild.name}:`,
+                error
+              );
+            }
+          }
+        } catch (guildError) {
           console.error(
-            `[BIRTHDAY] Error sending birthday message for user ${user.userId}:`,
-            error
+            `[BIRTHDAY] Error processing guild ${guild.id}:`,
+            guildError
           );
         }
       }

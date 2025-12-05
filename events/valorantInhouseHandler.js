@@ -7,7 +7,7 @@ const {
 } = require("discord.js");
 const { createCanvas, loadImage } = require("canvas");
 const https = require("https");
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
+
 const { CleanupMap, LimitedMap } = require("../utils/memoryUtils");
 const { loadImageFromURL } = require("../utils/valorantCanvasUtils");
 
@@ -769,8 +769,8 @@ module.exports = (client) => {
     client.on("messageCreate", async (message) => {
       if (message.author.bot) return;
 
-      // Only run in target guild
-      if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+      // Only run in guilds
+      if (!message.guild) return;
 
       // EARLY RETURN: Skip if not a valorant inhouse command
       const content = message.content.toLowerCase();

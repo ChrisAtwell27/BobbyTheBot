@@ -7,7 +7,7 @@ const {
   StringSelectMenuBuilder,
 } = require("discord.js");
 const { createCanvas } = require("canvas");
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
+// TARGET_GUILD_ID removed for multi-guild support
 const { LimitedMap } = require("../utils/memoryUtils");
 const {
   loadImageFromURL,
@@ -505,7 +505,7 @@ module.exports = (client) => {
   // Message handler for team creation
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
-    if (message.guild?.id !== TARGET_GUILD_ID) return;
+    if (!message.guild) return;
 
     const rawRoleMention = `<@&${RAW_VALORANT_ROLE_ID}>`;
     const isCommand = message.content.toLowerCase() === "!rawteam";

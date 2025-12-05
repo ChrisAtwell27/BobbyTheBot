@@ -578,3 +578,31 @@ export const markBirthdayWished = mutation({
     }
   },
 });
+
+/**
+ * Reset all user balances to a specific amount (DANGEROUS)
+ */
+export const resetAllBalances = mutation({
+  args: {
+    amount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // This is a potentially heavy operation, but Convex handles it transactionally.
+    // If there are too many users, this might time out and need to be batched/paginated.
+    // However, for this bot's scale, it should be fine.
+    const users = await ctx.db.query("users").collect();
+    
+    let modifiedCount = 0;
+    const now = Date.now();
+    
+    for (const user of users) {
+      await ctx.db.patch(user._id, {
+        balance: args.amount,
+        updatedAt: now,
+      });
+      modifiedCount++;
+    }
+    
+    return { modifiedCount };
+  },
+});

@@ -3,7 +3,7 @@ const { EmbedBuilder } = require("discord.js");
 // const User = require("../database/models/User"); // REMOVED: Migrated to Convex
 const { getConvexClient: getClient } = require("../database/convexClient");
 const { api } = require("../convex/_generated/api");
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
+// TARGET_GUILD_ID removed
 const { CleanupMap } = require("../utils/memoryUtils");
 const { getSetting } = require("../utils/settingsManager");
 
@@ -26,11 +26,11 @@ if (!global.askHandlerCleanupMaps) global.askHandlerCleanupMaps = [];
 global.askHandlerCleanupMaps.push(conversationHistory);
 
 // Function to get user's memory/personal details
-async function getUserMemory(userId) {
+async function getUserMemory(userId, guildId) {
   try {
     const client = getClient();
     const user = await client.query(api.users.getUser, {
-      guildId: TARGET_GUILD_ID,
+      guildId: guildId,
       userId: userId,
     });
 
@@ -48,13 +48,13 @@ async function getUserMemory(userId) {
 }
 
 // Function to save/update user memory
-async function saveUserMemory(userId, memory) {
+async function saveUserMemory(userId, guildId, memory) {
   try {
     const client = getClient();
     // Use upsertUser to ensure user exists, or updateMemory if preferred
     // Using updateMemory mutation which creates if not exists per convex/users.ts logic
     await client.mutation(api.users.updateMemory, {
-      guildId: TARGET_GUILD_ID,
+      guildId: guildId,
       userId: userId,
       memory: memory,
     });
@@ -70,11 +70,11 @@ async function saveUserMemory(userId, memory) {
 }
 
 // Function to get user's personality score (1-10, default 5)
-async function getUserPersonalityScore(userId) {
+async function getUserPersonalityScore(userId, guildId) {
   try {
     const client = getClient();
     const user = await client.query(api.users.getUser, {
-      guildId: TARGET_GUILD_ID,
+      guildId: guildId,
       userId: userId,
     });
 
@@ -460,13 +460,13 @@ IMPORTANT: Place [SAVE_MEMORY: ...] at the END of your response. It will be hidd
 Keep the memory description concise but clear. Update/append to existing memories when new info comes in.`;
 
 // Function to get or create conversation history for a user
-async function getConversationHistory(userId) {
+async function getConversationHistory(userId, guildId) {
   // Always check personality score (in case it changed in the database)
-  const personalityScore = await getUserPersonalityScore(userId);
+  const personalityScore = await getUserPersonalityScore(userId, guildId);
   const personalityInstruction = getPersonalityInstruction(personalityScore);
 
   // Get user's personal memories
-  const userMemory = await getUserMemory(userId);
+  const userMemory = await getUserMemory(userId, guildId);
 
   // Create custom system prompt with personality override and memories
   let customPrompt = `${BOBBY_SYSTEM_PROMPT}
@@ -507,8 +507,8 @@ ${userMemory}
 }
 
 // Function to add message to conversation history
-async function addToHistory(userId, role, content) {
-  const history = await getConversationHistory(userId);
+async function addToHistory(userId, guildId, role, content) {
+  const history = await getConversationHistory(userId, guildId);
   history.push({ role, content });
 
   // Keep only system message + last N messages
@@ -536,13 +536,13 @@ async function getBobbyResponse(userId, userMessage, guildId) {
   }
 
   // Get conversation history (this also updates personality)
-  const history = await getConversationHistory(userId);
+  const history = await getConversationHistory(userId, guildId);
 
   // Add user message to history
-  await addToHistory(userId, "user", userMessage);
+  await addToHistory(userId, guildId, "user", userMessage);
 
   // Debug: Log personality score
-  const currentScore = await getUserPersonalityScore(userId);
+  const currentScore = await getUserPersonalityScore(userId, guildId);
   if (currentScore !== 5) {
     console.log(
       `🎭 Responding to user ${userId} with personality score: ${currentScore}/10`
@@ -571,7 +571,7 @@ async function getBobbyResponse(userId, userMessage, guildId) {
       const newMemories = memoryMatches.map((match) => match[1].trim());
 
       // Get existing memory
-      const existingMemory = await getUserMemory(userId);
+      const existingMemory = await getUserMemory(userId, guildId);
 
       // Combine memories
       let updatedMemory;
@@ -584,7 +584,7 @@ async function getBobbyResponse(userId, userMessage, guildId) {
       }
 
       // Save to database
-      const saved = await saveUserMemory(userId, updatedMemory);
+      const saved = await saveUserMemory(userId, guildId, updatedMemory);
       if (saved) {
         console.log(`🤖 Bobby auto-saved memory for user ${userId}`);
       }
@@ -594,7 +594,7 @@ async function getBobbyResponse(userId, userMessage, guildId) {
     }
 
     // Add Bobby's response to history (without the memory markers)
-    await addToHistory(userId, "assistant", response);
+    await addToHistory(userId, guildId, "assistant", response);
 
     return response;
   } catch (error) {
@@ -661,8 +661,8 @@ module.exports = (client) => {
     // Ignore bot messages
     if (message.author.bot) return;
 
-    // Only run in target guild
-    if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+    // Only respond in guilds (not DMs for this handler)
+    if (!message.guild) return;
 
     // Only respond in guilds (not DMs for this handler)
     if (!message.guild) return;
@@ -726,7 +726,11 @@ module.exports = (client) => {
         );
       }
 
-      const success = await saveUserMemory(message.author.id, memoryText);
+      const success = await saveUserMemory(
+        message.author.id,
+        message.guild.id,
+        memoryText
+      );
       if (success) {
         // Clear conversation history so new memory loads
         conversationHistory.delete(message.author.id);
@@ -742,7 +746,7 @@ module.exports = (client) => {
 
     // Handle !mymemory command - shows what Bobby remembers about you
     if (command === "!mymemory" || command === "!whatdoyouknow") {
-      const memory = await getUserMemory(message.author.id);
+      const memory = await getUserMemory(message.author.id, message.guild.id);
       if (memory) {
         return message.channel.send(
           `🧠 Here's what I remember about you:\n"${memory}"\n\nUse \`!setmemory\` to update this!`
@@ -756,9 +760,9 @@ module.exports = (client) => {
 
     // Handle !forgetme command - clears user's memory
     if (command === "!forgetme" || command === "!clearmemory") {
-      const memory = await getUserMemory(message.author.id);
+      const memory = await getUserMemory(message.author.id, message.guild.id);
       if (memory) {
-        await saveUserMemory(message.author.id, "");
+        await saveUserMemory(message.author.id, message.guild.id, "");
         conversationHistory.delete(message.author.id);
         return message.channel.send(
           "🗑️ I've forgotten everything about you. Use `!setmemory` if you want me to remember something new!"

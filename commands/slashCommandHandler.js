@@ -4,7 +4,7 @@
  * Integrates with existing handlers by calling their logic
  */
 
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
+// TARGET_GUILD_ID removed - not needed for slash command handling
 
 /**
  * Initialize slash command handling

@@ -9,7 +9,8 @@ const {
 } = require("discord.js");
 const { updateBobbyBucks } = require("../database/helpers/economyHelpers");
 // const User = require('../database/models/User'); // REMOVED: Unused
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
+// TARGET_GUILD_ID removed
+const { getSetting } = require("../utils/settingsManager");
 const { ROLES } = require("../mafia/roles/mafiaRoles");
 const {
   createGame,
@@ -45,8 +46,7 @@ const { CleanupMap } = require("../utils/memoryUtils");
 setActionHandler({ sendNightActionPrompts, sendDuskActionPrompts });
 
 // Constants
-const MAFIA_VC_ID = "1434633691455426600";
-const MAFIA_TEXT_CHANNEL_ID = "1434636519380881508";
+// MAFIA_VC_ID and MAFIA_TEXT_CHANNEL_ID removed (dynamic)
 const GAME_INACTIVITY_TIMEOUT = 3600000; // 1 hour
 
 // Store pending game configurations with automatic cleanup after 5 minutes
@@ -125,18 +125,32 @@ module.exports = {
 
       // !createmafia or !createmafiadebug
       if (command === "createmafia" || command === "createmafiadebug") {
-        if (
-          message.channel.id !== MAFIA_TEXT_CHANNEL_ID &&
-          message.channel.id !== TARGET_GUILD_ID
-        ) {
-          // Allow in mafia channel or guild root (for testing)
-          // Actually, usually restricted to specific channels
+        const mafiaTextChannelId = await getSetting(
+          message.guild.id,
+          "channels.mafia_text"
+        );
+
+        if (mafiaTextChannelId && message.channel.id !== mafiaTextChannelId) {
+          return message.reply(
+            `❌ Please use this command in <#${mafiaTextChannelId}>`
+          );
         }
 
         const voiceChannel = message.member.voice.channel;
-        if (!voiceChannel || voiceChannel.id !== MAFIA_VC_ID) {
+        const mafiaVoiceId = await getSetting(
+          message.guild.id,
+          "channels.mafia_voice"
+        );
+
+        if (!voiceChannel) {
           return message.reply(
-            `❌ You must be in the **Mafia Voice Channel** (<#${MAFIA_VC_ID}>) to start a game!`
+            "❌ You must be in a voice channel to start a game!"
+          );
+        }
+
+        if (mafiaVoiceId && voiceChannel.id !== mafiaVoiceId) {
+          return message.reply(
+            `❌ You must be in the **Mafia Voice Channel** (<#${mafiaVoiceId}>) to start a game!`
           );
         }
 

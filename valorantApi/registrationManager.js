@@ -8,7 +8,7 @@ const { getConvexClient } = require("../database/convexClient");
 const { api } = require("../convex/_generated/api");
 const { getMMRData } = require("./apiClient");
 const { calculateMMR } = require("./rankUtils");
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
+// TARGET_GUILD_ID removed - functions now accept guildId as parameter
 
 // Helper to get client
 function getClient() {
@@ -34,13 +34,14 @@ function saveUserRegistrations() {
 
 /**
  * Adds a new user registration
+ * @param {string} guildId - Guild ID
  * @param {string} userId - Discord user ID
  * @param {Object} userData - User data
  */
-async function addUserRegistration(userId, userData) {
+async function addUserRegistration(guildId, userId, userData) {
   const client = getClient();
   await client.mutation(api.users.updateValorant, {
-    guildId: TARGET_GUILD_ID,
+    guildId,
     userId,
     valorant: userData,
   });
@@ -51,31 +52,29 @@ async function addUserRegistration(userId, userData) {
 
 /**
  * Removes a user registration
+ * @param {string} guildId - Guild ID
  * @param {string} userId - Discord user ID
  * @returns {Promise<boolean>}
  */
-async function removeUserRegistration(userId) {
+async function removeUserRegistration(guildId, userId) {
   const client = getClient();
-  // Check if user exists first? Or just try remove.
-  // We can query first if we want to return true/false accurately.
-  // Or just call mutation.
   await client.mutation(api.users.removeValorant, {
-    guildId: TARGET_GUILD_ID,
+    guildId,
     userId,
   });
-  // We assume success for now, or we could check fetching user.
   return true;
 }
 
 /**
  * Gets a user registration
+ * @param {string} guildId - Guild ID
  * @param {string} userId - Discord user ID
  * @returns {Promise<Object|null>}
  */
-async function getUserRegistration(userId) {
+async function getUserRegistration(guildId, userId) {
   const client = getClient();
   const user = await client.query(api.users.getUser, {
-    guildId: TARGET_GUILD_ID,
+    guildId,
     userId,
   });
   return user ? user.valorant : null;
@@ -83,16 +82,16 @@ async function getUserRegistration(userId) {
 
 /**
  * Finds a user registration by ID (async replacement)
- * NOTE: The original logic searched by username too.
+ * @param {string} guildId - Guild ID
  * @param {User} discordUser - The Discord user object
  * @returns {Promise<Object|null>}
  */
-async function findOrMigrateUser(discordUser) {
+async function findOrMigrateUser(guildId, discordUser) {
   const client = getClient();
 
   // 1. Check ID
   const user = await client.query(api.users.getUser, {
-    guildId: TARGET_GUILD_ID,
+    guildId,
     userId: discordUser.id,
   });
 
@@ -100,10 +99,9 @@ async function findOrMigrateUser(discordUser) {
     return user.valorant;
   }
 
-  // 2. Search legacy/other users (Expensive operation!)
-  // We fetch all valorant users and search in memory.
+  // 2. Search legacy/other users
   const allUsers = await client.query(api.users.getAllValorantUsers, {
-    guildId: TARGET_GUILD_ID,
+    guildId,
   });
 
   let foundUser = null;
@@ -155,15 +153,14 @@ async function findOrMigrateUser(discordUser) {
 
 /**
  * Gets all registered users
+ * @param {string} guildId - Guild ID
  * @returns {Promise<Map>}
  */
-async function getAllRegisteredUsers() {
+async function getAllRegisteredUsers(guildId) {
   const client = getClient();
   const users = await client.query(api.users.getAllValorantUsers, {
-    guildId: TARGET_GUILD_ID,
+    guildId,
   });
-  // Convert to map to match interface somewhat?
-  // Old code returned Map<userId, userData>
   const map = new Map();
   users.forEach((u) => map.set(u.userId, u.valorant));
   return map;
@@ -171,11 +168,12 @@ async function getAllRegisteredUsers() {
 
 /**
  * Gets user rank data from the API
+ * @param {string} guildId - Guild ID
  * @param {string} userId - Discord user ID
  * @returns {Promise<Object|null>}
  */
-async function getUserRankData(userId) {
-  const registration = await getUserRegistration(userId); // Awaited now
+async function getUserRankData(guildId, userId) {
+  const registration = await getUserRegistration(guildId, userId);
   if (!registration) {
     return null;
   }
@@ -208,28 +206,30 @@ async function getUserRankData(userId) {
 
 /**
  * Checks if a user is registered
+ * @param {string} guildId - Guild ID
  * @param {string} userId - Discord user ID
  * @returns {Promise<boolean>}
  */
-async function isUserRegistered(userId) {
-  const reg = await getUserRegistration(userId);
+async function isUserRegistered(guildId, userId) {
+  const reg = await getUserRegistration(guildId, userId);
   return !!reg;
 }
 
 /**
  * Updates a user registration
+ * @param {string} guildId - Guild ID
  * @param {string} userId
  * @param {Object} updates
  * @returns {Promise<boolean>}
  */
-async function updateUserRegistration(userId, updates) {
+async function updateUserRegistration(guildId, userId, updates) {
   const client = getClient();
-  const current = await getUserRegistration(userId);
+  const current = await getUserRegistration(guildId, userId);
   if (!current) return false;
 
   const updated = { ...current, ...updates };
   await client.mutation(api.users.updateValorant, {
-    guildId: TARGET_GUILD_ID,
+    guildId,
     userId,
     valorant: updated,
   });
@@ -238,10 +238,11 @@ async function updateUserRegistration(userId, updates) {
 
 /**
  * Gets the total number of registered users
+ * @param {string} guildId - Guild ID
  * @returns {Promise<number>}
  */
-async function getRegistrationCount() {
-  const map = await getAllRegisteredUsers();
+async function getRegistrationCount(guildId) {
+  const map = await getAllRegisteredUsers(guildId);
   return map.size;
 }
 

@@ -21,9 +21,22 @@ const SETTING_REQUIREMENTS = {
   // Basic features available to everyone
   "features.trivia": "free",
   "features.alerts": "free",
+  "features.gambling": "free",
+  "features.wordle": "free",
+  "channels.updates": "free",
+  "channels.trivia": "free",
+  "channels.wordle": "free",
+  "channels.mafia_text": "free",
+  "channels.mafia_voice": "free",
+  "channels.alerts": "free",
+
+  // Basic Tier (Silver)
+  "features.birthdays": "basic",
+  "features.bounties": "basic",
 
   // Premium features
   openaiApiKey: "premium", // Custom API keys are premium
+  "features.valorant": "premium", // API intensive
   "features.custom_branding": "enterprise", // Example
 };
 

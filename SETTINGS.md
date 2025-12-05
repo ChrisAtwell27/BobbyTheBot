@@ -6,11 +6,17 @@ This document describes the configuration settings available for the bot and how
 
 Settings are key-value pairs stored per-guild in the Convex database.
 
-| Setting Key       | Type      | Default             | Description                                                                   |
-| :---------------- | :-------- | :------------------ | :---------------------------------------------------------------------------- |
-| `features.trivia` | `boolean` | `true`              | Enables/disables the daily trivia posting feature.                            |
-| `features.alerts` | `boolean` | `true`              | Enables/disables keyword alerting in chat.                                    |
-| `openaiApiKey`    | `string`  | _(Global Fallback)_ | Custom OpenAI API Key for this specific server. Overrides the global env var. |
+| Setting Key          | Type      | Default             | Description                                                                                           |
+| :------------------- | :-------- | :------------------ | :---------------------------------------------------------------------------------------------------- |
+| `features.trivia`    | `boolean` | `true`              | Enables/disables the daily trivia posting feature.                                                    |
+| `features.alerts`    | `boolean` | `true`              | Enables/disables keyword alerting in chat.                                                            |
+| `features.gambling`  | `boolean` | `true`              | Enables economy games (Blackjack, Roulette, etc.).                                                    |
+| `features.wordle`    | `boolean` | `true`              | Enables daily Wordle game.                                                                            |
+| `features.birthdays` | `boolean` | `false`             | Enables birthday tracking and wishes. (Requires Basic Tier)                                           |
+| `features.bounties`  | `boolean` | `false`             | Enables bounty system. (Requires Basic Tier)                                                          |
+| `features.valorant`  | `boolean` | `false`             | Enables Valorant team tracking. (Requires Premium Tier)                                               |
+| `channels.updates`   | `string`  | `null`              | Channel ID for bot announcements.                                                                     |
+| `openaiApiKey`       | `string`  | _(Global Fallback)_ | Custom OpenAI API Key for this specific server. Overrides the global env var. (Requires Premium Tier) |
 
 _Note: New settings can be added arbitrarily as the system supports dynamic key-value storage._
 

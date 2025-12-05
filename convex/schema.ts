@@ -91,6 +91,7 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
   })
     .index("by_guild_and_status", ["guildId", "status"])
+    .index("by_status", ["status"])
     .index("by_guild_and_expiry", ["guildId", "expiresAt"])
     .index("by_bounty_id", ["bountyId"])
     .index("by_guild_creator", ["guildId", "creatorId"]),

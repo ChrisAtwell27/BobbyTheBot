@@ -11,7 +11,7 @@ const {
   updateBalance,
   getBalance,
 } = require("../database/helpers/convexEconomyHelpers");
-const { TARGET_GUILD_ID } = require("../config/guildConfig");
+// TARGET_GUILD_ID removed
 const {
   insufficientFundsMessage,
   invalidUsageMessage,
@@ -145,7 +145,7 @@ async function postBounty(message, args) {
     }
 
     // Check user balance
-    const balance = await getBalance(TARGET_GUILD_ID, message.author.id);
+    const balance = await getBalance(message.guild.id, message.author.id);
     if (balance < amount) {
       return message.reply(
         insufficientFundsMessage(message.author.username, balance, amount)
@@ -153,14 +153,14 @@ async function postBounty(message, args) {
     }
 
     // Deduct honey (escrow)
-    await updateBalance(TARGET_GUILD_ID, message.author.id, -amount);
+    await updateBalance(message.guild.id, message.author.id, -amount);
 
     // Create bounty
     const bountyId = generateBountyId();
     const expiresAt = Date.now() + BOUNTY_DURATION;
 
     await client.mutation(api.bounties.createBounty, {
-      guildId: TARGET_GUILD_ID,
+      guildId: message.guild.id,
       bountyId,
       creatorId: message.author.id,
       creatorName: message.author.username,
@@ -268,7 +268,7 @@ async function postAdminBounty(message, args) {
     const expiresAt = Date.now() + BOUNTY_DURATION;
 
     await client.mutation(api.bounties.createBounty, {
-      guildId: TARGET_GUILD_ID,
+      guildId: message.guild.id,
       bountyId,
       creatorId: message.author.id,
       creatorName: message.author.username + " (ADMIN)",
@@ -331,7 +331,7 @@ async function listBounties(message) {
     if (!client) return message.reply("Database connection unavailable.");
 
     const bounties = await client.query(api.bounties.getActiveBounties, {
-      guildId: TARGET_GUILD_ID,
+      guildId: message.guild.id,
     });
 
     // Sort in memory since query returns mostly filtered list, just need simple sort
@@ -378,7 +378,7 @@ async function viewBounty(message, bountyIdPart) {
     if (!client) return message.reply("Database connection unavailable.");
 
     const allBounties = await client.query(api.bounties.getAllBounties, {
-      guildId: TARGET_GUILD_ID,
+      guildId: message.guild.id,
     });
     const bounty = allBounties.find((b) => b.bountyId.includes(bountyIdPart));
 
@@ -429,7 +429,7 @@ async function cancelBounty(message, bountyIdPart) {
     if (!client) return message.reply("Database connection unavailable.");
 
     const allBounties = await client.query(api.bounties.getActiveBounties, {
-      guildId: TARGET_GUILD_ID,
+      guildId: message.guild.id,
     });
     const bounty = allBounties.find((b) => b.bountyId.includes(bountyIdPart));
 
@@ -450,7 +450,7 @@ async function cancelBounty(message, bountyIdPart) {
     }
 
     // Refund honey
-    await updateBalance(TARGET_GUILD_ID, bounty.creatorId, bounty.reward);
+    await updateBalance(message.guild.id, bounty.creatorId, bounty.reward);
 
     // Update status
     await client.mutation(api.bounties.cancelBounty, {
@@ -476,10 +476,9 @@ async function cleanupExpiredBounties(client) {
     const convex = getConvexClient();
     if (!convex) return;
 
-    // Get expired active bounties
+    // Get expired active bounties globally
     const expiredBounties = await convex.query(
-      api.bounties.getExpiredBounties,
-      { guildId: TARGET_GUILD_ID }
+      api.bounties.getAllExpiredBounties
     );
 
     if (expiredBounties.length === 0) return;
@@ -487,7 +486,7 @@ async function cleanupExpiredBounties(client) {
     for (const bounty of expiredBounties) {
       // Refund creator
       try {
-        await updateBalance(TARGET_GUILD_ID, bounty.creatorId, bounty.reward);
+        await updateBalance(bounty.guildId, bounty.creatorId, bounty.reward);
       } catch (refundError) {
         console.error(
           `[BOUNTY] Error refunding user ${bounty.creatorId} for bounty ${bounty.bountyId}:`,
@@ -515,10 +514,12 @@ async function cleanupExpiredBounties(client) {
       );
     }
 
-    // Bulk update status to expired
-    await convex.mutation(api.bounties.expireBounties, {
-      guildId: TARGET_GUILD_ID,
-    });
+    // Update status to expired
+    for (const bounty of expiredBounties) {
+      await convex.mutation(api.bounties.expireBounty, {
+        bountyId: bounty.bountyId,
+      });
+    }
 
     if (expiredBounties.length > 0) {
       console.log(
@@ -548,7 +549,8 @@ module.exports = (client) => {
   // Message commands
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
-    if (message.guild && message.guild.id !== TARGET_GUILD_ID) return;
+    // Only respond in guilds
+    if (!message.guild) return;
 
     // EARLY RETURN: Skip if not a bounty command
     const content = message.content.toLowerCase();
@@ -603,7 +605,7 @@ module.exports = (client) => {
         const convex = getConvexClient();
         const result = await convex.mutation(
           api.bounties.deleteAllGuildBounties,
-          { guildId: TARGET_GUILD_ID }
+          { guildId: message.guild.id }
         );
         message.reply(`✅ Cleared ${result} bounties.`);
       } catch (error) {
@@ -616,7 +618,7 @@ module.exports = (client) => {
   // Button interactions
   client.on("interactionCreate", async (interaction) => {
     if (!interaction.isButton()) return;
-    if (interaction.guild && interaction.guild.id !== TARGET_GUILD_ID) return;
+    if (!interaction.guild) return;
 
     const customId = interaction.customId;
 
@@ -687,7 +689,7 @@ module.exports = (client) => {
 
             // Award honey
             await updateBalance(
-              TARGET_GUILD_ID,
+              interaction.guild.id,
               interaction.user.id,
               bounty.reward
             );
@@ -807,7 +809,7 @@ module.exports = (client) => {
         }
 
         // Refund honey
-        await updateBalance(TARGET_GUILD_ID, bounty.creatorId, bounty.reward);
+        await updateBalance(bounty.guildId, bounty.creatorId, bounty.reward);
 
         // Update status
         await convex.mutation(api.bounties.cancelBounty, {
