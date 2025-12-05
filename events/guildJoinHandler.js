@@ -18,8 +18,15 @@ module.exports = (client) => {
             const guildName = guild.name;
             const ownerId = guild.ownerId;
 
-            // Get Convex client
-            const convex = getConvexClient();
+            // Get Convex client with error handling
+            let convex;
+            try {
+                convex = getConvexClient();
+            } catch (convexError) {
+                console.error(`[Guild Join] Failed to get Convex client: ${convexError.message}`);
+                console.log(`[Guild Join] Skipping trial creation for ${guildName} - will be created on next verification`);
+                return;
+            }
 
             // Check if this guild already has a subscription
             const existingSubscription = await convex.query(api.subscriptions.getSubscription, {
