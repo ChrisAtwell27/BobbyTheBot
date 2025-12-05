@@ -1,7 +1,8 @@
 const fs = require("fs");
 const path = require("path");
-const { EmbedBuilder, PermissionsBitField } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const { thinIceRoleId } = require("../data/config");
+const { hasAdminPermission } = require("../utils/adminPermissions");
 // TARGET_GUILD_ID removed for multi-guild support
 
 // Load bad words from the formatted_badwords.txt file
@@ -45,8 +46,6 @@ try {
   console.error("❌ Thin Ice Handler: Failed to load bad words file:", error);
 }
 
-const topEggRoleId = "701309444562092113";
-
 // Timeout durations in milliseconds
 const TIMEOUT_DURATIONS = {
   1: 60000, // 1 minute
@@ -76,14 +75,13 @@ module.exports = async (client) => {
     // Handle admin commands first
     // Command structure: !Reset Thinice @User
     if (messageContent.startsWith("!reset thinice")) {
-      // Check if the author has the Top Egg role or admin permissions
-      const hasPermission =
-        message.member.roles.cache.has(topEggRoleId) ||
-        message.member.permissions.has(PermissionsBitField.Flags.Administrator);
+      // Check if the author has admin permissions
+      const guildId = message.guild.id;
+      const isAdmin = await hasAdminPermission(message.member, guildId);
 
-      if (!hasPermission) {
+      if (!isAdmin) {
         return message.reply(
-          "❌ You don't have permission to use this command."
+          "❌ You don't have permission to use this command. (Admin role required)"
         );
       }
 

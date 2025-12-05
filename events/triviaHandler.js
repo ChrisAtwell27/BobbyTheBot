@@ -1,4 +1,4 @@
-const { EmbedBuilder, PermissionsBitField } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const axios = require("axios");
 const cron = require("node-cron");
 // const TriviaSession = require("../database/models/TriviaSession"); // REMOVED: Migrated to Convex
@@ -6,6 +6,7 @@ const { getConvexClient } = require("../database/convexClient");
 const { api } = require("../convex/_generated/api");
 // TARGET_GUILD_ID removed
 const { getSetting } = require("../utils/settingsManager");
+const { hasAdminPermission } = require("../utils/adminPermissions");
 
 // TRIVIA_CHANNEL_ID removed (dynamic)
 const CATEGORY_VIDEO_GAMES = 15;
@@ -467,12 +468,11 @@ module.exports = (client) => {
 
     // Manual trivia post (for testing or manual trigger - Admin only)
     if (command === "!trivia") {
-      // Check if user has administrator permissions
-      if (
-        !message.member.permissions.has(PermissionsBitField.Flags.Administrator)
-      ) {
+      // Check if user has admin permissions
+      const isAdmin = await hasAdminPermission(message.member, guildId);
+      if (!isAdmin) {
         return message.reply(
-          "You don't have permission to use this command. (Administrator only)"
+          "You don't have permission to use this command. (Admin role required)"
         );
       }
 
@@ -486,12 +486,11 @@ module.exports = (client) => {
 
     // Manual answer reveal (for testing - Admin only)
     if (command === "!triviaanswer") {
-      // Check if user has administrator permissions
-      if (
-        !message.member.permissions.has(PermissionsBitField.Flags.Administrator)
-      ) {
+      // Check if user has admin permissions
+      const isAdmin = await hasAdminPermission(message.member, guildId);
+      if (!isAdmin) {
         return message.reply(
-          "You don't have permission to use this command. (Administrator only)"
+          "You don't have permission to use this command. (Admin role required)"
         );
       }
 
@@ -505,12 +504,11 @@ module.exports = (client) => {
 
     // Show current question (Admin only)
     if (command === "!triviacurrent") {
-      // Check if user has administrator permissions
-      if (
-        !message.member.permissions.has(PermissionsBitField.Flags.Administrator)
-      ) {
+      // Check if user has admin permissions
+      const isAdmin = await hasAdminPermission(message.member, guildId);
+      if (!isAdmin) {
         return message.reply(
-          "You don't have permission to use this command. (Administrator only)"
+          "You don't have permission to use this command. (Admin role required)"
         );
       }
 

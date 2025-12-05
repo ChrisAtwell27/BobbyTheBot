@@ -3,7 +3,6 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  PermissionsBitField,
 } = require("discord.js");
 const { getConvexClient } = require("../database/convexClient");
 const { api } = require("../convex/_generated/api");
@@ -17,6 +16,7 @@ const {
   invalidUsageMessage,
   permissionDeniedMessage,
 } = require("../utils/errorMessages");
+const { hasAdminPermission } = require("../utils/adminPermissions");
 
 // Configuration
 const MIN_BOUNTY = 50;
@@ -223,9 +223,9 @@ async function postAdminBounty(message, args) {
     if (!client) return message.reply("Database connection unavailable.");
 
     // Check permissions
-    if (
-      !message.member.permissions.has(PermissionsBitField.Flags.Administrator)
-    ) {
+    const guildId = message.guild.id;
+    const isAdmin = await hasAdminPermission(message.member, guildId);
+    if (!isAdmin) {
       return message.reply(permissionDeniedMessage());
     }
 
@@ -595,9 +595,9 @@ module.exports = (client) => {
 
     // Admin command: !clearbounties
     if (command === "clearbounties") {
-      if (
-        !message.member.permissions.has(PermissionsBitField.Flags.Administrator)
-      ) {
+      const guildId = message.guild.id;
+      const isAdmin = await hasAdminPermission(message.member, guildId);
+      if (!isAdmin) {
         return message.reply(permissionDeniedMessage());
       }
 

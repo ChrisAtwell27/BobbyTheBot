@@ -8,7 +8,7 @@
 } = require("discord.js");
 const { createCanvas, loadImage } = require("canvas");
 const https = require("https");
-const { topEggRoleId } = require("../data/config");
+const { hasAdminPermission } = require("../utils/adminPermissions");
 // Convex helpers (with guild ID support)
 const {
   getBalance,
@@ -187,8 +187,9 @@ module.exports = (client) => {
     if (args[0] === "!award" && args[1] && args[2]) {
       const guildId = message.guild.id; // Get guild ID for permissions and data
 
-      if (!userRoles.has(topEggRoleId)) {
-        return message.reply("You don't have permission to use this command.");
+      const isAdmin = await hasAdminPermission(message.member, guildId);
+      if (!isAdmin) {
+        return message.reply("You don't have permission to use this command. (Admin role required)");
       }
 
       const mentionedUser =
@@ -344,8 +345,9 @@ module.exports = (client) => {
     // Command to give all users in the server a specific amount of Honey - FIXED
     if (args[0] === "!awardall" && args[1]) {
       const guildId = message.guild.id;
-      if (!userRoles.has(topEggRoleId)) {
-        return message.reply("You don't have permission to use this command.");
+      const isAdmin = await hasAdminPermission(message.member, guildId);
+      if (!isAdmin) {
+        return message.reply("You don't have permission to use this command. (Admin role required)");
       }
 
       const amount = parseInt(args[1], 10);
@@ -632,19 +634,18 @@ module.exports = (client) => {
       return message.channel.send({ embeds: [embed], files: [attachment] });
     }
 
-    // Command to reset everyone's honey to 5000 (Top Egg only) - WITH CONFIRMATION
+    // Command to reset everyone's honey to 5000 (Admin only) - WITH CONFIRMATION
     if (args[0].toLowerCase() === "!clearhoney") {
-      console.log("!clearhoney command detected");
-      console.log("User roles:", [...userRoles.keys()]);
-      console.log("Top Egg Role ID:", topEggRoleId);
-      console.log("Has Top Egg role:", userRoles.has(topEggRoleId));
+      const guildId = message.guild.id;
+      const isAdmin = await hasAdminPermission(message.member, guildId);
 
-      if (
-        !userRoles.has(topEggRoleId) &&
-        !message.member.permissions.has(PermissionsBitField.Flags.Administrator)
-      ) {
+      console.log("!clearhoney command detected");
+      console.log("User:", message.author.tag);
+      console.log("Has admin permission:", isAdmin);
+
+      if (!isAdmin) {
         return message.reply(
-          "You don't have permission to use this command. (Top Egg or Admin only)"
+          "You don't have permission to use this command. (Admin role required)"
         );
       }
 

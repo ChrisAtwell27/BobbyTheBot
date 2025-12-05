@@ -1,6 +1,7 @@
 const { Collection, PermissionsBitField, EmbedBuilder } = require("discord.js");
 // TARGET_GUILD_ID removed
 const { LimitedMap } = require("../utils/memoryUtils");
+const { hasAdminPermission } = require("../utils/adminPermissions");
 
 module.exports = (client) => {
   // Configuration options
@@ -11,7 +12,7 @@ module.exports = (client) => {
     timeWindow: 30000, // 30 seconds window
     maxWarnings: 3,
     logChannelId: null, // Set this to your log channel ID if you want logging
-    exemptRoles: ["Admin", "Moderator", "Top Egg"], // Roles exempt from moderation
+    // Admin roles now configured per-server via settings (adminRoles setting)
     messageRateLimit: 10, // Max messages per timeWindow
     duplicateMessageThreshold: 3, // How many duplicate messages trigger action
     maxTrackedUsers: 500, // Maximum users to track to prevent memory leaks
@@ -33,7 +34,7 @@ module.exports = (client) => {
     if (!message.guild) return;
 
     // Check if user is exempt from moderation
-    if (isExemptFromModeration(message.member)) return;
+    if (await isExemptFromModeration(message.member)) return;
 
     // Ignore commands (messages starting with !)
     if (message.content.startsWith("!")) return;
@@ -65,19 +66,14 @@ module.exports = (client) => {
     global.moderationHandlerIntervals = [];
   global.moderationHandlerIntervals.push(cleanupInterval);
 
-  // Check if user is exempt from moderation
-  function isExemptFromModeration(member) {
+  // Check if user is exempt from moderation (async version)
+  async function isExemptFromModeration(member) {
     if (!member) return false;
 
-    // Check if user has admin permissions
-    if (member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return true;
-    }
-
-    // Check if user has any exempt roles
-    return config.exemptRoles.some((roleName) =>
-      member.roles.cache.some((role) => role.name === roleName)
-    );
+    // Check if user has configured admin permissions
+    const guildId = member.guild.id;
+    const isAdmin = await hasAdminPermission(member, guildId);
+    return isAdmin;
   }
 
   // Check message rate limiting
