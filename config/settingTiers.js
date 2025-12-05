@@ -6,9 +6,8 @@
 // Rank values for comparison (higher = better)
 const TIERS = {
   free: 0,
-  basic: 1,
-  premium: 2,
-  enterprise: 3,
+  plus: 1,
+  ultimate: 2,
 };
 
 // Default tier for guilds with no subscription
@@ -30,14 +29,12 @@ const SETTING_REQUIREMENTS = {
   "features.clips": "free",
   "features.bump_reminder": "free",
 
-  // Basic Tier features
-  "features.birthdays": "basic",
-  "features.bounties": "basic",
-  "features.team_builder": "basic",
-
-  // Premium features
-  "features.valorant": "premium", // API intensive
-  "features.custom_branding": "enterprise",
+  // Plus Tier features
+  "features.birthdays": "plus",
+  "features.bounties": "plus",
+  "features.team_builder": "plus",
+  "features.valorant": "plus", // API intensive
+  "features.custom_branding": "ultimate",
 
   // =====================================================================
   // CHANNEL SETTINGS (free tier - all servers can configure channels)
@@ -76,13 +73,13 @@ const SETTING_REQUIREMENTS = {
   "roles.clip_winner": "free", // Role for clip contest winners
 
   // Team builder / Valorant roles
-  "roles.valorant_team": "basic", // Role to ping for Valorant teams
-  "roles.valorant_inhouse": "basic", // Role for in-house games
+  "roles.valorant_team": "plus", // Role to ping for Valorant teams
+  "roles.valorant_inhouse": "plus", // Role for in-house games
 
   // =====================================================================
-  // PREMIUM SETTINGS
+  // ULTIMATE SETTINGS
   // =====================================================================
-  openaiApiKey: "premium", // Custom API keys are premium
+  openaiApiKey: "ultimate", // Custom API keys are ultimate tier
 };
 
 /**
