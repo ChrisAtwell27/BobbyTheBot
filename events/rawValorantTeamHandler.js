@@ -21,10 +21,16 @@ const {
 // Import functions from the API handler (with persistent storage)
 const apiHandler = require("./valorantApiHandler");
 const { saveTeamToHistory } = require("../database/helpers/teamHistoryHelpers");
+const { getSetting } = require("../utils/settingsManager");
 
-// Configuration
-const RAW_VALORANT_ROLE_ID = "1166209212418904145";
+// Configuration - legacy fallback ID
+const DEFAULT_RAW_VALORANT_ROLE_ID = "1166209212418904145";
 const TEAM_NAME = "RaW Valorant";
+
+// Helper to get RaW Valorant role from settings
+async function getRawValorantRoleId(guildId) {
+  return await getSetting(guildId, 'roles.valorant_inhouse', DEFAULT_RAW_VALORANT_ROLE_ID);
+}
 
 // Store active teams (auto-cleanup with size limit of 50)
 const activeTeams = new LimitedMap(50);
@@ -507,19 +513,21 @@ module.exports = (client) => {
     if (message.author.bot) return;
     if (!message.guild) return;
 
-    const rawRoleMention = `<@&${RAW_VALORANT_ROLE_ID}>`;
+    // Get dynamic RaW Valorant role ID from settings
+    const rawValorantRoleId = await getRawValorantRoleId(message.guild.id);
+    const rawRoleMention = `<@&${rawValorantRoleId}>`;
     const isCommand = message.content.toLowerCase() === "!rawteam";
 
     if (
       !message.content.includes(rawRoleMention) &&
-      !message.mentions.roles.has(RAW_VALORANT_ROLE_ID) &&
+      !message.mentions.roles.has(rawValorantRoleId) &&
       !isCommand
     )
       return;
 
     // Check if user has the RaW Valorant role
     const member = await message.guild.members.fetch(message.author.id);
-    if (!member.roles.cache.has(RAW_VALORANT_ROLE_ID)) {
+    if (!member.roles.cache.has(rawValorantRoleId)) {
       if (isCommand) {
         message
           .reply("❌ You need the **RaW Valorant** role to create a RaW team!")
@@ -691,9 +699,10 @@ module.exports = (client) => {
 
       // JOIN
       if (action === "join") {
-        // Check for RaW Role
+        // Check for RaW Role (dynamically from settings)
+        const rawValorantRoleId = await getRawValorantRoleId(interaction.guild.id);
         const member = await interaction.guild.members.fetch(userId);
-        if (!member.roles.cache.has(RAW_VALORANT_ROLE_ID)) {
+        if (!member.roles.cache.has(rawValorantRoleId)) {
           return safeInteractionResponse(interaction, "reply", {
             content: "❌ You need the **RaW Valorant** role to join this team!",
             ephemeral: true,

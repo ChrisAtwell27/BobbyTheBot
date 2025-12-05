@@ -218,6 +218,7 @@ module.exports = {
         // Create config
         const config = {
           gameId: message.channel.id, // Use channel ID as game ID
+          guildId: message.guild.id, // Guild ID for settings lookup
           players,
           organizerId: message.author.id,
           randomMode,

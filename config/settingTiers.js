@@ -18,26 +18,71 @@ const DEFAULT_TIER = "free";
 // Key: Setting name (dot notation supported)
 // Value: Minimum required tier key
 const SETTING_REQUIREMENTS = {
-  // Basic features available to everyone
+  // =====================================================================
+  // FEATURE TOGGLES (free tier)
+  // =====================================================================
   "features.trivia": "free",
   "features.alerts": "free",
   "features.gambling": "free",
   "features.wordle": "free",
-  "channels.updates": "free",
-  "channels.trivia": "free",
-  "channels.wordle": "free",
-  "channels.mafia_text": "free",
-  "channels.mafia_voice": "free",
-  "channels.alerts": "free",
+  "features.mafia": "free",
+  "features.moderation": "free",
+  "features.clips": "free",
+  "features.bump_reminder": "free",
 
-  // Basic Tier (Silver)
+  // Basic Tier features
   "features.birthdays": "basic",
   "features.bounties": "basic",
+  "features.team_builder": "basic",
 
   // Premium features
-  openaiApiKey: "premium", // Custom API keys are premium
   "features.valorant": "premium", // API intensive
-  "features.custom_branding": "enterprise", // Example
+  "features.custom_branding": "enterprise",
+
+  // =====================================================================
+  // CHANNEL SETTINGS (free tier - all servers can configure channels)
+  // =====================================================================
+  "channels.trivia": "free",
+  "channels.wordle": "free",
+  "channels.alerts": "free",
+  "channels.updates": "free",
+  "channels.announcements": "free",
+  "channels.commands": "free",
+  "channels.logging": "free",
+  "channels.changelog": "free",
+
+  // Mafia channels
+  "channels.mafia_text": "free",
+  "channels.mafia_voice": "free",
+
+  // Moderation channels
+  "channels.graveyard": "free",
+
+  // Clip submission
+  "channels.clip_submission": "free",
+
+  // =====================================================================
+  // ROLE SETTINGS (free tier - all servers can configure roles)
+  // =====================================================================
+  // Admin roles (who can use admin commands)
+  "adminRoles": "free",
+
+  // Moderation roles
+  "roles.dead": "free", // Role given to "dead" users in mafia/moderation
+
+  // Notification roles (who gets pinged for various events)
+  "roles.bump_reminder": "free", // Role to ping for server bumps
+  "roles.updates": "free", // Role for update notifications
+  "roles.clip_winner": "free", // Role for clip contest winners
+
+  // Team builder / Valorant roles
+  "roles.valorant_team": "basic", // Role to ping for Valorant teams
+  "roles.valorant_inhouse": "basic", // Role for in-house games
+
+  // =====================================================================
+  // PREMIUM SETTINGS
+  // =====================================================================
+  openaiApiKey: "premium", // Custom API keys are premium
 };
 
 /**

@@ -13,9 +13,15 @@ const { loadImageFromURL } = require("../utils/valorantCanvasUtils");
 
 // Import functions from the API handler (with persistent storage)
 const apiHandler = require("./valorantApiHandler");
+const { getSetting } = require("../utils/settingsManager");
 
-// Configuration
-const VALORANT_ROLE_ID = "1058201257338228757"; // Replace with actual @Valorant role ID
+// Configuration - legacy fallback ID
+const DEFAULT_VALORANT_ROLE_ID = "1058201257338228757";
+
+// Helper to get Valorant role from settings (for future use)
+async function getValorantRoleId(guildId) {
+  return await getSetting(guildId, 'roles.valorant_team', DEFAULT_VALORANT_ROLE_ID);
+}
 const INHOUSE_SIZE = 10; // In-house needs 10 players (2 teams of 5)
 const MAX_INHOUSES_PER_USER = 1; // Limit active in-houses per user
 const INHOUSE_COOLDOWN = 60000; // 1 minute cooldown between in-house creations

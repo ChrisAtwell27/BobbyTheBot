@@ -21,9 +21,15 @@ const {
 // Import functions from the API handler (with persistent storage)
 const apiHandler = require("./valorantApiHandler");
 const { saveTeamToHistory } = require("../database/helpers/teamHistoryHelpers");
+const { getSetting } = require("../utils/settingsManager");
 
-// Configuration
-const VALORANT_ROLE_ID = "1058201257338228757";
+// Configuration - legacy fallback ID
+const DEFAULT_VALORANT_ROLE_ID = "1058201257338228757";
+
+// Helper to get Valorant role from settings
+async function getValorantRoleId(guildId) {
+  return await getSetting(guildId, 'roles.valorant_team', DEFAULT_VALORANT_ROLE_ID);
+}
 
 // Store active teams (auto-cleanup with size limit of 50)
 const activeTeams = new LimitedMap(50);
@@ -670,12 +676,14 @@ module.exports = (client) => {
     // Check if message is in a guild
     if (!message.guild) return;
 
-    const valorantRoleMention = `<@&${VALORANT_ROLE_ID}>`;
+    // Get dynamic Valorant role ID from settings
+    const valorantRoleId = await getValorantRoleId(message.guild.id);
+    const valorantRoleMention = `<@&${valorantRoleId}>`;
     const isCommand = message.content.toLowerCase() === "!valorantteam";
 
     if (
       !message.content.includes(valorantRoleMention) &&
-      !message.mentions.roles.has(VALORANT_ROLE_ID) &&
+      !message.mentions.roles.has(valorantRoleId) &&
       !isCommand
     )
       return;

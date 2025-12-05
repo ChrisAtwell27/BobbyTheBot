@@ -293,6 +293,384 @@ class SettingsServer {
         }
       }
     );
+
+    // =====================================================================
+    // CHANNEL SETTINGS ENDPOINTS
+    // =====================================================================
+
+    // Get all available channels in the guild (for selection dropdowns)
+    this.app.get(
+      "/api/settings/:guildId/available-channels",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId } = req.params;
+          const { type } = req.query; // Optional: 'text', 'voice', or 'all'
+
+          if (!this.client) {
+            return res
+              .status(500)
+              .json({ success: false, error: "Bot client not available" });
+          }
+
+          const guild = await this.client.guilds.fetch(guildId);
+
+          // Channel type constants: 0 = text, 2 = voice, 4 = category
+          let channels = guild.channels.cache;
+
+          if (type === "text") {
+            channels = channels.filter((ch) => ch.type === 0);
+          } else if (type === "voice") {
+            channels = channels.filter((ch) => ch.type === 2);
+          } else {
+            // Default: text and voice channels (exclude categories)
+            channels = channels.filter((ch) => ch.type === 0 || ch.type === 2);
+          }
+
+          const channelList = channels
+            .sort((a, b) => a.position - b.position)
+            .map((channel) => ({
+              id: channel.id,
+              name: channel.name,
+              type: channel.type === 0 ? "text" : "voice",
+              category: channel.parent ? channel.parent.name : null,
+              position: channel.position,
+            }));
+
+          res.json({
+            success: true,
+            guildId,
+            channels: channelList,
+          });
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // Get configured channels for a guild
+    this.app.get(
+      "/api/settings/:guildId/channels",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId } = req.params;
+          const channels = await getSetting(guildId, "channels", {});
+
+          // Enrich with channel names if client is available
+          let enrichedChannels = {};
+          if (this.client) {
+            try {
+              const guild = await this.client.guilds.fetch(guildId);
+              for (const [key, channelId] of Object.entries(channels)) {
+                if (channelId) {
+                  const channel = guild.channels.cache.get(channelId);
+                  enrichedChannels[key] = {
+                    id: channelId,
+                    name: channel ? channel.name : "Unknown Channel",
+                    type: channel
+                      ? channel.type === 0
+                        ? "text"
+                        : "voice"
+                      : "unknown",
+                  };
+                } else {
+                  enrichedChannels[key] = null;
+                }
+              }
+            } catch (fetchError) {
+              // Return IDs only if guild fetch fails
+              enrichedChannels = channels;
+            }
+          } else {
+            enrichedChannels = channels;
+          }
+
+          res.json({
+            success: true,
+            guildId,
+            channels: enrichedChannels,
+          });
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // Set a channel setting
+    this.app.post(
+      "/api/settings/:guildId/channels/:channelType",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId, channelType } = req.params;
+          const { channelId } = req.body;
+
+          // Validate channel type
+          const validTypes = [
+            "trivia",
+            "wordle",
+            "alerts",
+            "updates",
+            "announcements",
+            "commands",
+            "logging",
+            "changelog",
+            "mafia_text",
+            "mafia_voice",
+            "graveyard",
+            "clip_submission",
+          ];
+
+          if (!validTypes.includes(channelType)) {
+            return res.status(400).json({
+              success: false,
+              error: `Invalid channel type. Valid types: ${validTypes.join(", ")}`,
+            });
+          }
+
+          // Check tier permissions
+          const currentTier = await getServerTier(guildId);
+          const requiredTier = getRequirement(`channels.${channelType}`);
+
+          if (!meetsRequirement(currentTier, requiredTier)) {
+            return res.status(403).json({
+              success: false,
+              error: "Forbidden: Higher subscription tier required",
+              tier: { current: currentTier, required: requiredTier },
+            });
+          }
+
+          // Set the channel
+          const result = await setSetting(
+            guildId,
+            `channels.${channelType}`,
+            channelId || null
+          );
+
+          if (result) {
+            res.json({
+              success: true,
+              message: `Channel ${channelType} updated`,
+              channelType,
+              channelId: channelId || null,
+            });
+          } else {
+            res
+              .status(500)
+              .json({ success: false, error: "Failed to update channel" });
+          }
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // =====================================================================
+    // ROLE SETTINGS ENDPOINTS (for specific functional roles)
+    // =====================================================================
+
+    // Get configured roles for a guild
+    this.app.get(
+      "/api/settings/:guildId/roles",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId } = req.params;
+          const roles = await getSetting(guildId, "roles", {});
+
+          // Enrich with role names if client is available
+          let enrichedRoles = {};
+          if (this.client) {
+            try {
+              const guild = await this.client.guilds.fetch(guildId);
+              for (const [key, roleId] of Object.entries(roles)) {
+                if (roleId) {
+                  const role = guild.roles.cache.get(roleId);
+                  enrichedRoles[key] = {
+                    id: roleId,
+                    name: role ? role.name : "Unknown Role",
+                    color: role ? role.hexColor : "#000000",
+                  };
+                } else {
+                  enrichedRoles[key] = null;
+                }
+              }
+            } catch (fetchError) {
+              enrichedRoles = roles;
+            }
+          } else {
+            enrichedRoles = roles;
+          }
+
+          res.json({
+            success: true,
+            guildId,
+            roles: enrichedRoles,
+          });
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // Set a role setting
+    this.app.post(
+      "/api/settings/:guildId/roles/:roleType",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId, roleType } = req.params;
+          const { roleId } = req.body;
+
+          // Validate role type
+          const validTypes = [
+            "dead",
+            "bump_reminder",
+            "updates",
+            "clip_winner",
+            "valorant_team",
+            "valorant_inhouse",
+          ];
+
+          if (!validTypes.includes(roleType)) {
+            return res.status(400).json({
+              success: false,
+              error: `Invalid role type. Valid types: ${validTypes.join(", ")}`,
+            });
+          }
+
+          // Check tier permissions
+          const currentTier = await getServerTier(guildId);
+          const requiredTier = getRequirement(`roles.${roleType}`);
+
+          if (!meetsRequirement(currentTier, requiredTier)) {
+            return res.status(403).json({
+              success: false,
+              error: "Forbidden: Higher subscription tier required",
+              tier: { current: currentTier, required: requiredTier },
+            });
+          }
+
+          // Set the role
+          const result = await setSetting(
+            guildId,
+            `roles.${roleType}`,
+            roleId || null
+          );
+
+          if (result) {
+            res.json({
+              success: true,
+              message: `Role ${roleType} updated`,
+              roleType,
+              roleId: roleId || null,
+            });
+          } else {
+            res
+              .status(500)
+              .json({ success: false, error: "Failed to update role" });
+          }
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // =====================================================================
+    // FEATURE TOGGLES ENDPOINTS
+    // =====================================================================
+
+    // Get all feature toggles
+    this.app.get(
+      "/api/settings/:guildId/features",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId } = req.params;
+          const features = await getSetting(guildId, "features", {});
+          const tier = await getServerTier(guildId);
+
+          res.json({
+            success: true,
+            guildId,
+            tier,
+            features,
+          });
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // Toggle a feature
+    this.app.post(
+      "/api/settings/:guildId/features/:featureName",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId, featureName } = req.params;
+          const { enabled } = req.body;
+
+          // Validate feature name
+          const validFeatures = [
+            "trivia",
+            "alerts",
+            "gambling",
+            "wordle",
+            "mafia",
+            "moderation",
+            "clips",
+            "bump_reminder",
+            "birthdays",
+            "bounties",
+            "team_builder",
+            "valorant",
+          ];
+
+          if (!validFeatures.includes(featureName)) {
+            return res.status(400).json({
+              success: false,
+              error: `Invalid feature. Valid features: ${validFeatures.join(", ")}`,
+            });
+          }
+
+          // Check tier permissions
+          const currentTier = await getServerTier(guildId);
+          const requiredTier = getRequirement(`features.${featureName}`);
+
+          if (!meetsRequirement(currentTier, requiredTier)) {
+            return res.status(403).json({
+              success: false,
+              error: "Forbidden: Higher subscription tier required",
+              tier: { current: currentTier, required: requiredTier },
+            });
+          }
+
+          // Set the feature
+          const result = await setSetting(
+            guildId,
+            `features.${featureName}`,
+            enabled === true
+          );
+
+          if (result) {
+            res.json({
+              success: true,
+              message: `Feature ${featureName} ${enabled ? "enabled" : "disabled"}`,
+              featureName,
+              enabled: enabled === true,
+            });
+          } else {
+            res
+              .status(500)
+              .json({ success: false, error: "Failed to update feature" });
+          }
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
   }
 
   start(port = 3003) {

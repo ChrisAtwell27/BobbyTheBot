@@ -1,8 +1,23 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+const { getSetting } = require('../utils/settingsManager');
 
-const MAFIA_VC_ID = '1434633691455426600';
+// Legacy fallback ID (used if no settings configured)
+const DEFAULT_MAFIA_VC_ID = '1434633691455426600';
+
+// Helper to get mafia VC from settings or game state
+async function getMafiaVcId(guildId, game = null) {
+    // First try to get from game state (if game has a stored VC ID)
+    if (game && game.voiceChannelId) {
+        return game.voiceChannelId;
+    }
+    // Then try settings
+    if (guildId) {
+        return await getSetting(guildId, 'channels.mafia_voice', DEFAULT_MAFIA_VC_ID);
+    }
+    return DEFAULT_MAFIA_VC_ID;
+}
 
 /**
  * Mafia Webhook API Server
@@ -112,8 +127,9 @@ class MafiaWebhookServer {
           });
         }
 
-        // Get voice channel info
-        const voiceChannel = await this.client.channels.fetch(MAFIA_VC_ID);
+        // Get voice channel info using dynamic settings
+        const mafiaVcId = await getMafiaVcId(guildId, game);
+        const voiceChannel = await this.client.channels.fetch(mafiaVcId);
         const members = voiceChannel?.members.map(m => ({
           id: m.id,
           username: m.user.username,
@@ -378,7 +394,9 @@ class MafiaWebhookServer {
     this.app.get('/api/voice/members/:guildId', this.verifySignature.bind(this), async (req, res) => {
       try {
         const { guildId } = req.params;
-        const voiceChannel = await this.client.channels.fetch(MAFIA_VC_ID);
+        const game = this.games.get(guildId);
+        const mafiaVcId = await getMafiaVcId(guildId, game);
+        const voiceChannel = await this.client.channels.fetch(mafiaVcId);
 
         if (!voiceChannel) {
           return res.status(404).json({
@@ -399,7 +417,7 @@ class MafiaWebhookServer {
 
         res.json({
           success: true,
-          channelId: MAFIA_VC_ID,
+          channelId: mafiaVcId,
           memberCount: members.length,
           members: members
         });
@@ -417,7 +435,9 @@ class MafiaWebhookServer {
     this.app.post('/api/voice/channel/mute', this.verifySignature.bind(this), async (req, res) => {
       try {
         const { channelId, guildId, reason } = req.body;
-        const vcId = channelId || MAFIA_VC_ID;
+        const game = guildId ? this.games.get(guildId) : null;
+        const defaultVcId = await getMafiaVcId(guildId, game);
+        const vcId = channelId || defaultVcId;
 
         if (!guildId) {
           return res.status(400).json({
@@ -475,7 +495,9 @@ class MafiaWebhookServer {
     this.app.post('/api/voice/channel/unmute', this.verifySignature.bind(this), async (req, res) => {
       try {
         const { channelId, guildId, reason } = req.body;
-        const vcId = channelId || MAFIA_VC_ID;
+        const game = guildId ? this.games.get(guildId) : null;
+        const defaultVcId = await getMafiaVcId(guildId, game);
+        const vcId = channelId || defaultVcId;
 
         if (!guildId) {
           return res.status(400).json({

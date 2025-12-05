@@ -2,30 +2,31 @@ const { EmbedBuilder, ButtonStyle, ActionRowBuilder, ButtonBuilder } = require('
 const { ROLES } = require('../roles/mafiaRoles');
 const { createGameEmbed } = require('../ui/embeds');
 const { createVotingButtons } = require('../ui/buttons');
-const { 
-    sendRoleDMs, 
-    sendDeathNotification, 
-    sendToEveryoneInGame, 
+const {
+    sendRoleDMs,
+    sendDeathNotification,
+    sendToEveryoneInGame,
     updateGameDisplay,
-    sendToAllPlayers 
+    sendToAllPlayers
 } = require('../ui/messaging');
-const { 
-    processNightActions, 
-    processWaspSuccession 
+const {
+    processNightActions,
+    processWaspSuccession
 } = require('../game/mafiaActions');
-const { 
-    createGame, 
-    deleteGame, 
-    getGame 
+const {
+    createGame,
+    deleteGame,
+    getGame
 } = require('../game/mafiaGameState');
-const { 
-    getPlayerTeam, 
-    shuffleArray, 
-    checkWinConditions, 
-    getRoleDistribution, 
+const {
+    getPlayerTeam,
+    shuffleArray,
+    checkWinConditions,
+    getRoleDistribution,
     initializePlayerRole,
     determineWinners
 } = require('../game/mafiaUtils');
+const { getSetting } = require('../../utils/settingsManager');
 
 // We'll inject actionHandler later to avoid circular dependency issues during module load
 let actionHandler = null;
@@ -34,8 +35,16 @@ function setActionHandler(handler) {
     actionHandler = handler;
 }
 
-const MAFIA_TEXT_CHANNEL_ID = '1434636519380881508';
-const MAFIA_VC_ID = '1434636519380881509';
+// Legacy fallback IDs (used if no settings configured)
+const DEFAULT_MAFIA_TEXT_CHANNEL_ID = '1434636519380881508';
+const DEFAULT_MAFIA_VC_ID = '1434636519380881509';
+
+// Helper to get mafia channels from settings
+async function getMafiaChannels(guildId) {
+    const textChannel = await getSetting(guildId, 'channels.mafia_text', DEFAULT_MAFIA_TEXT_CHANNEL_ID);
+    const voiceChannel = await getSetting(guildId, 'channels.mafia_voice', DEFAULT_MAFIA_VC_ID);
+    return { textChannel, voiceChannel };
+}
 
 // Helper to check if a player is a mute variant
 function isMutePlayer(player) {
@@ -70,7 +79,9 @@ function getPhaseDuration(game, phase) {
 // Mute/unmute voice channel
 async function muteVoiceAndLockText(game, client, shouldMute) {
     try {
-        const voiceChannel = await client.channels.fetch(MAFIA_VC_ID);
+        // Use dynamic VC ID from game state, or fall back to default
+        const vcId = game.voiceChannelId || DEFAULT_MAFIA_VC_ID;
+        const voiceChannel = await client.channels.fetch(vcId);
 
         if (shouldMute) {
             // NIGHT: Mute all members
@@ -124,7 +135,10 @@ async function muteVoiceAndLockText(game, client, shouldMute) {
 
 // Start Mafia Game
 async function startMafiaGame(client, config) {
-    const { gameId, players, organizerId, randomMode, customDurations, revealRoles, preset, noAI, specifiedRoles, debugMode } = config;
+    const { gameId, guildId, players, organizerId, randomMode, customDurations, revealRoles, preset, noAI, specifiedRoles, debugMode } = config;
+
+    // Get dynamic channel settings
+    const { textChannel: mafiaTextChannelId, voiceChannel: mafiaVcId } = await getMafiaChannels(guildId);
 
     // Filter out invalid players
     const realPlayers = players.filter(p => !p.id.startsWith('bot'));
@@ -136,7 +150,7 @@ async function startMafiaGame(client, config) {
         for (let i = 0; i < specifiedRoles.length && i < realPlayers.length; i++) {
             initializePlayerRole(realPlayers[i], specifiedRoles[i]);
         }
-        
+
         // Assign random roles to remaining players (including bots)
         const remainingPlayers = [...realPlayers.slice(specifiedRoles.length), ...fakePlayers];
         const roleDistribution = getRoleDistribution(remainingPlayers.length, randomMode, true);
@@ -163,15 +177,16 @@ async function startMafiaGame(client, config) {
         }
     });
 
-    // Create game state
-    const game = createGame(gameId, players, organizerId, MAFIA_TEXT_CHANNEL_ID);
+    // Create game state with guildId for settings lookup
+    const game = createGame(gameId, players, organizerId, mafiaTextChannelId, guildId);
     game.debugMode = debugMode || false;
     game.noAI = noAI;
     game.revealRoles = revealRoles;
+    game.voiceChannelId = mafiaVcId; // Store VC ID for voice muting
     if (customDurations) game.customDurations = customDurations;
 
     // Send initial message
-    const channel = await client.channels.fetch(MAFIA_TEXT_CHANNEL_ID);
+    const channel = await client.channels.fetch(mafiaTextChannelId);
     game.cachedChannel = channel;
 
     const setupEmbed = createGameEmbed(game); // Use the new embed creator

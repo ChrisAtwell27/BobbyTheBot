@@ -2,12 +2,29 @@ const { Collection, PermissionsBitField, EmbedBuilder } = require("discord.js");
 // TARGET_GUILD_ID removed
 const { LimitedMap } = require("../utils/memoryUtils");
 const { hasAdminPermission } = require("../utils/adminPermissions");
+const { getSetting } = require("../utils/settingsManager");
+
+// Default fallback values for role/channel names
+const DEFAULT_DEAD_ROLE_NAME = "dead.";
+const DEFAULT_GRAVEYARD_CHANNEL_NAME = "the-graveyard";
 
 module.exports = (client) => {
+  // Helper to get dead role ID or name from settings
+  async function getDeadRoleInfo(guildId) {
+    const roleId = await getSetting(guildId, 'roles.dead', null);
+    return { roleId, fallbackName: DEFAULT_DEAD_ROLE_NAME };
+  }
+
+  // Helper to get graveyard channel ID or name from settings
+  async function getGraveyardChannelInfo(guildId) {
+    const channelId = await getSetting(guildId, 'channels.graveyard', null);
+    return { channelId, fallbackName: DEFAULT_GRAVEYARD_CHANNEL_NAME };
+  }
+
   // Configuration options
   const config = {
-    deadRoleName: "dead.",
-    graveyardChannelName: "the-graveyard",
+    deadRoleName: DEFAULT_DEAD_ROLE_NAME, // Legacy fallback
+    graveyardChannelName: DEFAULT_GRAVEYARD_CHANNEL_NAME, // Legacy fallback
     spamThreshold: 2, // Number of channels for spam detection
     timeWindow: 30000, // 30 seconds window
     maxWarnings: 3,
@@ -228,10 +245,21 @@ module.exports = (client) => {
     if (!member) return false;
 
     try {
-      // Find the Dead. role
-      let deadRole = member.guild.roles.cache.find(
-        (role) => role.name === config.deadRoleName
-      );
+      // Get dead role from settings or by name
+      const { roleId: deadRoleId, fallbackName } = await getDeadRoleInfo(member.guild.id);
+      let deadRole;
+
+      if (deadRoleId) {
+        // Try to get role by ID from settings
+        deadRole = member.guild.roles.cache.get(deadRoleId);
+      }
+
+      if (!deadRole) {
+        // Fallback to finding by name
+        deadRole = member.guild.roles.cache.find(
+          (role) => role.name === fallbackName
+        );
+      }
 
       // Create the role if it doesn't exist
       if (!deadRole) {
@@ -248,9 +276,18 @@ module.exports = (client) => {
 
       // Send notification to graveyard channel
       try {
-        const graveyardChannel = member.guild.channels.cache.find(
-          (channel) => channel.name === config.graveyardChannelName
-        );
+        const { channelId: graveyardChannelId, fallbackName: graveyardFallbackName } = await getGraveyardChannelInfo(member.guild.id);
+        let graveyardChannel;
+
+        if (graveyardChannelId) {
+          graveyardChannel = member.guild.channels.cache.get(graveyardChannelId);
+        }
+
+        if (!graveyardChannel) {
+          graveyardChannel = member.guild.channels.cache.find(
+            (channel) => channel.name === graveyardFallbackName
+          );
+        }
 
         if (graveyardChannel && graveyardChannel.isTextBased()) {
           const embed = new EmbedBuilder()
@@ -694,9 +731,18 @@ module.exports = (client) => {
 
         // Send notification to graveyard channel
         try {
-          const graveyardChannel = message.guild.channels.cache.find(
-            (channel) => channel.name === config.graveyardChannelName
-          );
+          const { channelId: graveyardChannelId, fallbackName: graveyardFallbackName } = await getGraveyardChannelInfo(message.guild.id);
+          let graveyardChannel;
+
+          if (graveyardChannelId) {
+            graveyardChannel = message.guild.channels.cache.get(graveyardChannelId);
+          }
+
+          if (!graveyardChannel) {
+            graveyardChannel = message.guild.channels.cache.find(
+              (channel) => channel.name === graveyardFallbackName
+            );
+          }
 
           if (graveyardChannel && graveyardChannel.isTextBased()) {
             const graveyardEmbed = new EmbedBuilder()
@@ -819,7 +865,7 @@ module.exports = (client) => {
         }
       }
 
-      const stats = getUserStats(targetUser.id, message.guild);
+      const stats = await getUserStats(targetUser.id, message.guild);
       const targetMember = message.guild.members.cache.get(targetUser.id);
 
       const embed = new EmbedBuilder()
@@ -965,9 +1011,20 @@ module.exports = (client) => {
   // Function to remove dead role manually
   async function removeDeadRole(member) {
     try {
-      const deadRole = member.guild.roles.cache.find(
-        (role) => role.name === config.deadRoleName
-      );
+      // Get dead role from settings or by name
+      const { roleId: deadRoleId, fallbackName } = await getDeadRoleInfo(member.guild.id);
+      let deadRole;
+
+      if (deadRoleId) {
+        deadRole = member.guild.roles.cache.get(deadRoleId);
+      }
+
+      if (!deadRole) {
+        deadRole = member.guild.roles.cache.find(
+          (role) => role.name === fallbackName
+        );
+      }
+
       if (deadRole && member.roles.cache.has(deadRole.id)) {
         await member.roles.remove(deadRole, "Manual moderation: Role removed");
         return true;
@@ -979,18 +1036,30 @@ module.exports = (client) => {
     }
   }
 
-  // Function to get user stats
-  function getUserStats(userId, guild) {
+  // Function to get user stats (async to support dynamic settings)
+  async function getUserStats(userId, guild) {
     const messages = userMessages.get(userId) || [];
     const warnings = userWarnings.get(userId) || 0;
     const messageRate = userMessageCount.get(userId)?.length || 0;
     const member = guild.members.cache.get(userId);
-    const deadRole = guild.roles.cache.find(
-      (role) => role.name === config.deadRoleName
-    );
+
+    // Get dead role from settings or by name
+    const { roleId: deadRoleId, fallbackName } = await getDeadRoleInfo(guild.id);
+    let deadRole;
+
+    if (deadRoleId) {
+      deadRole = guild.roles.cache.get(deadRoleId);
+    }
+
+    if (!deadRole) {
+      deadRole = guild.roles.cache.find(
+        (role) => role.name === fallbackName
+      );
+    }
+
     const hasDeadRole =
       member && deadRole ? member.roles.cache.has(deadRole.id) : false;
-    const isExempt = member ? isExemptFromModeration(member) : false;
+    const isExempt = member ? await isExemptFromModeration(member) : false;
 
     return {
       recentMessages: messages.length,

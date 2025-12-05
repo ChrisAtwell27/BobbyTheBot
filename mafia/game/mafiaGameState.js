@@ -15,12 +15,14 @@ const playerGameMap = new LimitedMap(100); // Track which game each player is in
  * @param {Array} players - Array of player objects
  * @param {string} organizerId - Discord ID of game organizer
  * @param {string} channelId - Discord channel ID
+ * @param {string} guildId - Discord guild ID (for settings lookup)
  * @returns {Object} Game object
  */
-function createGame(gameId, players, organizerId, channelId) {
+function createGame(gameId, players, organizerId, channelId, guildId = null) {
     const game = {
         id: gameId,
         channelId: channelId,
+        guildId: guildId, // Guild ID for dynamic settings lookup
         messageId: null,
         cachedChannel: null,
         organizerId: organizerId,
