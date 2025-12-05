@@ -1,13 +1,15 @@
 const cron = require("node-cron");
-const { ConvexHttpClient } = require("convex/browser");
+const { getConvexClient } = require("../database/convexClient");
 const { api } = require("../convex/_generated/api");
 const { TARGET_GUILD_ID } = require("../config/guildConfig");
-require("dotenv").config();
 
-const client = new ConvexHttpClient(process.env.CONVEX_URL);
+// Remove direct instantiation to prevent startup crash if env var is missing
+// const client = new ConvexHttpClient(process.env.CONVEX_URL);
 const UPDATES_ROLE_ID = "1428572559523188746";
 
 module.exports = (discordClient, announcementsChannelId) => {
+  const client = getConvexClient();
+
   // Handle !birthday command
   discordClient.on("messageCreate", async (message) => {
     // Ignore bot messages
