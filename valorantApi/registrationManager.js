@@ -157,13 +157,18 @@ async function findOrMigrateUser(guildId, discordUser) {
  * @returns {Promise<Map>}
  */
 async function getAllRegisteredUsers(guildId) {
-  const client = getClient();
-  const users = await client.query(api.users.getAllValorantUsers, {
-    guildId,
-  });
-  const map = new Map();
-  users.forEach((u) => map.set(u.userId, u.valorant));
-  return map;
+  try {
+    const client = getClient();
+    const users = await client.query(api.users.getAllValorantUsers, {
+      guildId,
+    });
+    const map = new Map();
+    users.forEach((u) => map.set(u.userId, u.valorant));
+    return map;
+  } catch (error) {
+    console.error(`[Registration Manager] Error fetching users: ${error.message}`);
+    return new Map(); // Return empty map on error
+  }
 }
 
 /**
