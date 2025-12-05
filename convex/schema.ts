@@ -264,6 +264,7 @@ export default defineSchema({
     houseBalance: v.number(),
     lastVotingDate: v.optional(v.number()),
     settings: v.optional(v.record(v.string(), v.any())),
+    tier: v.optional(v.string()), // "free", "basic", "premium", "enterprise"
 
     createdAt: v.number(),
     updatedAt: v.number(),

@@ -131,6 +131,24 @@ export const upsertSubscription = mutation({
         createdAt: now,
         updatedAt: now,
       });
+
+      // Sync tier to servers if guilds provided at creation
+      if (args.verifiedGuilds && args.verifiedGuilds.length > 0) {
+        for (const guild of args.verifiedGuilds) {
+           const server = await ctx.db
+            .query("servers")
+            .withIndex("by_guild", (q) => q.eq("guildId", guild.guildId))
+            .first();
+           
+           if (server) {
+             await ctx.db.patch(server._id, {
+               tier: args.tier ?? "free",
+               updatedAt: now,
+             });
+           }
+        }
+      }
+
       return newSubscription;
     }
   },
@@ -160,6 +178,7 @@ export const addVerifiedGuild = mutation({
     );
 
     if (existingGuild) {
+      // Still ensure tier is synced implicitly? Optional but robust.
       return subscription._id; // Already verified
     }
 
@@ -176,6 +195,33 @@ export const addVerifiedGuild = mutation({
       verifiedGuilds: updatedGuilds,
       updatedAt: Date.now(),
     });
+
+    // SYNC TIER TO SERVER
+    const server = await ctx.db
+      .query("servers")
+      .withIndex("by_guild", (q) => q.eq("guildId", args.guildId))
+      .first();
+
+    // Determine effective tier (active subscription?)
+    // Here we assume if they are adding a guild, the sub's tier applies
+    const tier = subscription.status === 'active' ? subscription.tier : 'free';
+
+    if (server) {
+      await ctx.db.patch(server._id, {
+        tier: tier,
+        updatedAt: Date.now(),
+      });
+    } else {
+      // If server doesn't exist yet (bot just joined?), create it
+      await ctx.db.insert("servers", {
+        guildId: args.guildId,
+        houseBalance: 0,
+        settings: {},
+        tier: tier,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
 
     return subscription._id;
   },

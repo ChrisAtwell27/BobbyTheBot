@@ -4,7 +4,9 @@ const {
   getSettings,
   setSetting,
   getSetting,
+  getServerTier,
 } = require("../utils/settingsManager");
+const { getRequirement, meetsRequirement } = require("../config/settingTiers");
 
 /**
  * Settings API Server
@@ -68,7 +70,8 @@ class SettingsServer {
         try {
           const { guildId } = req.params;
           const settings = await getSettings(guildId);
-          res.json({ success: true, guildId, settings });
+          const tier = await getServerTier(guildId); // Get current tier
+          res.json({ success: true, guildId, tier, settings });
         } catch (error) {
           res.status(500).json({ success: false, error: error.message });
         }
@@ -88,6 +91,18 @@ class SettingsServer {
             return res
               .status(400)
               .json({ success: false, error: "Missing key" });
+          }
+
+          // Check Tier Permissions
+          const currentTier = await getServerTier(guildId);
+          const requiredTier = getRequirement(key);
+
+          if (!meetsRequirement(currentTier, requiredTier)) {
+            return res.status(403).json({
+              success: false,
+              error: "Forbidden: Higher subscription tier required",
+              tier: { current: currentTier, required: requiredTier },
+            });
           }
 
           const result = await setSetting(guildId, key, value);

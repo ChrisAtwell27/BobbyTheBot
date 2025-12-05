@@ -109,4 +109,26 @@ function invalidateCache(guildId) {
   settingsCache.delete(guildId);
 }
 
-module.exports = { getSettings, getSetting, setSetting, invalidateCache };
+/**
+ * Get the subscription tier for a guild
+ * @param {string} guildId
+ * @returns {Promise<string>} Tier (default "free")
+ */
+async function getServerTier(guildId) {
+  if (!convex) return "free";
+  try {
+    const server = await convex.query("servers:getServer", { guildId });
+    return server && server.tier ? server.tier : "free";
+  } catch (error) {
+    console.error(`Error fetching tier for guild ${guildId}:`, error);
+    return "free";
+  }
+}
+
+module.exports = {
+  getSettings,
+  getSetting,
+  setSetting,
+  invalidateCache,
+  getServerTier,
+};
