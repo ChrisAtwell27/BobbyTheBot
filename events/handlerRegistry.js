@@ -41,6 +41,9 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Bump handler - needs its own listener to receive bot messages from DISBOARD
     require('./bumpHandler')(client);
 
+    // Guild join handler - monitors guildCreate/guildDelete for automatic trials
+    require('./guildJoinHandler')(client);
+
     // ==========================================
     // MESSAGE PROCESSORS
     // (These need to see ALL messages, not just commands)

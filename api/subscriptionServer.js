@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const Subscription = require('../database/models/Subscription');
+const ConvexHelper = require('./convexApiHelper');
 
 /**
  * Subscription Verification API Server
@@ -439,30 +440,54 @@ class SubscriptionServer {
 
                 const botVerified = verifiedGuilds.length > 0;
 
-                // Update or create subscription record with Clerk user ID
-                const subscription = await Subscription.findOneAndUpdate(
-                    { discordId },
-                    {
-                        $set: {
-                            discordUsername: userInfo.username,
-                            discordAvatar: userInfo.avatar,
-                            botVerified,
-                            lastVerificationCheck: new Date(),
-                            verifiedGuilds: verifiedGuilds.map(g => ({
-                                guildId: g.guildId,
-                                guildName: g.guildName,
-                                verifiedAt: new Date()
-                            })),
-                            'metadata.clerkUserId': clerkUserId
-                        },
-                        $setOnInsert: {
-                            tier: 'free',
-                            status: 'pending',
-                            subscribedAt: new Date()
-                        }
-                    },
-                    { upsert: true, new: true }
-                );
+                // Upsert subscription in Convex with user-level data
+                await ConvexHelper.upsertSubscription({
+                    discordId,
+                    discordUsername: userInfo.username,
+                    discordAvatar: userInfo.avatar,
+                    botVerified,
+                    metadata: { clerkUserId }
+                });
+
+                // Get current subscription to check existing guilds
+                const existingSubscription = await ConvexHelper.getSubscriptionByDiscordId(discordId);
+                const existingGuildIds = existingSubscription?.verifiedGuilds?.map(g => g.guildId) || [];
+
+                // Add verified guilds with automatic trials for new guilds
+                for (const guild of verifiedGuilds) {
+                    if (!existingGuildIds.includes(guild.guildId)) {
+                        // New guild - start a 7-day trial
+                        await ConvexHelper.addVerifiedGuild(
+                            discordId,
+                            guild.guildId,
+                            guild.guildName,
+                            true // Start trial
+                        );
+                    }
+                }
+
+                // Fetch updated subscription with per-guild data
+                const subscription = await ConvexHelper.getSubscriptionByDiscordId(discordId);
+
+                // Format verified guilds with per-guild subscription data
+                const formattedGuilds = verifiedGuilds.map(guild => {
+                    const guildSubscription = subscription?.verifiedGuilds?.find(g => g.guildId === guild.guildId);
+                    const formatted = guildSubscription ? ConvexHelper.formatGuildForResponse(guildSubscription) : null;
+
+                    return {
+                        guildId: guild.guildId,
+                        guildName: guild.guildName,
+                        guildIcon: guild.guildIcon,
+                        isOwner: guild.isOwner,
+                        permissions: guild.permissions,
+                        // Per-guild subscription data
+                        tier: formatted?.tier || 'free',
+                        status: formatted?.status || 'active',
+                        trialEndsAt: formatted?.trialEndsAt || null,
+                        expiresAt: formatted?.expiresAt || null,
+                        subscribedAt: formatted?.subscribedAt || Date.now(),
+                    };
+                });
 
                 res.json({
                     success: true,
@@ -477,13 +502,7 @@ class SubscriptionServer {
                     guilds: {
                         total: userGuilds.length,
                         withBot: verifiedGuilds.length,
-                        verified: verifiedGuilds
-                    },
-                    subscription: {
-                        tier: subscription.tier,
-                        status: subscription.status,
-                        features: Subscription.getTierFeatures(subscription.tier),
-                        expiresAt: subscription.expiresAt
+                        verified: formattedGuilds // Now includes per-guild tier/status/trial data
                     },
                     // Include invite URL if not verified
                     ...(botVerified ? {} : {

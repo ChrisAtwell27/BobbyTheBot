@@ -297,6 +297,23 @@ export default defineSchema({
       guildId: v.string(),
       guildName: v.string(),
       verifiedAt: v.number(),
+      // Per-guild subscription data
+      tier: v.optional(v.union(
+        v.literal("free"),
+        v.literal("basic"),
+        v.literal("premium"),
+        v.literal("enterprise")
+      )),
+      status: v.optional(v.union(
+        v.literal("active"),
+        v.literal("trial"),
+        v.literal("expired"),
+        v.literal("cancelled"),
+        v.literal("pending")
+      )),
+      trialEndsAt: v.optional(v.number()),
+      expiresAt: v.optional(v.number()),
+      subscribedAt: v.optional(v.number()),
     })),
 
     lastVerificationCheck: v.optional(v.number()),

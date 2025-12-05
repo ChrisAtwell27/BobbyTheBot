@@ -1,5 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { getSubscription, normalizeTier, TIERS } = require('../utils/subscriptionUtils');
+const { getConvexClient } = require('../utils/convexClient');
+const { api } = require('../convex/_generated/api');
 
 /**
  * Subscription Command Handler
@@ -21,7 +23,16 @@ module.exports = (client) => {
 
     try {
       const guildId = message.guild.id;
-      const subscription = await getSubscription(guildId);
+      const ownerId = message.guild.ownerId;
+
+      // Get Convex client and query guild-specific subscription
+      const convex = getConvexClient();
+      const ownerSubscription = await convex.query(api.subscriptions.getSubscription, {
+        discordId: ownerId
+      });
+
+      // Find this guild's subscription data
+      const guildSubscription = ownerSubscription?.verifiedGuilds?.find(g => g.guildId === guildId);
 
       // Tier information
       const tierEmojis = {
@@ -39,7 +50,8 @@ module.exports = (client) => {
       const tierColors = {
         [TIERS.FREE]: 0x95A5A6,      // Gray
         [TIERS.PLUS]: 0x3498DB,      // Blue
-        [TIERS.ULTIMATE]: 0x9B59B6   // Purple
+        [TIERS.ULTIMATE]: 0x9B59B6,   // Purple
+        trial: 0xF39C12               // Orange for trial
       };
 
       const tierDescriptions = {
@@ -48,44 +60,69 @@ module.exports = (client) => {
         [TIERS.ULTIMATE]: 'Everything in Plus + Audit Logs, Auto-Moderation, Custom Prefix, API Access & Priority Support'
       };
 
-      // Determine current tier
+      // Determine current tier and status
       let currentTier = TIERS.FREE;
-      let isActive = false;
+      let status = 'active';
       let expiresAt = null;
+      let trialEndsAt = null;
+      let isOnTrial = false;
 
-      if (subscription && subscription.status === 'active') {
-        currentTier = normalizeTier(subscription.tier);
-        isActive = true;
-        expiresAt = subscription.expiresAt;
+      if (guildSubscription) {
+        currentTier = normalizeTier(guildSubscription.tier || 'free');
+        status = guildSubscription.status || 'active';
+        expiresAt = guildSubscription.expiresAt;
+        trialEndsAt = guildSubscription.trialEndsAt;
+        isOnTrial = status === 'trial';
+
+        // Check if trial has expired
+        if (isOnTrial && trialEndsAt && Date.now() > trialEndsAt) {
+          status = 'expired';
+          isOnTrial = false;
+        }
       }
 
       // Create embed
+      const embedColor = isOnTrial ? tierColors.trial : tierColors[currentTier];
       const embed = new EmbedBuilder()
-        .setColor(tierColors[currentTier])
-        .setTitle(`${tierEmojis[currentTier]} Server Subscription Status`)
-        .setDescription(`**${message.guild.name}** is currently on the **${tierNames[currentTier]}** tier.`)
-        .addFields(
-          {
-            name: '📊 Current Tier',
-            value: `${tierEmojis[currentTier]} **${tierNames[currentTier]}**`,
-            inline: true
-          },
-          {
-            name: '✅ Status',
-            value: isActive ? 'Active' : 'Inactive',
-            inline: true
-          }
-        );
+        .setColor(embedColor)
+        .setTitle(`${isOnTrial ? '🎁' : tierEmojis[currentTier]} Server Subscription Status`)
+        .setDescription(`**${message.guild.name}** is currently ${isOnTrial ? 'on a **7-day trial**' : `on the **${tierNames[currentTier]}** tier`}.`);
 
-      // Add expiration info if applicable
-      if (isActive && expiresAt) {
+      // Show trial information prominently
+      if (isOnTrial && trialEndsAt) {
+        const trialEndDate = new Date(trialEndsAt);
+        const now = Date.now();
+        const daysRemaining = Math.ceil((trialEndDate - now) / (1000 * 60 * 60 * 24));
+
+        embed.addFields({
+          name: '🎁 Trial Status',
+          value: `You have **${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}** remaining in your trial!\nTrial ends <t:${Math.floor(trialEndDate.getTime() / 1000)}:R>`,
+          inline: false
+        });
+      }
+
+      embed.addFields(
+        {
+          name: '📊 Current Tier',
+          value: `${tierEmojis[currentTier]} **${tierNames[currentTier]}**`,
+          inline: true
+        },
+        {
+          name: '✅ Status',
+          value: isOnTrial ? '🎁 Trial Active' : (status === 'active' ? 'Active' : 'Inactive'),
+          inline: true
+        }
+      );
+
+      // Add expiration info for paid subscriptions
+      if (status === 'active' && !isOnTrial && expiresAt) {
         const expirationDate = new Date(expiresAt);
-        const now = new Date();
+        const now = Date.now();
 
         if (expirationDate > now) {
           const daysUntilExpiry = Math.ceil((expirationDate - now) / (1000 * 60 * 60 * 24));
           embed.addFields({
-            name: '📅 Expires',
+            name: '📅 Subscription Expires',
             value: `<t:${Math.floor(expirationDate.getTime() / 1000)}:R> (${daysUntilExpiry} days)`,
             inline: true
           });

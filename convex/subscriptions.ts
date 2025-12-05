@@ -155,13 +155,14 @@ export const upsertSubscription = mutation({
 });
 
 /**
- * Add verified guild to subscription
+ * Add verified guild to subscription with automatic trial
  */
 export const addVerifiedGuild = mutation({
   args: {
     discordId: v.string(),
     guildId: v.string(),
     guildName: v.string(),
+    startTrial: v.optional(v.boolean()), // Auto-start 7-day trial
   },
   handler: async (ctx, args) => {
     const subscription = await ctx.db
@@ -177,23 +178,32 @@ export const addVerifiedGuild = mutation({
       (g) => g.guildId === args.guildId
     );
 
+    const now = Date.now();
+
     if (existingGuild) {
-      // Still ensure tier is synced implicitly? Optional but robust.
-      return subscription._id; // Already verified
+      // Already verified - don't modify existing trial/subscription
+      return subscription._id;
     }
 
-    const updatedGuilds = [
-      ...subscription.verifiedGuilds,
-      {
-        guildId: args.guildId,
-        guildName: args.guildName,
-        verifiedAt: Date.now(),
-      },
-    ];
+    // Determine if we should start a trial for this guild
+    const shouldStartTrial = args.startTrial !== false; // Default to true
+    const trialEndsAt = shouldStartTrial ? now + (7 * 24 * 60 * 60 * 1000) : undefined; // 7 days
+
+    const newGuild = {
+      guildId: args.guildId,
+      guildName: args.guildName,
+      verifiedAt: now,
+      tier: "free" as const,
+      status: shouldStartTrial ? ("trial" as const) : ("active" as const),
+      trialEndsAt: trialEndsAt,
+      subscribedAt: now,
+    };
+
+    const updatedGuilds = [...subscription.verifiedGuilds, newGuild];
 
     await ctx.db.patch(subscription._id, {
       verifiedGuilds: updatedGuilds,
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
 
     // SYNC TIER TO SERVER
@@ -202,14 +212,13 @@ export const addVerifiedGuild = mutation({
       .withIndex("by_guild", (q) => q.eq("guildId", args.guildId))
       .first();
 
-    // Determine effective tier (active subscription?)
-    // Here we assume if they are adding a guild, the sub's tier applies
-    const tier = subscription.status === 'active' ? subscription.tier : 'free';
+    // During trial, guild has "free" tier but status is "trial"
+    const tierForServer = newGuild.status === 'trial' ? 'free' : newGuild.tier;
 
     if (server) {
       await ctx.db.patch(server._id, {
-        tier: tier,
-        updatedAt: Date.now(),
+        tier: tierForServer,
+        updatedAt: now,
       });
     } else {
       // If server doesn't exist yet (bot just joined?), create it
@@ -217,9 +226,9 @@ export const addVerifiedGuild = mutation({
         guildId: args.guildId,
         houseBalance: 0,
         settings: {},
-        tier: tier,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        tier: tierForServer,
+        createdAt: now,
+        updatedAt: now,
       });
     }
 
@@ -277,6 +286,118 @@ export const updateVerificationCheck = mutation({
       lastVerificationCheck: Date.now(),
       updatedAt: Date.now(),
     });
+
+    return subscription._id;
+  },
+});
+
+/**
+ * Get guild-specific subscription status
+ */
+export const getGuildSubscription = query({
+  args: {
+    discordId: v.string(),
+    guildId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const subscription = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_discord_id", (q) => q.eq("discordId", args.discordId))
+      .first();
+
+    if (!subscription) {
+      return null;
+    }
+
+    const guildData = subscription.verifiedGuilds.find(
+      (g) => g.guildId === args.guildId
+    );
+
+    if (!guildData) {
+      return null;
+    }
+
+    // Check if trial has expired
+    const now = Date.now();
+    if (guildData.status === "trial" && guildData.trialEndsAt && guildData.trialEndsAt < now) {
+      return {
+        ...guildData,
+        status: "expired" as const,
+        isTrialExpired: true,
+      };
+    }
+
+    // Check if paid subscription has expired
+    if (guildData.status === "active" && guildData.expiresAt && guildData.expiresAt < now) {
+      return {
+        ...guildData,
+        status: "expired" as const,
+        isSubscriptionExpired: true,
+      };
+    }
+
+    return guildData;
+  },
+});
+
+/**
+ * Update guild-specific subscription
+ */
+export const updateGuildSubscription = mutation({
+  args: {
+    discordId: v.string(),
+    guildId: v.string(),
+    tier: v.optional(v.union(v.literal("free"), v.literal("basic"), v.literal("premium"), v.literal("enterprise"))),
+    status: v.optional(v.union(v.literal("active"), v.literal("trial"), v.literal("expired"), v.literal("cancelled"), v.literal("pending"))),
+    expiresAt: v.optional(v.number()),
+    trialEndsAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const subscription = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_discord_id", (q) => q.eq("discordId", args.discordId))
+      .first();
+
+    if (!subscription) {
+      throw new Error("Subscription not found");
+    }
+
+    const now = Date.now();
+
+    // Find and update the specific guild
+    const updatedGuilds = subscription.verifiedGuilds.map((g) => {
+      if (g.guildId === args.guildId) {
+        return {
+          ...g,
+          ...(args.tier !== undefined && { tier: args.tier }),
+          ...(args.status !== undefined && { status: args.status }),
+          ...(args.expiresAt !== undefined && { expiresAt: args.expiresAt }),
+          ...(args.trialEndsAt !== undefined && { trialEndsAt: args.trialEndsAt }),
+        };
+      }
+      return g;
+    });
+
+    await ctx.db.patch(subscription._id, {
+      verifiedGuilds: updatedGuilds,
+      updatedAt: now,
+    });
+
+    // Sync tier to servers table
+    const server = await ctx.db
+      .query("servers")
+      .withIndex("by_guild", (q) => q.eq("guildId", args.guildId))
+      .first();
+
+    const guildData = updatedGuilds.find((g) => g.guildId === args.guildId);
+    const tierForServer = guildData?.tier || "free";
+
+    if (server) {
+      await ctx.db.patch(server._id, {
+        tier: tierForServer,
+        updatedAt: now,
+      });
+    }
 
     return subscription._id;
   },
