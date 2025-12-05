@@ -154,6 +154,12 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Bounty handler - !bounty, !claim
     registerCommandHandler(client, commandRouter, interactionRouter, './bountyHandler');
 
+    // Subscription command handler - !subscription, !sub, !tier
+    registerCommandHandler(client, commandRouter, interactionRouter, './subscriptionCommandHandler');
+
+    // Settings command handler - !settings, !config, !setup
+    registerCommandHandler(client, commandRouter, interactionRouter, './settingsCommandHandler');
+
     // Mafia handler - !createmafia, !join, !vote, etc.
     const mafiaHandler = require('./mafiaHandler');
     const mafiaWrapper = createHandlerWrapper(client, () => mafiaHandler);

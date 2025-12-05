@@ -401,6 +401,23 @@ const HELP_CATEGORIES = {
       },
     ],
   },
+  utility: {
+    name: "🔧 Utility & Info",
+    emoji: "🔧",
+    description: "Bot settings and subscription information",
+    commands: [
+      {
+        name: "!subscription",
+        description: "View your server's subscription tier and benefits",
+        usage: "!subscription (or !sub, !tier)",
+      },
+      {
+        name: "!settings",
+        description: "Get link to bot configuration dashboard",
+        usage: "!settings (or !config, !setup)",
+      },
+    ],
+  },
 };
 
 // Create help menu visualization
