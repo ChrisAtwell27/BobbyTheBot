@@ -57,7 +57,7 @@ async function batchGetUserRankInfo(userIds) {
   if (idsToFetch.length > 0) {
     const fetchPromises = idsToFetch.map(async (userId) => {
       try {
-        const registration = apiHandler.getUserRegistration(userId);
+        const registration = await apiHandler.getUserRegistration(userId);
         if (!registration) return { userId, data: null };
 
         const rankData = await apiHandler.getUserRankData(userId);
@@ -617,14 +617,17 @@ module.exports = (client) => {
                 // Auto-cleanup 10 minutes AFTER event starts
                 if (currentTeam.deleteTimer)
                   clearTimeout(currentTeam.deleteTimer);
-                currentTeam.deleteTimer = setTimeout(() => {
-                  activeTeams.delete(teamId);
-                  // Try to fetch message to delete it
-                  ch.messages
-                    .fetch(currentTeam.messageId)
-                    .then((msg) => msg.delete())
-                    .catch(() => {});
-                }, 10 * 60 * 1000);
+                currentTeam.deleteTimer = setTimeout(
+                  () => {
+                    activeTeams.delete(teamId);
+                    // Try to fetch message to delete it
+                    ch.messages
+                      .fetch(currentTeam.messageId)
+                      .then((msg) => msg.delete())
+                      .catch(() => {});
+                  },
+                  10 * 60 * 1000
+                );
               } catch (err) {
                 console.error("[Team] Event timer error:", err);
               }
@@ -635,19 +638,22 @@ module.exports = (client) => {
 
       // Auto-disband warning at 25 minutes (only if no timer set, or if timer is far out)
       if (!team.targetTime) {
-        team.warningTimer = setTimeout(async () => {
-          const currentTeam = activeTeams.get(teamId);
-          if (currentTeam && getTotalMembers(currentTeam) < 5) {
-            try {
-              const ch = await client.channels.fetch(currentTeam.channelId);
-              await ch.send(
-                `⏰ Team will auto-disband in **5 minutes** if not filled! (${getTotalMembers(
-                  currentTeam
-                )}/5)`
-              );
-            } catch {}
-          }
-        }, 25 * 60 * 1000);
+        team.warningTimer = setTimeout(
+          async () => {
+            const currentTeam = activeTeams.get(teamId);
+            if (currentTeam && getTotalMembers(currentTeam) < 5) {
+              try {
+                const ch = await client.channels.fetch(currentTeam.channelId);
+                await ch.send(
+                  `⏰ Team will auto-disband in **5 minutes** if not filled! (${getTotalMembers(
+                    currentTeam
+                  )}/5)`
+                );
+              } catch {}
+            }
+          },
+          25 * 60 * 1000
+        );
       }
 
       return true;
@@ -793,13 +799,16 @@ module.exports = (client) => {
               // Auto-cleanup 10 minutes AFTER event starts
               if (currentTeam.deleteTimer)
                 clearTimeout(currentTeam.deleteTimer);
-              currentTeam.deleteTimer = setTimeout(() => {
-                activeTeams.delete(fullTeamId);
-                ch.messages
-                  .fetch(currentTeam.messageId)
-                  .then((msg) => msg.delete())
-                  .catch(() => {});
-              }, 10 * 60 * 1000);
+              currentTeam.deleteTimer = setTimeout(
+                () => {
+                  activeTeams.delete(fullTeamId);
+                  ch.messages
+                    .fetch(currentTeam.messageId)
+                    .then((msg) => msg.delete())
+                    .catch(() => {});
+                },
+                10 * 60 * 1000
+              );
             } catch (err) {
               console.error("[Team] Event timer error:", err);
             }
@@ -1008,10 +1017,13 @@ module.exports = (client) => {
 
             // Auto-cleanup after 10 minutes ONLY if no future event is scheduled
             if (!team.targetTime || team.targetTime < Date.now()) {
-              team.deleteTimer = setTimeout(() => {
-                activeTeams.delete(fullTeamId);
-                interaction.message?.delete().catch(() => {});
-              }, 10 * 60 * 1000);
+              team.deleteTimer = setTimeout(
+                () => {
+                  activeTeams.delete(fullTeamId);
+                  interaction.message?.delete().catch(() => {});
+                },
+                10 * 60 * 1000
+              );
             }
 
             // Save to history
@@ -1241,10 +1253,13 @@ module.exports = (client) => {
           });
 
           // Auto-cleanup
-          team.deleteTimer = setTimeout(() => {
-            activeTeams.delete(fullTeamId);
-            message.delete().catch(() => {});
-          }, 5 * 60 * 1000);
+          team.deleteTimer = setTimeout(
+            () => {
+              activeTeams.delete(fullTeamId);
+              message.delete().catch(() => {});
+            },
+            5 * 60 * 1000
+          );
 
           // Save to history
           saveTeamToHistory({

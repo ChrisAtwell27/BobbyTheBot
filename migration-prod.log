@@ -1,0 +1,42 @@
+[dotenv@17.2.3] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+🚀 Starting MongoDB to Convex migration...
+
+📋 Migration Strategy: Guild ID Partitioning
+   - All guilds share the same Convex tables
+   - Data partitioned by guildId field (same as MongoDB)
+   - Single migration handles all guilds
+
+🔌 Connecting to MongoDB...
+(node:78832) [MONGOOSE] Warning: Duplicate schema index on {"userId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✅ Connected to MongoDB
+🔌 Connecting to Convex...
+✅ Connected to Convex
+
+📊 Starting data migration...
+
+
+📦 Migrating users...
+Found 299 users to migrate
+  ✓ Progress: 50/299 users processed
+  ✓ Progress: 100/299 users processed
+  ✓ Progress: 150/299 users processed
+  ✓ Progress: 200/299 users processed
+  ✓ Progress: 250/299 users processed
+  ✓ Progress: 299/299 users processed
+✅ Users migration complete: 299 migrated, 0 failed
+
+📦 Migrating bounties...
+Found 0 bounties to migrate
+✅ Bounties migration complete: 0 migrated, 0 failed
+
+📦 Migrating team histories...
+Found 4 teams to migrate
+✅ Team histories migration complete: 4 migrated, 0 failed
+
+📦 Migrating trivia sessions...
+Found 1 sessions to migrate
+✅ Trivia sessions migration complete: 1 migrated
+
+📦 Migrating wordle scores...
+Found 26 wordle scores to migrate

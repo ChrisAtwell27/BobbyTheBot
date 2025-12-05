@@ -21,7 +21,14 @@
       "Bash(node:*)",
       "Bash(if not exist \"e:\\BobbyTheBot\\BobbyTheBot\\commands\" mkdir \"e:\\BobbyTheBot\\BobbyTheBot\\commands\")",
       "Bash(find:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(npx convex dev:*)",
+      "Bash(npx convex deploy)",
+      "Bash(npx convex:*)",
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": []

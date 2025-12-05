@@ -6,6 +6,7 @@ const path = require('path');
 const { getBobbyBucks, updateBobbyBucks, setBobbyBucks } = require('../database/helpers/economyHelpers');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
 const { CleanupMap } = require('../utils/memoryUtils');
+const { checkSubscription, createUpgradeEmbed, TIERS } = require('../utils/subscriptionUtils');
 
 // Store active Russian Roulette lobbies (auto-cleanup after 5 minutes)
 const activeLobbies = new CleanupMap(5 * 60 * 1000, 1 * 60 * 1000);
@@ -358,9 +359,16 @@ module.exports = (client) => {
 
         // Russian Roulette command
         if (command === '!russianroulette' || command === '!rr') {
+            // Check subscription tier (PLUS required for russian roulette)
+            const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+            if (!subCheck.hasAccess) {
+                const upgradeEmbed = createUpgradeEmbed('Russian Roulette', TIERS.PLUS, subCheck.guildTier);
+                return message.channel.send({ embeds: [upgradeEmbed] });
+            }
+
             const userId = message.author.id;
             const userBalance = await getBobbyBucks(userId);
-            
+
             // Check if user has any money
             if (userBalance <= 0) {
                 return message.channel.send({

@@ -208,7 +208,7 @@ async function handleRegistrationSubmission(interaction) {
       registeredAt: new Date().toISOString(),
     };
 
-    addUserRegistration(interaction.user.id, userData);
+    await addUserRegistration(interaction.user.id, userData);
 
     const successEmbed = new EmbedBuilder()
       .setTitle("✅ Registration Successful!")
@@ -289,7 +289,7 @@ async function handleUpdateRegistration(message, args) {
 
   // If region not provided, try to get from existing registration
   if (!region) {
-    const existing = getUserRegistration(message.author.id);
+    const existing = await getUserRegistration(message.author.id);
     if (existing) {
       region = existing.region;
     } else {
@@ -342,7 +342,7 @@ async function handleUpdateRegistration(message, args) {
       updatedAt: new Date().toISOString(),
     };
 
-    addUserRegistration(message.author.id, userData);
+    await addUserRegistration(message.author.id, userData);
 
     const successEmbed = new EmbedBuilder()
       .setTitle("✅ Valorant Tag Updated!")
@@ -678,7 +678,7 @@ async function getPlayersWithStats(reactors, client) {
   const players = [];
 
   for (const user of reactors) {
-    const registration = getUserRegistration(user.id);
+    const registration = await getUserRegistration(user.id);
     if (!registration) {
       console.log(`User ${user.tag} is not registered`);
       continue;
@@ -1024,7 +1024,7 @@ module.exports = {
   getAllRegisteredUsers,
 
   // Initialize function to set up event handlers
-  init: (client) => {
+  init: async (client) => {
     // Only add event listeners if not already added
     if (!client._valorantApiHandlerInitialized) {
       console.log(
@@ -1035,7 +1035,7 @@ module.exports = {
         "Commands: !valstats, !valprofile, !valmatches, !createteams (admin), !valtest (admin), !valreset (admin), !vallist (admin), !valskills (admin)"
       );
       console.log(`Data file: ${USERS_FILE}`);
-      console.log(`Loaded ${getRegistrationCount()} registered users`);
+      console.log(`Loaded ${await getRegistrationCount()} registered users`);
 
       client.on("messageCreate", async (message) => {
         if (message.author.bot) return;
@@ -1048,7 +1048,7 @@ module.exports = {
         // !valstats or !valprofile command
         if (command === "!valstats" || command === "!valprofile") {
           // Use migration utility to handle legacy username registrations
-          const registration = findOrMigrateUser(message.author);
+          const registration = await findOrMigrateUser(message.author);
 
           if (!registration) {
             await showRegistrationPrompt(message);
@@ -1065,7 +1065,7 @@ module.exports = {
 
         // !valmatches command
         if (command === "!valmatches") {
-          const registration = findOrMigrateUser(message.author);
+          const registration = await findOrMigrateUser(message.author);
           if (!registration) {
             await message.channel.send(
               "❌ You need to register first! Use `!valstats` to register your Valorant account."
@@ -1082,7 +1082,7 @@ module.exports = {
         ) {
           const mentionedUser = message.mentions.users.first();
           if (mentionedUser) {
-            const removed = removeUserRegistration(mentionedUser.id);
+            const removed = await removeUserRegistration(mentionedUser.id);
             if (removed) {
               await message.channel.send(
                 `✅ Reset Valorant registration for ${mentionedUser.tag}`
@@ -1155,7 +1155,7 @@ module.exports = {
           command === "!vallist" &&
           message.member.permissions.has("ADMINISTRATOR")
         ) {
-          const allUsers = getAllRegisteredUsers();
+          const allUsers = await getAllRegisteredUsers();
           if (allUsers.size === 0) {
             await message.channel.send("No registered Valorant users found.");
             return;
@@ -1207,7 +1207,7 @@ module.exports = {
           command === "!valskills" &&
           message.member.permissions.has("ADMINISTRATOR")
         ) {
-          const allUsers = getAllRegisteredUsers();
+          const allUsers = await getAllRegisteredUsers();
           if (allUsers.size === 0) {
             await message.channel.send("No registered Valorant users found.");
             return;
@@ -1437,7 +1437,7 @@ module.exports = {
                 });
               }
 
-              const registration = getUserRegistration(userId);
+              const registration = await getUserRegistration(userId);
               if (!registration) {
                 return await safeInteractionResponse(interaction, "reply", {
                   content:
@@ -1466,7 +1466,7 @@ module.exports = {
                 });
               }
 
-              const registration = getUserRegistration(userId);
+              const registration = await getUserRegistration(userId);
               if (!registration) {
                 return await safeInteractionResponse(interaction, "reply", {
                   content:

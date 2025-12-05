@@ -1,0 +1,81 @@
+[dotenv@17.2.3] injecting env (0) from .env -- tip: 🔄 add secrets lifecycle management: https://dotenvx.com/ops
+🚀 Starting MongoDB to Convex migration...
+
+📋 Migration Strategy: Guild ID Partitioning
+   - All guilds share the same Convex tables
+   - Data partitioned by guildId field (same as MongoDB)
+   - Single migration handles all guilds
+
+🔌 Connecting to MongoDB...
+(node:30044) [MONGOOSE] Warning: Duplicate schema index on {"userId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✅ Connected to MongoDB
+🔌 Connecting to Convex...
+✅ Connected to Convex
+
+📊 Starting data migration...
+
+
+📦 Migrating users...
+Found 299 users to migrate
+  ✓ Progress: 50/299 users processed
+  ✓ Progress: 100/299 users processed
+  ✓ Progress: 150/299 users processed
+  ✓ Progress: 200/299 users processed
+  ✓ Progress: 250/299 users processed
+  ✓ Progress: 299/299 users processed
+✅ Users migration complete: 299 migrated, 0 failed
+
+📦 Migrating bounties...
+Found 0 bounties to migrate
+✅ Bounties migration complete: 0 migrated, 0 failed
+
+📦 Migrating team histories...
+Found 4 teams to migrate
+✅ Team histories migration complete: 4 migrated, 0 failed
+
+📦 Migrating trivia sessions...
+Found 1 sessions to migrate
+✅ Trivia sessions migration complete: 1 migrated
+
+📦 Migrating wordle scores...
+Found 26 wordle scores to migrate
+✅ Wordle scores migration complete: 26 migrated, 0 failed
+
+📦 Migrating wordle monthly winners...
+Found 1 monthly winners to migrate
+✅ Wordle monthly winners migration complete: 1 migrated
+
+📦 Migrating server settings...
+Found 1 servers to migrate
+✅ Server settings migration complete: 1 migrated
+
+📦 Migrating subscriptions...
+Found 1 subscriptions to migrate
+  ✗ Failed to migrate subscription for 451459488562806784: ObjectId "6931deddd0d203ea15e35bee" is not a supported Convex type (present at path .verifiedGuilds[0]._id in original object {"discordId":"451459488562806784","discordUsername":"_egg","discordAvatar":"a_e51a60eaa6f92753473db5249618fc82","tier":"free","status":"pending","botVerified":true,"verifiedGuilds":[{"guildId":"701308904877064193","guildName":"Cracked Hive","verifiedAt":1764875997372,"_id":"6931deddd0d203ea15e35bee"},{"guildId":"1009072535356317769","guildName":"Bobby Testing","verifiedAt":1764875997372,"_id":"6931deddd0d203ea15e35bef"}],"expiresAt":"undefined","paymentReference":null,"features":[],"metadata":{"clerkUserId":"user_35vccjhOAjEZEq8tc7g5pAkFK5A"}}). To learn about Convex's supported types, see https://docs.convex.dev/using/types.
+✅ Subscriptions migration complete: 0 migrated, 1 failed
+
+============================================================
+✅ MIGRATION COMPLETED SUCCESSFULLY!
+============================================================
+
+📊 Migration Summary:
+   Users:            299 migrated, 0 failed
+   Bounties:         0 migrated, 0 failed
+   Team Histories:   4 migrated, 0 failed
+   Trivia Sessions:  1 migrated, 0 failed
+   Wordle Scores:    26 migrated, 0 failed
+   Wordle Winners:   1 migrated, 0 failed
+   Servers:          1 migrated, 0 failed
+   Subscriptions:    0 migrated, 1 failed
+
+   TOTAL:            332 migrated, 1 failed
+
+📝 Next steps:
+  1. ✅ Verify data in Convex dashboard: https://dashboard.convex.dev
+  2. 📋 Update your bot code to use Convex helpers
+  3. 🧪 Test all bot features thoroughly
+  4. 📊 Monitor Convex logs for any issues
+  5. 🗄️  Keep MongoDB backup for at least 30 days
+
+👋 Disconnected from MongoDB

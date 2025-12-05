@@ -2,7 +2,8 @@
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 const { topEggRoleId } = require('../data/config');
-const { getBobbyBucks, updateBobbyBucks, setBobbyBucks, getTopBalances, getTotalEconomy, getUserRank } = require('../database/helpers/economyHelpers');
+// Convex helpers (with guild ID support)
+const { getBalance, updateBalance, setBalance, getTopBalances, getTotalEconomy, getUserRank } = require('../database/helpers/convexEconomyHelpers');
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
 
@@ -56,8 +57,9 @@ module.exports = (client) => {
 
         // Command to check Honey balance
         if (args[0] === '!balance') {
+            const guildId = message.guild.id; // Get guild ID from message
             let userId, username, user;
-            
+
             if (args[1]) {
                 // Check someone else's balance
                 const mentionedUser = message.mentions.users.first() || message.guild.members.cache.find(member => member.user.username === args[1])?.user;
@@ -73,9 +75,10 @@ module.exports = (client) => {
                 username = message.author.username;
                 user = message.author;
             }
-            
-            const balance = await getBobbyBucks(userId);
-            const rank = await getUserRank(userId) || 'N/A';
+
+            const balance = await getBalance(guildId, userId);
+            const rankData = await getUserRank(guildId, userId);
+            const rank = rankData?.rank || 'N/A';
             const balanceCard = await createBalanceCard(user, balance);
             const attachment = new AttachmentBuilder(balanceCard.toBuffer(), { name: 'balance-card.png' });
 
@@ -97,7 +100,8 @@ module.exports = (client) => {
 
         // Enhanced leaderboard command
         if (args[0] === '!baltop') {
-            const topBalances = await getTopBalances(10);
+            const guildId = message.guild.id; // Get guild ID
+            const topBalances = await getTopBalances(guildId, 10);
 
             if (topBalances.length === 0) {
                 return message.channel.send('No balances found.');
@@ -106,8 +110,8 @@ module.exports = (client) => {
             const leaderboardImage = await createLeaderboard(topBalances, message.guild);
             const attachment = new AttachmentBuilder(leaderboardImage.toBuffer(), { name: 'leaderboard.png' });
 
-            const totalEconomy = await getTotalEconomy();
-            const houseBalance = await getHouseBalance();
+            const totalEconomy = await getTotalEconomy(guildId);
+            const houseBalance = await getHouseBalance(guildId);
 
             const embed = new EmbedBuilder()
                 .setTitle('🍯 Honey Leaderboard - Top Beekeepers')
@@ -127,6 +131,8 @@ module.exports = (client) => {
 
         // Command to award Honey
         if (args[0] === '!award' && args[1] && args[2]) {
+            const guildId = message.guild.id; // Get guild ID for permissions and data
+
             if (!userRoles.has(topEggRoleId)) {
                 return message.reply("You don't have permission to use this command.");
             }
@@ -139,9 +145,9 @@ module.exports = (client) => {
                 return message.channel.send('Invalid user or amount specified.');
             }
 
-            const oldBalance = await getBobbyBucks(userId);
-            await updateBobbyBucks(userId, amount);
-            const newBalance = await getBobbyBucks(userId);
+            const oldBalance = await getBalance(guildId, userId);
+            await updateBalance(guildId, userId, amount);
+            const newBalance = await getBalance(guildId, userId);
 
             const transactionReceipt = await createTransactionReceipt(mentionedUser, amount, oldBalance, newBalance, 'AWARD', message.author);
             const attachment = new AttachmentBuilder(transactionReceipt.toBuffer(), { name: 'transaction-receipt.png' });
@@ -164,9 +170,10 @@ module.exports = (client) => {
 
         // Command to spend Honey
         if (args[0] === '!spend' && args[1]) {
+            const guildId = message.guild.id;
             const userId = message.author.id;
             const amount = parseInt(args[1], 10);
-            const balance = await getBobbyBucks(userId);
+            const balance = await getBalance(guildId, userId);
 
             if (isNaN(amount) || amount <= 0) {
                 return message.channel.send('Invalid amount specified.');
@@ -174,8 +181,8 @@ module.exports = (client) => {
 
             if (balance >= amount) {
                 const oldBalance = balance;
-                await updateBobbyBucks(userId, -amount);
-                const newBalance = await getBobbyBucks(userId);
+                await updateBalance(guildId, userId, -amount);
+                const newBalance = await getBalance(guildId, userId);
 
                 const transactionReceipt = await createTransactionReceipt(message.author, amount, oldBalance, newBalance, 'SPEND', message.author);
                 const attachment = new AttachmentBuilder(transactionReceipt.toBuffer(), { name: 'spending-receipt.png' });
@@ -217,6 +224,7 @@ module.exports = (client) => {
 
         // Command to give all users in the server a specific amount of Honey - FIXED
         if (args[0] === '!awardall' && args[1]) {
+            const guildId = message.guild.id;
             if (!userRoles.has(topEggRoleId)) {
                 return message.reply("You don't have permission to use this command.");
             }
@@ -234,7 +242,7 @@ module.exports = (client) => {
                 let membersAwarded = 0;
                 for (const [, member] of allMembers) {
                     if (!member.user.bot) {
-                        await updateBobbyBucks(member.id, amount);
+                        await updateBalance(guildId, member.id, amount);
                         membersAwarded++;
                     }
                 }
@@ -264,6 +272,7 @@ module.exports = (client) => {
 
         // Command to pay another user Honey
         if (args[0] === '!pay' && args[1] && args[2]) {
+            const guildId = message.guild.id;
             const senderId = message.author.id;
             const mentionedUser = message.mentions.users.first() || message.guild.members.cache.find(member => member.user.username === args[1])?.user;
             const amount = parseInt(args[2], 10);
@@ -284,7 +293,7 @@ module.exports = (client) => {
                 return message.channel.send('❌ Invalid amount specified. Amount must be a positive number.');
             }
 
-            const senderBalance = await getBobbyBucks(senderId);
+            const senderBalance = await getBalance(guildId, senderId);
 
             if (senderBalance < amount) {
                 const insufficientFunds = await createInsufficientFundsCard(message.author, senderBalance, amount);
@@ -308,13 +317,13 @@ module.exports = (client) => {
 
             // Process the transfer
             const senderOldBalance = senderBalance;
-            const recipientOldBalance = await getBobbyBucks(mentionedUser.id);
-            
-            await updateBobbyBucks(senderId, -amount); // Deduct from sender
-            await updateBobbyBucks(mentionedUser.id, amount); // Add to recipient
-            
-            const senderNewBalance = await getBobbyBucks(senderId);
-            const recipientNewBalance = await getBobbyBucks(mentionedUser.id);
+            const recipientOldBalance = await getBalance(guildId, mentionedUser.id);
+
+            await updateBalance(guildId, senderId, -amount); // Deduct from sender
+            await updateBalance(guildId, mentionedUser.id, amount); // Add to recipient
+
+            const senderNewBalance = await getBalance(guildId, senderId);
+            const recipientNewBalance = await getBalance(guildId, mentionedUser.id);
 
             // Create payment receipt
             const paymentReceipt = await createPaymentReceipt(message.author, mentionedUser, amount, senderOldBalance, senderNewBalance, recipientOldBalance, recipientNewBalance);
@@ -338,8 +347,9 @@ module.exports = (client) => {
 
         // Command to beg for Honey with interactive tip jar
         if (args[0] === '!beg') {
+            const guildId = message.guild.id;
             const userId = message.author.id;
-            const balance = await getBobbyBucks(userId);
+            const balance = await getBalance(guildId, userId);
             
             // Create tip jar visualization
             const tipJarImage = await createTipJarCard(message.author, balance);
@@ -539,6 +549,7 @@ module.exports = (client) => {
 
         // Handle donation button clicks
         if (interaction.customId.startsWith('donate_')) {
+            const guildId = interaction.guild.id;
             const parts = interaction.customId.split('_');
             const beggarId = parts[1];
             const messageId = parts[2];
@@ -553,7 +564,7 @@ module.exports = (client) => {
             }
 
             // Check if donor has enough money (at least 1 Honey)
-            const donorBalance = await getBobbyBucks(donorId);
+            const donorBalance = await getBalance(guildId, donorId);
             if (donorBalance < 1) {
                 return interaction.reply({
                     content: '❌ You need at least 1 Honey to donate!',
@@ -563,19 +574,19 @@ module.exports = (client) => {
 
             // Generate random donation amount (1-10)
             const donationAmount = Math.floor(Math.random() * 10) + 1;
-            
+
             // Check if donor has enough for the random amount
             const actualDonation = Math.min(donationAmount, donorBalance);
-            
+
             // Process the donation
             const donorOldBalance = donorBalance;
-            const beggarOldBalance = await getBobbyBucks(beggarId);
-            
-            await updateBobbyBucks(donorId, -actualDonation);
-            await updateBobbyBucks(beggarId, actualDonation);
-            
-            const donorNewBalance = await getBobbyBucks(donorId);
-            const beggarNewBalance = await getBobbyBucks(beggarId);
+            const beggarOldBalance = await getBalance(guildId, beggarId);
+
+            await updateBalance(guildId, donorId, -actualDonation);
+            await updateBalance(guildId, beggarId, actualDonation);
+
+            const donorNewBalance = await getBalance(guildId, donorId);
+            const beggarNewBalance = await getBalance(guildId, beggarId);
 
             // Get user objects
             const beggar = await interaction.guild.members.fetch(beggarId);
@@ -630,8 +641,10 @@ module.exports = (client) => {
     client.on('guildMemberAdd', async (member) => {
         if (member.user.bot) return; // Don't award bots
 
+        const guildId = member.guild.id;
+
         // Award welcome bonus
-        await updateBobbyBucks(member.id, 500);
+        await updateBalance(guildId, member.id, 500);
 
         // Send welcome message to the member
         try {

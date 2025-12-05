@@ -2,10 +2,11 @@
 const { createCanvas, loadImage } = require('canvas');
 const fs = require('fs');
 const path = require('path');
-const { getBobbyBucks, updateBobbyBucks } = require('../database/helpers/economyHelpers');
+const { getBalance, updateBalance } = require('../database/helpers/convexEconomyHelpers');
 const { getHouseBalance, updateHouse } = require('../database/helpers/serverHelpers');
 const { TARGET_GUILD_ID } = require('../config/guildConfig');
 const { insufficientFundsMessage, invalidUsageMessage, processingMessage } = require('../utils/errorMessages');
+const { checkSubscription, createUpgradeEmbed, TIERS } = require('../utils/subscriptionUtils');
 
 const blackjackStreaksFilePath = path.join(__dirname, '../data/blackjack_streaks.txt');
 
@@ -58,19 +59,27 @@ module.exports = (client) => {
 
         // Blackjack game
         if (args[0] === '!blackjack') {
+            // Check subscription tier (PLUS required for blackjack)
+            const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+            if (!subCheck.hasAccess) {
+                const upgradeEmbed = createUpgradeEmbed('Blackjack', TIERS.PLUS, subCheck.guildTier);
+                return message.channel.send({ embeds: [upgradeEmbed] });
+            }
+
             if (args.length !== 2 || isNaN(parseInt(args[1], 10)) || parseInt(args[1], 10) <= 0) {
                 return message.channel.send(invalidUsageMessage('blackjack', '!blackjack [amount]', '!blackjack 100'));
             }
 
             const betAmount = parseInt(args[1], 10);
             const userId = message.author.id;
-            const balance = await getBobbyBucks(userId);
+            const guildId = message.guild.id;
+            const balance = await getBalance(guildId, userId);
 
             if (balance < betAmount) {
                 return message.channel.send(insufficientFundsMessage(message.author.username, balance, betAmount));
             }
 
-            await startBlackjackGame(message, userId, betAmount);
+            await startBlackjackGame(message, guildId, userId, betAmount);
         }
     });
 
@@ -275,12 +284,12 @@ module.exports = (client) => {
         return canvas;
     }
 
-    async function startBlackjackGame(message, userId, betAmount) {
+    async function startBlackjackGame(message, guildId, userId, betAmount) {
         // Show processing message
         const processingMsg = await message.channel.send(processingMessage('we deal the cards'));
 
         // CRITICAL FIX: Deduct the initial bet from player's balance when game starts
-        await updateBobbyBucks(userId, -betAmount);
+        await updateBalance(guildId, userId, -betAmount);
 
         // Get current streak and deck status
         const currentStreak = getStreak(userId);
@@ -296,7 +305,7 @@ module.exports = (client) => {
         let dealerScore = calculateHandValue(dealerHand);
 
         // Check if split is possible
-        const canSplit = playerHand[0].value === playerHand[1].value && await getBobbyBucks(userId) >= betAmount;
+        const canSplit = playerHand[0].value === playerHand[1].value && await getBalance(guildId, userId) >= betAmount;
 
         // Create initial game visualization
         const gameCanvas = await createGameTable(
@@ -325,7 +334,7 @@ module.exports = (client) => {
             .addFields(
                 { name: '🎯 Your Hand', value: `${displayHandEmoji(playerHand)}\n**Score:** ${playerScore}`, inline: true },
                 { name: '🎭 Dealer\'s Hand', value: `${displayHandEmoji([dealerHand[0]])} 🎴\n**Score:** ${calculateHandValue([dealerHand[0]])} + ?`, inline: true },
-                { name: '💰 Game Info', value: `**Your Balance:** 🍯${await getBobbyBucks(userId)}\n**House Edge:** ${await getHouseBalance()}`, inline: true }
+                { name: '💰 Game Info', value: `**Your Balance:** 🍯${await getBalance(guildId, userId)}\n**House Edge:** ${await getHouseBalance()}`, inline: true }
             )
             .setFooter({ text: 'Choose your action wisely! 🎲' })
             .setTimestamp();
@@ -334,7 +343,7 @@ module.exports = (client) => {
         if (playerScore === 21) {
             if (dealerScore === 21) {
                 // Tie - return the bet (no streak bonus or penalty)
-                await updateBobbyBucks(userId, betAmount);
+                await updateBalance(guildId, userId, betAmount);
                 
                 const finalCanvas = await createGameTable(playerHand, dealerHand, playerScore, dealerScore, 'tie', message.author.username, betAmount, false, currentStreak, deckStatus);
                 const finalAttachment = new AttachmentBuilder(finalCanvas.toBuffer(), { name: 'blackjack-result.png' });
@@ -357,7 +366,7 @@ module.exports = (client) => {
                 const baseWinnings = Math.floor(betAmount * 2.5);
                 const streakBonus = calculateStreakBonus(baseWinnings, currentStreak);
                 const totalWinnings = baseWinnings + streakBonus;
-                await updateBobbyBucks(userId, totalWinnings);
+                await updateBalance(guildId, userId, totalWinnings);
                 updateStreak(userId, true); // Increment streak
                 
                 const finalCanvas = await createGameTable(playerHand, dealerHand, playerScore, dealerScore, 'win', message.author.username, betAmount, false, currentStreak + 1, deckStatus);
@@ -372,7 +381,7 @@ module.exports = (client) => {
                     .setImage('attachment://blackjack-result.png')
                     .addFields(
                         { name: '🎯 Final Result', value: `**You:** ${playerScore}\n**Dealer:** ${dealerScore}`, inline: true },
-                        { name: '💰 Payout', value: `**Won:** 🍯${totalWinnings}\n**New Balance:** 🍯${await getBobbyBucks(userId)}\n**Streak:** ${currentStreak + 1} wins`, inline: true }
+                        { name: '💰 Payout', value: `**Won:** 🍯${totalWinnings}\n**New Balance:** 🍯${await getBalance(guildId, userId)}\n**Streak:** ${currentStreak + 1} wins`, inline: true }
                     )
                     .setFooter({ text: 'Blackjack pays 3:2!' })
                     .setTimestamp();
@@ -398,7 +407,7 @@ module.exports = (client) => {
             .setLabel('Double Down')
             .setStyle('Secondary')
             .setEmoji('⚡')
-            .setDisabled(await getBobbyBucks(userId) < betAmount);
+            .setDisabled(await getBalance(guildId, userId) < betAmount);
             
         const splitButton = new ButtonBuilder()
             .setCustomId('split')
@@ -442,7 +451,7 @@ module.exports = (client) => {
                         .setImage('attachment://blackjack-result.png')
                         .addFields(
                             { name: '🎯 Final Result', value: `**You:** ${playerScore} (BUST)\n**Dealer:** ${calculateHandValue([dealerHand[0]])} + ?`, inline: true },
-                            { name: '💰 Loss', value: `**Lost:** 🍯${betAmount}\n**New Balance:** 🍯${await getBobbyBucks(userId)}\n**Streak:** Reset`, inline: true }
+                            { name: '💰 Loss', value: `**Lost:** 🍯${betAmount}\n**New Balance:** 🍯${await getBalance(guildId, userId)}\n**Streak:** Reset`, inline: true }
                         )
                         .setFooter({ text: 'Better luck next time!' })
                         .setTimestamp();
@@ -463,7 +472,7 @@ module.exports = (client) => {
                         .addFields(
                             { name: '🎯 Your Hand', value: `${displayHandEmoji(playerHand)}\n**Score:** ${playerScore}`, inline: true },
                             { name: '🎭 Dealer\'s Hand', value: `${displayHandEmoji([dealerHand[0]])} 🎴\n**Score:** ${calculateHandValue([dealerHand[0]])} + ?`, inline: true },
-                            { name: '💰 Game Info', value: `**Your Balance:** 🍯${await getBobbyBucks(userId)}\n**House Edge:** ${await getHouseBalance()}`, inline: true }
+                            { name: '💰 Game Info', value: `**Your Balance:** 🍯${await getBalance(guildId, userId)}\n**House Edge:** ${await getHouseBalance()}`, inline: true }
                         )
                         .setFooter({ text: 'Choose your action wisely! 🎲' })
                         .setTimestamp();
@@ -475,7 +484,7 @@ module.exports = (client) => {
                 
                 if (interaction.customId === 'double') {
                     actualBet = betAmount * 2;
-                    await updateBobbyBucks(userId, -betAmount); // Take the extra bet
+                    await updateBalance(guildId, userId, -betAmount); // Take the extra bet
                     playerHand.push(drawCard(gameShoe));
                     playerScore = calculateHandValue(playerHand);
                     
@@ -494,7 +503,7 @@ module.exports = (client) => {
                             .setImage('attachment://blackjack-result.png')
                             .addFields(
                                 { name: '🎯 Final Result', value: `**You:** ${playerScore} (BUST)\n**Dealer:** ${calculateHandValue([dealerHand[0]])} + ?`, inline: true },
-                                { name: '💰 Loss', value: `**Lost:** 🍯${actualBet}\n**New Balance:** 🍯${await getBobbyBucks(userId)}\n**Streak:** Reset`, inline: true }
+                                { name: '💰 Loss', value: `**Lost:** 🍯${actualBet}\n**New Balance:** 🍯${await getBalance(guildId, userId)}\n**Streak:** Reset`, inline: true }
                             )
                             .setFooter({ text: 'Double down gone wrong!' })
                             .setTimestamp();
@@ -522,7 +531,7 @@ module.exports = (client) => {
                     const baseWinnings = actualBet * 2;
                     const streakBonus = calculateStreakBonus(baseWinnings, currentStreak);
                     const totalWinnings = baseWinnings + streakBonus;
-                    await updateBobbyBucks(userId, totalWinnings);
+                    await updateBalance(guildId, userId, totalWinnings);
                     updateStreak(userId, true); // Increment streak
                     newStreak = currentStreak + 1;
                     resultMessage = streakBonus > 0 ? `🎉 You won 🍯${totalWinnings}! (🍯${streakBonus} streak bonus)` : `🎉 You won 🍯${totalWinnings}!`;
@@ -530,7 +539,7 @@ module.exports = (client) => {
                     gameState = 'win';
                 } else if (playerScore === dealerScore) {
                     // Tie - return the bet (no streak change)
-                    await updateBobbyBucks(userId, actualBet);
+                    await updateBalance(guildId, userId, actualBet);
                     resultMessage = `🤝 It's a tie! You get your 🍯${actualBet} back.`;
                     resultColor = '#ffaa00';
                     gameState = 'tie';
@@ -554,7 +563,7 @@ module.exports = (client) => {
                     .setImage('attachment://blackjack-result.png')
                     .addFields(
                         { name: '🎯 Final Result', value: `**You:** ${playerScore}\n**Dealer:** ${dealerScore}`, inline: true },
-                        { name: '💰 Your Stats', value: `**New Balance:** 🍯${await getBobbyBucks(userId)}\n**Win Streak:** ${newStreak}\n**House Balance:** 🍯${await getHouseBalance()}`, inline: true }
+                        { name: '💰 Your Stats', value: `**New Balance:** 🍯${await getBalance(guildId, userId)}\n**Win Streak:** ${newStreak}\n**House Balance:** 🍯${await getHouseBalance()}`, inline: true }
                     )
                     .setFooter({ text: 'Thanks for playing! 🎲' })
                     .setTimestamp();
@@ -565,7 +574,7 @@ module.exports = (client) => {
             } else if (interaction.customId === 'surrender') {
                 // Surrender - return half the bet
                 const refund = Math.floor(betAmount / 2);
-                await updateBobbyBucks(userId, refund);
+                await updateBalance(guildId, userId, refund);
                 await updateHouse(betAmount - refund);
                 updateStreak(userId, false); // Reset streak
                 
@@ -579,7 +588,7 @@ module.exports = (client) => {
                     .setImage('attachment://blackjack-result.png')
                     .addFields(
                         { name: '🎯 Your Hand', value: `${displayHandEmoji(playerHand)}\n**Score:** ${playerScore}`, inline: true },
-                        { name: '💰 Refund', value: `**Returned:** 🍯${refund}\n**New Balance:** 🍯${await getBobbyBucks(userId)}`, inline: true }
+                        { name: '💰 Refund', value: `**Returned:** 🍯${refund}\n**New Balance:** 🍯${await getBalance(guildId, userId)}`, inline: true }
                     )
                     .setFooter({ text: 'Sometimes the best move is to fold!' })
                     .setTimestamp();
@@ -589,7 +598,7 @@ module.exports = (client) => {
                 await interaction.update({ embeds: [gameEmbed], files: [finalAttachment], components: [] });
             } else if (interaction.customId === 'split') {
                 // Split hands - requires additional bet
-                await updateBobbyBucks(userId, -betAmount); // Take second bet
+                await updateBalance(guildId, userId, -betAmount); // Take second bet
                 
                 const hand1 = [playerHand[0], drawCard(gameShoe)];
                 const hand2 = [playerHand[1], drawCard(gameShoe)];
@@ -617,12 +626,12 @@ module.exports = (client) => {
                 // Play hand 1
                 let finalScore1 = score1;
                 let finalHand1 = [...hand1];
-                await playHand(message, userId, finalHand1, dealerHand, betAmount, 1, currentStreak, deckStatus);
-                
+                await playHand(message, guildId, userId, finalHand1, dealerHand, betAmount, 1, currentStreak, deckStatus);
+
                 // Play hand 2
                 let finalScore2 = score2;
                 let finalHand2 = [...hand2];
-                await playHand(message, userId, finalHand2, dealerHand, betAmount, 2, currentStreak, deckStatus);
+                await playHand(message, guildId, userId, finalHand2, dealerHand, betAmount, 2, currentStreak, deckStatus);
                 
                 gameEnded = true;
                 collector.stop();
@@ -636,7 +645,7 @@ module.exports = (client) => {
                 }
                 try {
                     await interaction.reply({ content: 'An error occurred during the game. Your bet has been refunded.', ephemeral: true });
-                    await updateBobbyBucks(userId, betAmount); // Refund on error
+                    await updateBalance(guildId, userId, betAmount); // Refund on error
                 } catch (replyError) {
                     console.error('[Blackjack] Failed to send error message:', replyError);
                 }
@@ -803,7 +812,7 @@ module.exports = (client) => {
         return 0;
     }
     
-    async function playHand(message, userId, playerHand, dealerHand, betAmount, handNumber, currentStreak, deckStatus) {
+    async function playHand(message, guildId, userId, playerHand, dealerHand, betAmount, handNumber, currentStreak, deckStatus) {
         // Simplified hand play for split - auto-play to 17+
         let playerScore = calculateHandValue(playerHand);
         
@@ -834,12 +843,12 @@ module.exports = (client) => {
             const baseWinnings = betAmount * 2;
             const streakBonus = calculateStreakBonus(baseWinnings, currentStreak);
             payout = baseWinnings + streakBonus;
-            await updateBobbyBucks(userId, payout);
+            await updateBalance(guildId, userId, payout);
             won = true;
             resultMessage = `🎉 Hand ${handNumber} Wins! Won 🍯${payout}`;
             gameState = 'win';
         } else if (playerScore === dealerScore) {
-            await updateBobbyBucks(userId, betAmount);
+            await updateBalance(guildId, userId, betAmount);
             resultMessage = `🤝 Hand ${handNumber} Push! Returned 🍯${betAmount}`;
             gameState = 'tie';
         } else {
@@ -866,7 +875,7 @@ module.exports = (client) => {
             .addFields(
                 { name: '🎯 Your Hand', value: `${displayHandEmoji(playerHand)}\n**Score:** ${playerScore}`, inline: true },
                 { name: '🎭 Dealer', value: `${displayHandEmoji(dealerHand)}\n**Score:** ${dealerScore}`, inline: true },
-                { name: '💰 Balance', value: `🍯${await getBobbyBucks(userId)}`, inline: true }
+                { name: '💰 Balance', value: `🍯${await getBalance(guildId, userId)}`, inline: true }
             )
             .setTimestamp();
         

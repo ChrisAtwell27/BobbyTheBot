@@ -1,30 +1,36 @@
-// alertHandler.js
-const { EmbedBuilder } = require('discord.js');
-const { TARGET_GUILD_ID } = require('../config/guildConfig');
-const { CleanupMap } = require('../utils/memoryUtils');
+const { EmbedBuilder } = require("discord.js");
+const { TARGET_GUILD_ID } = require("../config/guildConfig");
+const { CleanupMap } = require("../utils/memoryUtils");
+const { getSetting } = require("../utils/settingsManager");
 
 module.exports = (client, alertKeywords, alertChannelId) => {
   // Rate limiting: Track alerts to prevent spam with automatic cleanup
   // CleanupMap automatically removes expired entries and auto-registers for graceful shutdown
   const COOLDOWN_MS = 60000; // 1 minute cooldown per user per keyword
-  const alertCooldowns = new CleanupMap(COOLDOWN_MS, 1 * 60 * 1000); // Auto-cleanup every 1 minute
+  const alertCooldowns = new CleanupMap(COOLDOWN_MS, 60000); // Auto-cleanup every 1 minute
 
   // Validation on initialization
   let isValidConfig = true;
 
   if (!Array.isArray(alertKeywords) || alertKeywords.length === 0) {
-    console.error('⚠️ Alert Handler: alertKeywords must be a non-empty array. Handler disabled.');
+    console.error(
+      "⚠️ Alert Handler: alertKeywords must be a non-empty array. Handler disabled."
+    );
     isValidConfig = false;
   }
 
   if (!alertChannelId) {
-    console.error('⚠️ Alert Handler: alertChannelId is not configured. Handler disabled.');
+    console.error(
+      "⚠️ Alert Handler: alertChannelId is not configured. Handler disabled."
+    );
     isValidConfig = false;
   }
 
-  console.log(`🔔 Alert Handler initialized with ${alertKeywords?.length || 0} keywords`);
+  console.log(
+    `🔔 Alert Handler initialized with ${alertKeywords?.length || 0} keywords`
+  );
 
-  client.on('messageCreate', async (message) => {
+  client.on("messageCreate", async (message) => {
     // Skip if config is invalid
     if (!isValidConfig) return;
 
@@ -40,6 +46,11 @@ module.exports = (client, alertKeywords, alertChannelId) => {
     // Ignore empty messages
     if (!message.content || !message.content.trim()) return;
 
+    // Check if alerts are enabled
+    const features = await getSetting(message.guild.id, "features", {});
+    // Default to true if not specified (legacy behavior)
+    if (features.alerts === false) return;
+
     // Get alert channel (check on each message in case it was created after bot startup)
     const alertChannel = client.channels.cache.get(alertChannelId);
     if (!alertChannel) {
@@ -51,8 +62,8 @@ module.exports = (client, alertKeywords, alertChannelId) => {
     const foundKeywords = alertKeywords.filter((keyword) => {
       try {
         // Escape special regex characters in keyword
-        const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`\\b${escapedKeyword}\\b`, 'i');
+        const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const regex = new RegExp(`\\b${escapedKeyword}\\b`, "i");
         return regex.test(message.content);
       } catch (error) {
         console.error(`Error creating regex for keyword "${keyword}":`, error);
@@ -77,14 +88,29 @@ module.exports = (client, alertKeywords, alertChannelId) => {
       try {
         // Create embed for alert
         const embed = new EmbedBuilder()
-          .setColor(0xFF0000) // Red color
-          .setTitle('🚨 Keyword Alert')
+          .setColor(0xff0000) // Red color
+          .setTitle("🚨 Keyword Alert")
           .setDescription(`The keyword "**${foundKeyword}**" was detected`)
           .addFields(
-            { name: '👤 User', value: `${message.author} (${message.author.tag})`, inline: true },
-            { name: '📍 Channel', value: `${message.channel}`, inline: true },
-            { name: '🕒 Time', value: `<t:${Math.floor(message.createdTimestamp / 1000)}:R>`, inline: true },
-            { name: '💬 Message Content', value: message.content.length > 1024 ? message.content.substring(0, 1021) + '...' : message.content, inline: false }
+            {
+              name: "👤 User",
+              value: `${message.author} (${message.author.tag})`,
+              inline: true,
+            },
+            { name: "📍 Channel", value: `${message.channel}`, inline: true },
+            {
+              name: "🕒 Time",
+              value: `<t:${Math.floor(message.createdTimestamp / 1000)}:R>`,
+              inline: true,
+            },
+            {
+              name: "💬 Message Content",
+              value:
+                message.content.length > 1024
+                  ? message.content.substring(0, 1021) + "..."
+                  : message.content,
+              inline: false,
+            }
           )
           .setTimestamp()
           .setFooter({ text: `User ID: ${message.author.id}` });
@@ -100,25 +126,30 @@ module.exports = (client, alertKeywords, alertChannelId) => {
         await alertChannel.send({
           content: `🚨 **Keyword Alert:** \`${foundKeyword}\``,
           embeds: [embed],
-          components: [{
-            type: 1, // Action row
-            components: [{
-              type: 2, // Button
-              style: 5, // Link button
-              label: 'Jump to Message',
-              url: messageLink
-            }]
-          }]
+          components: [
+            {
+              type: 1, // Action row
+              components: [
+                {
+                  type: 2, // Button
+                  style: 5, // Link button
+                  label: "Jump to Message",
+                  url: messageLink,
+                },
+              ],
+            },
+          ],
         });
 
-        console.log(`🚨 Alert sent: "${foundKeyword}" by ${message.author.tag} in #${message.channel.name}`);
-
+        console.log(
+          `🚨 Alert sent: "${foundKeyword}" by ${message.author.tag} in #${message.channel.name}`
+        );
       } catch (error) {
-        console.error(`Error sending alert for keyword "${foundKeyword}":`, error);
+        console.error(
+          `Error sending alert for keyword "${foundKeyword}":`,
+          error
+        );
       }
     }
   });
-
-  // Note: Automatic cleanup is now handled by CleanupMap internally
-  // No need for manual cleanup interval - CleanupMap handles it automatically
 };
