@@ -453,15 +453,13 @@ class SubscriptionServer {
                 const existingSubscription = await ConvexHelper.getSubscriptionByDiscordId(discordId);
                 const existingGuildIds = existingSubscription?.verifiedGuilds?.map(g => g.guildId) || [];
 
-                // Add verified guilds with automatic trials for new guilds
+                // Add verified guilds for new guilds
                 for (const guild of verifiedGuilds) {
                     if (!existingGuildIds.includes(guild.guildId)) {
-                        // New guild - start a 7-day trial
                         await ConvexHelper.addVerifiedGuild(
                             discordId,
                             guild.guildId,
-                            guild.guildName,
-                            true // Start trial
+                            guild.guildName
                         );
                     }
                 }
@@ -483,7 +481,6 @@ class SubscriptionServer {
                         // Per-guild subscription data
                         tier: formatted?.tier || 'free',
                         status: formatted?.status || 'active',
-                        trialEndsAt: formatted?.trialEndsAt || null,
                         expiresAt: formatted?.expiresAt || null,
                         subscribedAt: formatted?.subscribedAt || Date.now(),
                     };
@@ -502,7 +499,7 @@ class SubscriptionServer {
                     guilds: {
                         total: userGuilds.length,
                         withBot: verifiedGuilds.length,
-                        verified: formattedGuilds // Now includes per-guild tier/status/trial data
+                        verified: formattedGuilds // Per-guild tier/status data
                     },
                     // Include invite URL if not verified
                     ...(botVerified ? {} : {

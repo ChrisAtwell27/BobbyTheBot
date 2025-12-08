@@ -65,21 +65,19 @@ async function getGuildSubscription(discordId, guildId) {
 }
 
 /**
- * Add verified guild with automatic trial
+ * Add verified guild
  * @param {string} discordId - Discord user ID
  * @param {string} guildId - Guild ID
  * @param {string} guildName - Guild name
- * @param {boolean} startTrial - Whether to start a trial (default: true)
  * @returns {Promise<string>} Subscription ID
  */
-async function addVerifiedGuild(discordId, guildId, guildName, startTrial = true) {
+async function addVerifiedGuild(discordId, guildId, guildName) {
     const client = initConvexClient();
     try {
         const result = await client.mutation(api.subscriptions.addVerifiedGuild, {
             discordId,
             guildId,
-            guildName,
-            startTrial
+            guildName
         });
         return result;
     } catch (error) {
@@ -128,17 +126,11 @@ async function upsertSubscription(subscriptionData) {
 
 /**
  * Format guild data for API response
- * Includes per-guild tier, status, and trial information
  */
 function formatGuildForResponse(guild) {
     const now = Date.now();
     let status = guild.status || 'active';
     let tier = guild.tier || 'free';
-
-    // Check if trial has expired
-    if (status === 'trial' && guild.trialEndsAt && guild.trialEndsAt < now) {
-        status = 'expired';
-    }
 
     // Check if paid subscription has expired
     if (status === 'active' && guild.expiresAt && guild.expiresAt < now) {
@@ -152,7 +144,6 @@ function formatGuildForResponse(guild) {
         isOwner: false,  // Will be populated from Discord API
         tier,
         status,
-        trialEndsAt: guild.trialEndsAt || null,
         expiresAt: guild.expiresAt || null,
         subscribedAt: guild.subscribedAt || guild.verifiedAt,
     };

@@ -155,14 +155,13 @@ export const upsertSubscription = mutation({
 });
 
 /**
- * Add verified guild to subscription with automatic trial
+ * Add verified guild to subscription
  */
 export const addVerifiedGuild = mutation({
   args: {
     discordId: v.string(),
     guildId: v.string(),
     guildName: v.string(),
-    startTrial: v.optional(v.boolean()), // Auto-start 7-day trial
   },
   handler: async (ctx, args) => {
     const subscription = await ctx.db
@@ -181,21 +180,16 @@ export const addVerifiedGuild = mutation({
     const now = Date.now();
 
     if (existingGuild) {
-      // Already verified - don't modify existing trial/subscription
+      // Already verified
       return subscription._id;
     }
-
-    // Determine if we should start a trial for this guild
-    const shouldStartTrial = args.startTrial !== false; // Default to true
-    const trialEndsAt = shouldStartTrial ? now + (7 * 24 * 60 * 60 * 1000) : undefined; // 7 days
 
     const newGuild = {
       guildId: args.guildId,
       guildName: args.guildName,
       verifiedAt: now,
       tier: "free" as const,
-      status: shouldStartTrial ? ("trial" as const) : ("active" as const),
-      trialEndsAt: trialEndsAt,
+      status: "active" as const,
       subscribedAt: now,
     };
 
@@ -212,12 +206,9 @@ export const addVerifiedGuild = mutation({
       .withIndex("by_guild", (q) => q.eq("guildId", args.guildId))
       .first();
 
-    // During trial, guild has "free" tier but status is "trial"
-    const tierForServer = newGuild.status === 'trial' ? 'free' : newGuild.tier;
-
     if (server) {
       await ctx.db.patch(server._id, {
-        tier: tierForServer,
+        tier: newGuild.tier,
         updatedAt: now,
       });
     } else {
@@ -226,7 +217,7 @@ export const addVerifiedGuild = mutation({
         guildId: args.guildId,
         houseBalance: 0,
         settings: {},
-        tier: tierForServer,
+        tier: newGuild.tier,
         createdAt: now,
         updatedAt: now,
       });
@@ -317,17 +308,8 @@ export const getGuildSubscription = query({
       return null;
     }
 
-    // Check if trial has expired
-    const now = Date.now();
-    if (guildData.status === "trial" && guildData.trialEndsAt && guildData.trialEndsAt < now) {
-      return {
-        ...guildData,
-        status: "expired" as const,
-        isTrialExpired: true,
-      };
-    }
-
     // Check if paid subscription has expired
+    const now = Date.now();
     if (guildData.status === "active" && guildData.expiresAt && guildData.expiresAt < now) {
       return {
         ...guildData,
@@ -348,9 +330,8 @@ export const updateGuildSubscription = mutation({
     discordId: v.string(),
     guildId: v.string(),
     tier: v.optional(v.union(v.literal("free"), v.literal("basic"), v.literal("premium"), v.literal("enterprise"))),
-    status: v.optional(v.union(v.literal("active"), v.literal("trial"), v.literal("expired"), v.literal("cancelled"), v.literal("pending"))),
+    status: v.optional(v.union(v.literal("active"), v.literal("expired"), v.literal("cancelled"), v.literal("pending"))),
     expiresAt: v.optional(v.number()),
-    trialEndsAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const subscription = await ctx.db
@@ -372,7 +353,6 @@ export const updateGuildSubscription = mutation({
           ...(args.tier !== undefined && { tier: args.tier }),
           ...(args.status !== undefined && { status: args.status }),
           ...(args.expiresAt !== undefined && { expiresAt: args.expiresAt }),
-          ...(args.trialEndsAt !== undefined && { trialEndsAt: args.trialEndsAt }),
         };
       }
       return g;

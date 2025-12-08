@@ -4,7 +4,7 @@ const { getConvexClient } = require('../utils/convexClient');
 
 /**
  * Guild Join Handler
- * Automatically starts a 7-day trial when the bot joins a new guild
+ * Registers new guilds when the bot joins
  */
 
 module.exports = (client) => {
@@ -24,7 +24,7 @@ module.exports = (client) => {
                 convex = getConvexClient();
             } catch (convexError) {
                 console.error(`[Guild Join] Failed to get Convex client: ${convexError.message}`);
-                console.log(`[Guild Join] Skipping trial creation for ${guildName} - will be created on next verification`);
+                console.log(`[Guild Join] Skipping guild registration for ${guildName} - will be created on next verification`);
                 return;
             }
 
@@ -38,22 +38,20 @@ module.exports = (client) => {
                 const existingGuild = existingSubscription.verifiedGuilds?.find(g => g.guildId === guildId);
 
                 if (!existingGuild) {
-                    // Add guild with automatic 7-day trial
+                    // Add guild to subscription
                     await convex.mutation(api.subscriptions.addVerifiedGuild, {
                         discordId: ownerId,
                         guildId,
-                        guildName,
-                        startTrial: true // Start 7-day trial
+                        guildName
                     });
 
-                    console.log(`[Guild Join] ✅ Started 7-day trial for guild ${guildName} (${guildId})`);
+                    console.log(`[Guild Join] ✅ Registered guild ${guildName} (${guildId})`);
 
                     // Try to send welcome message to the guild owner or system channel
                     try {
                         const welcomeMessage = `🎉 **Welcome to Bobby The Bot!**\n\n` +
                             `Thanks for adding me to **${guildName}**!\n\n` +
-                            `✨ **You now have a 7-day trial** with access to all premium features!\n\n` +
-                            `**What you can try:**\n` +
+                            `**What you can do:**\n` +
                             `• Casino games: \`!blackjack\`, \`!roulette\`, \`!dice\`\n` +
                             `• PvP challenges: \`!rps\`, \`!gladiator\`\n` +
                             `• Bee Mafia game: \`!createmafia\`\n` +
@@ -61,8 +59,8 @@ module.exports = (client) => {
                             `• Activity tracking: \`!activity\`\n` +
                             `• And much more!\n\n` +
                             `Use \`!help\` to see all commands.\n` +
-                            `Use \`!subscription\` to check your trial status.\n\n` +
-                            `After 7 days, you can upgrade at https://crackedgames.co/bobby-the-bot/`;
+                            `Use \`!subscription\` to check your subscription status.\n\n` +
+                            `Upgrade at https://crackedgames.co/bobby-the-bot/`;
 
                         // Try to send to system channel first
                         if (guild.systemChannel) {
@@ -84,7 +82,7 @@ module.exports = (client) => {
                     console.log(`[Guild Join] Guild ${guildName} already has subscription data`);
                 }
             } else {
-                // No subscription record exists - create one with trial
+                // No subscription record exists - create one
                 await convex.mutation(api.subscriptions.upsertSubscription, {
                     discordId: ownerId,
                     tier: 'free',
@@ -93,22 +91,20 @@ module.exports = (client) => {
                     verifiedGuilds: [],
                 });
 
-                // Then add the guild with trial
+                // Then add the guild
                 await convex.mutation(api.subscriptions.addVerifiedGuild, {
                     discordId: ownerId,
                     guildId,
-                    guildName,
-                    startTrial: true
+                    guildName
                 });
 
-                console.log(`[Guild Join] ✅ Created new subscription and started 7-day trial for ${guildName}`);
+                console.log(`[Guild Join] ✅ Created new subscription and registered guild ${guildName}`);
 
                 // Send welcome message
                 try {
                     const welcomeMessage = `🎉 **Welcome to Bobby The Bot!**\n\n` +
                         `Thanks for adding me to **${guildName}**!\n\n` +
-                        `✨ **You now have a 7-day trial** with access to all premium features!\n\n` +
-                        `**What you can try:**\n` +
+                        `**What you can do:**\n` +
                         `• Casino games: \`!blackjack\`, \`!roulette\`, \`!dice\`\n` +
                         `• PvP challenges: \`!rps\`, \`!gladiator\`\n` +
                         `• Bee Mafia game: \`!createmafia\`\n` +
@@ -116,8 +112,8 @@ module.exports = (client) => {
                         `• Activity tracking: \`!activity\`\n` +
                         `• And much more!\n\n` +
                         `Use \`!help\` to see all commands.\n` +
-                        `Use \`!subscription\` to check your trial status.\n\n` +
-                        `After 7 days, you can upgrade at https://crackedgames.co/bobby-the-bot/`;
+                        `Use \`!subscription\` to check your subscription status.\n\n` +
+                        `Upgrade at https://crackedgames.co/bobby-the-bot/`;
 
                     if (guild.systemChannel) {
                         await guild.systemChannel.send(welcomeMessage);
@@ -145,7 +141,6 @@ module.exports = (client) => {
         try {
             console.log(`[Guild Leave] Bot removed from guild: ${guild.name} (${guild.id})`);
             // Note: We don't delete subscription data, just log the event
-            // The subscription data remains so if they re-add the bot, they don't get a new trial
         } catch (error) {
             console.error('[Guild Leave] Error handling guild leave:', error);
         }
