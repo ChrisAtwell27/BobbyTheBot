@@ -709,6 +709,7 @@ class SubscriptionServer {
             try {
                 const {
                     discordId,
+                    guildId,
                     tier,
                     status,
                     expiresAt,
@@ -743,6 +744,18 @@ class SubscriptionServer {
                     },
                     { upsert: true, new: true }
                 );
+
+                // Also update server tier in Convex if guildId is provided
+                // This ensures the bot's Settings API tier checks use the correct tier
+                if (guildId && tier) {
+                    try {
+                        await ConvexHelper.updateServerTier(guildId, tier);
+                        console.log(`[Subscription API] Updated server tier for guild ${guildId} to ${tier}`);
+                    } catch (convexError) {
+                        console.warn('[Subscription API] Failed to update server tier in Convex:', convexError);
+                        // Don't fail the request - MongoDB update succeeded
+                    }
+                }
 
                 res.json({
                     success: true,

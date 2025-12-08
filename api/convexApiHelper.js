@@ -158,6 +158,28 @@ function formatGuildForResponse(guild) {
     };
 }
 
+/**
+ * Update server subscription tier
+ * Updates the tier field in the servers table for tier-gating features
+ * @param {string} guildId - Guild ID
+ * @param {string} tier - Subscription tier (free, plus, ultimate)
+ * @returns {Promise<string>} Server ID
+ */
+async function updateServerTier(guildId, tier) {
+    const client = initConvexClient();
+    try {
+        const result = await client.mutation(api.servers.updateTier, {
+            guildId,
+            tier
+        });
+        console.log(`[Convex API Helper] Updated server tier for ${guildId} to ${tier}`);
+        return result;
+    } catch (error) {
+        console.error('[Convex API Helper] Error updating server tier:', error);
+        throw error;
+    }
+}
+
 module.exports = {
     initConvexClient,
     getSubscriptionByDiscordId,
@@ -166,4 +188,5 @@ module.exports = {
     updateGuildSubscription,
     upsertSubscription,
     formatGuildForResponse,
+    updateServerTier,
 };

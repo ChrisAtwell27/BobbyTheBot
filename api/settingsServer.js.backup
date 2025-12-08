@@ -85,7 +85,7 @@ class SettingsServer {
       async (req, res) => {
         try {
           const { guildId } = req.params;
-          const { key, value, tier: passedTier } = req.body;
+          const { key, value } = req.body;
 
           if (!key) {
             return res
@@ -94,7 +94,7 @@ class SettingsServer {
           }
 
           // Check Tier Permissions
-          const currentTier = passedTier || (await getServerTier(guildId));
+          const currentTier = await getServerTier(guildId);
           const requiredTier = getRequirement(key);
 
           if (!meetsRequirement(currentTier, requiredTier)) {
@@ -180,7 +180,7 @@ class SettingsServer {
       async (req, res) => {
         try {
           const { guildId } = req.params;
-          const { roleId, tier: passedTier } = req.body;
+          const { roleId } = req.body;
 
           if (!roleId) {
             return res
@@ -404,7 +404,7 @@ class SettingsServer {
       async (req, res) => {
         try {
           const { guildId, channelType } = req.params;
-          const { channelId, tier: passedTier } = req.body;
+          const { channelId } = req.body;
 
           // Validate channel type
           const validTypes = [
@@ -429,9 +429,8 @@ class SettingsServer {
             });
           }
 
-          // Use tier from request body if provided (website passes tier from Convex - source of truth)
-          // Fall back to local lookup if not provided (for direct bot API calls)
-          const currentTier = passedTier || (await getServerTier(guildId));
+          // Check tier permissions
+          const currentTier = await getServerTier(guildId);
           const requiredTier = getRequirement(`channels.${channelType}`);
 
           if (!meetsRequirement(currentTier, requiredTier)) {
@@ -522,7 +521,7 @@ class SettingsServer {
       async (req, res) => {
         try {
           const { guildId, roleType } = req.params;
-          const { roleId, tier: passedTier } = req.body;
+          const { roleId } = req.body;
 
           // Validate role type
           const validTypes = [
@@ -541,9 +540,8 @@ class SettingsServer {
             });
           }
 
-          // Use tier from request body if provided (website passes tier from Convex - source of truth)
-          // Fall back to local lookup if not provided (for direct bot API calls)
-          const currentTier = passedTier || (await getServerTier(guildId));
+          // Check tier permissions
+          const currentTier = await getServerTier(guildId);
           const requiredTier = getRequirement(`roles.${roleType}`);
 
           if (!meetsRequirement(currentTier, requiredTier)) {
@@ -612,7 +610,7 @@ class SettingsServer {
       async (req, res) => {
         try {
           const { guildId, featureName } = req.params;
-          const { enabled, tier: passedTier } = req.body;
+          const { enabled } = req.body;
 
           // Validate feature name
           const validFeatures = [
@@ -637,9 +635,8 @@ class SettingsServer {
             });
           }
 
-          // Use tier from request body if provided (website passes tier from Convex - source of truth)
-          // Fall back to local lookup if not provided (for direct bot API calls)
-          const currentTier = passedTier || (await getServerTier(guildId));
+          // Check tier permissions
+          const currentTier = await getServerTier(guildId);
           const requiredTier = getRequirement(`features.${featureName}`);
 
           if (!meetsRequirement(currentTier, requiredTier)) {
