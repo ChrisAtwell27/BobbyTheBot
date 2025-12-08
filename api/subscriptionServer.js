@@ -742,14 +742,27 @@ class SubscriptionServer {
                     { upsert: true, new: true }
                 );
 
-                // Also update server tier in Convex if guildId is provided
-                // This ensures the bot's Settings API tier checks use the correct tier
-                if (guildId && tier) {
+                // Update Convex if guildId is provided
+                if (guildId) {
                     try {
-                        await ConvexHelper.updateServerTier(guildId, tier);
-                        console.log(`[Subscription API] Updated server tier for guild ${guildId} to ${tier}`);
+                        // Update guild subscription in Convex subscriptions table
+                        const guildUpdateData = {};
+                        if (tier) guildUpdateData.tier = tier;
+                        if (status) guildUpdateData.status = status;
+                        if (expiresAt) guildUpdateData.expiresAt = new Date(expiresAt).getTime();
+
+                        if (Object.keys(guildUpdateData).length > 0) {
+                            await ConvexHelper.updateGuildSubscription(discordId, guildId, guildUpdateData);
+                            console.log(`[Subscription API] Updated guild subscription for ${guildId}: tier=${tier}, status=${status}`);
+                        }
+
+                        // Also update server tier in servers table for tier-gating
+                        if (tier) {
+                            await ConvexHelper.updateServerTier(guildId, tier);
+                            console.log(`[Subscription API] Updated server tier for guild ${guildId} to ${tier}`);
+                        }
                     } catch (convexError) {
-                        console.warn('[Subscription API] Failed to update server tier in Convex:', convexError);
+                        console.error('[Subscription API] Failed to update Convex:', convexError);
                         // Don't fail the request - MongoDB update succeeded
                     }
                 }
