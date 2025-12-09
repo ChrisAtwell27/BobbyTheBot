@@ -3,7 +3,7 @@
  * Helper functions for role distribution, team counting, win conditions, etc.
  */
 
-const { ROLES } = require('../roles/mafiaRoles');
+const { ROLES, getAvailableRoleKeys } = require('../roles/mafiaRoles');
 
 /**
  * Get a player's actual team (respecting conversions)
@@ -39,14 +39,21 @@ function isMutePlayer(player) {
  * @param {number} playerCount - Number of players
  * @param {boolean} randomMode - If true, uses fully random distribution (only wasp count and queen guaranteed)
  * @param {boolean} debugMode - If true, forces wasp count to 2 for testing
+ * @param {string} tier - Subscription tier ('plus' or 'ultimate')
  * @returns {Array} Array of role keys
  */
-function getRoleDistribution(playerCount, randomMode = false, debugMode = false) {
+function getRoleDistribution(playerCount, randomMode = false, debugMode = false, tier = 'plus') {
     const distribution = [];
 
     if (playerCount < 6) {
         return null;
     }
+
+    // Get available roles based on tier
+    const availableRoleKeys = getAvailableRoleKeys(tier);
+
+    // Helper to filter roles by tier
+    const filterByTier = (roles) => roles.filter(r => availableRoleKeys.includes(r));
 
     // Calculate faction sizes based on player count
     let waspCount;
@@ -78,15 +85,15 @@ function getRoleDistribution(playerCount, randomMode = false, debugMode = false)
         distribution.push('KILLER_WASP');
     }
 
-    // All remaining wasp slots are random
-    const allWaspRoles = ['DECEIVER_WASP', 'SPY_WASP', 'CONSORT_WASP', 'JANITOR_WASP', 'DISGUISER_WASP', 'KILLER_WASP'];
+    // All remaining wasp slots are random (filtered by tier)
+    const allWaspRoles = filterByTier(['DECEIVER_WASP', 'SPY_WASP', 'CONSORT_WASP', 'JANITOR_WASP', 'DISGUISER_WASP', 'KILLER_WASP', 'BLACKMAILER_WASP', 'HYPNOTIST_WASP', 'POISONER_WASP', 'SABOTEUR_WASP', 'MIMIC_WASP', 'SILENCER_WASP', 'MOLE_WASP', 'KIDNAPPER_WASP', 'YAKUZA_WASP']);
     for (let i = distribution.length; i < waspCount; i++) {
         const randomRole = allWaspRoles[Math.floor(Math.random() * allWaspRoles.length)];
         distribution.push(randomRole);
     }
 
-    // === NEUTRAL ROLES ===
-    const neutralRoles = ['CLOWN_BEETLE', 'BOUNTY_HUNTER', 'BUTTERFLY', 'MURDER_HORNET', 'FIRE_ANT', 'SPIDER', 'AMNESIAC_BEETLE'];
+    // === NEUTRAL ROLES === (filtered by tier)
+    const neutralRoles = filterByTier(['CLOWN_BEETLE', 'BOUNTY_HUNTER', 'BUTTERFLY', 'MURDER_HORNET', 'FIRE_ANT', 'SPIDER', 'AMNESIAC_BEETLE', 'PIRATE_BEETLE', 'GUARDIAN_ANT', 'GOSSIP_BEETLE', 'PHANTOM_MOTH', 'GAMBLER_BEETLE', 'MATCHMAKER_BEETLE', 'DOPPELGANGER', 'ORACLE', 'JUDGE', 'MERCENARY', 'CULTIST', 'WILDCARD']);
     for (let i = 0; i < neutralCount; i++) {
         const randomNeutral = neutralRoles[Math.floor(Math.random() * neutralRoles.length)];
         distribution.push(randomNeutral);
@@ -96,8 +103,8 @@ function getRoleDistribution(playerCount, randomMode = false, debugMode = false)
     const beeRoles = [];
 
     if (randomMode) {
-        // RANDOM MODE: All bee roles are completely random (no guarantees)
-        const allBeeRoles = ['SCOUT_BEE', 'NURSE_BEE', 'QUEENS_GUARD', 'GUARD_BEE', 'LOOKOUT_BEE', 'SOLDIER_BEE', 'QUEEN_BEE', 'JAILER_BEE', 'ESCORT_BEE', 'MEDIUM_BEE', 'VETERAN_BEE', 'WORKER_BEE'];
+        // RANDOM MODE: All bee roles are completely random (no guarantees), filtered by tier
+        const allBeeRoles = filterByTier(['SCOUT_BEE', 'NURSE_BEE', 'QUEENS_GUARD', 'GUARD_BEE', 'LOOKOUT_BEE', 'SOLDIER_BEE', 'QUEEN_BEE', 'JAILER_BEE', 'ESCORT_BEE', 'MEDIUM_BEE', 'VETERAN_BEE', 'WORKER_BEE', 'TRACKER_BEE', 'POLLINATOR_BEE', 'SPY_BEE', 'TRAPPER_BEE', 'RETRIBUTIONIST_BEE', 'BEEKEEPER', 'LIBRARIAN_BEE', 'TRANSPORTER_BEE', 'PSYCHIC_BEE', 'MARSHAL_BEE', 'MUTE_BEE', 'DEAF_BEE']);
 
         // Fill all bee slots with random roles
         for (let i = 0; i < beeCount; i++) {
@@ -114,8 +121,8 @@ function getRoleDistribution(playerCount, randomMode = false, debugMode = false)
             beeRoles.push('SCOUT_BEE');
         }
 
-        // Optional power roles (including Queens Guard for all games)
-        const optionalBeeRoles = ['QUEENS_GUARD', 'LOOKOUT_BEE', 'SOLDIER_BEE', 'QUEEN_BEE', 'JAILER_BEE', 'ESCORT_BEE', 'MEDIUM_BEE', 'VETERAN_BEE'];
+        // Optional power roles (filtered by tier)
+        const optionalBeeRoles = filterByTier(['QUEENS_GUARD', 'LOOKOUT_BEE', 'SOLDIER_BEE', 'QUEEN_BEE', 'JAILER_BEE', 'ESCORT_BEE', 'MEDIUM_BEE', 'VETERAN_BEE', 'TRACKER_BEE', 'POLLINATOR_BEE', 'SPY_BEE', 'TRAPPER_BEE', 'RETRIBUTIONIST_BEE', 'BEEKEEPER', 'LIBRARIAN_BEE', 'TRANSPORTER_BEE', 'PSYCHIC_BEE', 'MARSHAL_BEE']);
 
         // Add random power roles
         while (beeRoles.length < Math.min(beeCount, Math.floor(beeCount * 0.6))) {

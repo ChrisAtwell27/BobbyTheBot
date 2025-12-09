@@ -22,6 +22,11 @@ const {
 const apiHandler = require("./valorantApiHandler");
 const { saveTeamToHistory } = require("../database/helpers/teamHistoryHelpers");
 const { getSetting } = require("../utils/settingsManager");
+const {
+  checkSubscription,
+  createUpgradeEmbed,
+  TIERS,
+} = require("../utils/subscriptionUtils");
 
 // ============ CONSTANTS ============
 // Configuration - legacy fallback ID
@@ -754,6 +759,21 @@ module.exports = (client) => {
       !isCommand
     )
       return;
+
+    // Check subscription tier - PLUS TIER REQUIRED for team building
+    const subCheck = await checkSubscription(
+      message.guild.id,
+      TIERS.PLUS,
+      message.guild.ownerId
+    );
+    if (!subCheck.hasAccess) {
+      const upgradeEmbed = createUpgradeEmbed(
+        "Valorant Team Builder",
+        TIERS.PLUS,
+        subCheck.guildTier
+      );
+      return message.channel.send({ embeds: [upgradeEmbed] });
+    }
 
     // Check for timer argument in message content (simple parsing for !valorantteam timer:X)
     let timerHours = null;

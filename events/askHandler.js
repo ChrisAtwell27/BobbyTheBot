@@ -6,6 +6,11 @@ const { api } = require("../convex/_generated/api");
 // TARGET_GUILD_ID removed
 const { CleanupMap } = require("../utils/memoryUtils");
 const { getSetting } = require("../utils/settingsManager");
+const {
+  checkSubscription,
+  createUpgradeEmbed,
+  TIERS,
+} = require("../utils/subscriptionUtils");
 
 // Default OpenAI API Key from environment
 const DEFAULT_OPENAI_KEY = process.env.OPENAI_API_KEY;
@@ -698,6 +703,29 @@ module.exports = (client) => {
       userMessageLower.includes("bobby");
 
     if (!isBobbyCommand) return;
+
+    // Check subscription tier - PLUS TIER REQUIRED for Bobby AI
+    const subCheck = await checkSubscription(
+      message.guild.id,
+      TIERS.PLUS,
+      message.guild.ownerId
+    );
+    if (!subCheck.hasAccess) {
+      const upgradeEmbed = createUpgradeEmbed(
+        "Bobby AI Chat",
+        TIERS.PLUS,
+        subCheck.guildTier
+      );
+      return message.channel.send({ embeds: [upgradeEmbed] });
+    }
+
+    // Check if AI API key is configured for this server
+    const serverApiKey = await getSetting(message.guild.id, "ai.openai_api_key");
+    if (!serverApiKey && !DEFAULT_OPENAI_KEY) {
+      return message.channel.send(
+        "❌ Bobby AI is not configured for this server. Please set up an OpenAI API key in the server settings."
+      );
+    }
 
     const args = userMessage.split(" ");
     const command = args[0].toLowerCase();

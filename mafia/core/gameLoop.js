@@ -135,7 +135,7 @@ async function muteVoiceAndLockText(game, client, shouldMute) {
 
 // Start Mafia Game
 async function startMafiaGame(client, config) {
-    const { gameId, guildId, players, organizerId, randomMode, customDurations, revealRoles, preset, noAI, specifiedRoles, debugMode } = config;
+    const { gameId, guildId, players, organizerId, randomMode, customDurations, revealRoles, preset, noAI, specifiedRoles, debugMode, tier = 'plus' } = config;
 
     // Get dynamic channel settings
     const { textChannel: mafiaTextChannelId, voiceChannel: mafiaVcId } = await getMafiaChannels(guildId);
@@ -153,7 +153,7 @@ async function startMafiaGame(client, config) {
 
         // Assign random roles to remaining players (including bots)
         const remainingPlayers = [...realPlayers.slice(specifiedRoles.length), ...fakePlayers];
-        const roleDistribution = getRoleDistribution(remainingPlayers.length, randomMode, true);
+        const roleDistribution = getRoleDistribution(remainingPlayers.length, randomMode, true, tier);
         const shuffledRoles = shuffleArray(roleDistribution);
 
         for (let i = 0; i < remainingPlayers.length; i++) {
@@ -161,7 +161,7 @@ async function startMafiaGame(client, config) {
         }
     } else {
         // All random
-        const roleDistribution = getRoleDistribution(players.length, randomMode, true);
+        const roleDistribution = getRoleDistribution(players.length, randomMode, true, tier);
         const shuffledRoles = shuffleArray(roleDistribution);
 
         for (let i = 0; i < players.length; i++) {
@@ -183,6 +183,7 @@ async function startMafiaGame(client, config) {
     game.noAI = noAI;
     game.revealRoles = revealRoles;
     game.voiceChannelId = mafiaVcId; // Store VC ID for voice muting
+    game.tier = tier; // Store tier for role availability reference
     if (customDurations) game.customDurations = customDurations;
 
     // Send initial message

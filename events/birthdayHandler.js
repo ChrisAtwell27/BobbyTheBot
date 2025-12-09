@@ -1,6 +1,11 @@
 const cron = require("node-cron");
 const { getConvexClient } = require("../database/convexClient");
 const { api } = require("../convex/_generated/api");
+const {
+  checkSubscription,
+  createUpgradeEmbed,
+  TIERS,
+} = require("../utils/subscriptionUtils");
 
 // Remove direct instantiation to prevent startup crash if env var is missing
 // const client = new ConvexHttpClient(process.env.CONVEX_URL);
@@ -20,6 +25,21 @@ module.exports = (discordClient) => {
 
     // EARLY RETURN: Skip if not a birthday command
     if (!message.content.toLowerCase().startsWith("!birthday")) return;
+
+    // Check subscription tier - PLUS TIER REQUIRED for birthday
+    const subCheck = await checkSubscription(
+      message.guild.id,
+      TIERS.PLUS,
+      message.guild.ownerId
+    );
+    if (!subCheck.hasAccess) {
+      const upgradeEmbed = createUpgradeEmbed(
+        "Birthday Tracking",
+        TIERS.PLUS,
+        subCheck.guildTier
+      );
+      return message.channel.send({ embeds: [upgradeEmbed] });
+    }
 
     const content = message.content.trim();
 

@@ -17,6 +17,11 @@ const {
   permissionDeniedMessage,
 } = require("../utils/errorMessages");
 const { hasAdminPermission } = require("../utils/adminPermissions");
+const {
+  checkSubscription,
+  createUpgradeEmbed,
+  TIERS,
+} = require("../utils/subscriptionUtils");
 
 // Configuration
 const MIN_BOUNTY = 50;
@@ -564,6 +569,21 @@ module.exports = (client) => {
       !content.startsWith("!clearbounties")
     )
       return;
+
+    // Check subscription tier - PLUS TIER REQUIRED for bounties
+    const subCheck = await checkSubscription(
+      message.guild.id,
+      TIERS.PLUS,
+      message.guild.ownerId
+    );
+    if (!subCheck.hasAccess) {
+      const upgradeEmbed = createUpgradeEmbed(
+        "Bounty System",
+        TIERS.PLUS,
+        subCheck.guildTier
+      );
+      return message.channel.send({ embeds: [upgradeEmbed] });
+    }
 
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();

@@ -917,4 +917,84 @@ const ROLES = {
     }
 };
 
-module.exports = { ROLES };
+/**
+ * PLUS Tier Roles (20 roles) - Basic Bee Mafia
+ * These are the core balanced roles for Plus subscribers
+ */
+const PLUS_TIER_ROLES = [
+    // Bee Roles (12)
+    'QUEENS_GUARD',
+    'SCOUT_BEE',
+    'NURSE_BEE',
+    'GUARD_BEE',
+    'LOOKOUT_BEE',
+    'SOLDIER_BEE',
+    'QUEEN_BEE',
+    'WORKER_BEE',
+    'JAILER_BEE',
+    'ESCORT_BEE',
+    'MEDIUM_BEE',
+    'VETERAN_BEE',
+    // Wasp Roles (5)
+    'WASP_QUEEN',
+    'KILLER_WASP',
+    'SPY_WASP',
+    'CONSORT_WASP',
+    'JANITOR_WASP',
+    // Neutral Roles (3)
+    'CLOWN_BEETLE',
+    'BUTTERFLY',
+    'MURDER_HORNET'
+];
+
+/**
+ * Get available roles based on subscription tier
+ * @param {string} tier - 'plus' or 'ultimate'
+ * @returns {Object} Filtered ROLES object
+ */
+function getAvailableRoles(tier = 'plus') {
+    if (tier === 'ultimate') {
+        // Ultimate tier gets ALL roles
+        return ROLES;
+    }
+
+    // Plus tier gets only the 20 basic roles
+    const filteredRoles = {};
+    PLUS_TIER_ROLES.forEach(roleKey => {
+        if (ROLES[roleKey]) {
+            filteredRoles[roleKey] = ROLES[roleKey];
+        }
+    });
+    return filteredRoles;
+}
+
+/**
+ * Get available role keys based on subscription tier
+ * @param {string} tier - 'plus' or 'ultimate'
+ * @returns {Array} Array of available role keys
+ */
+function getAvailableRoleKeys(tier = 'plus') {
+    if (tier === 'ultimate') {
+        return Object.keys(ROLES);
+    }
+    return PLUS_TIER_ROLES;
+}
+
+/**
+ * Check if a role is available for a given tier
+ * @param {string} roleKey - Role key to check
+ * @param {string} tier - 'plus' or 'ultimate'
+ * @returns {boolean}
+ */
+function isRoleAvailableForTier(roleKey, tier = 'plus') {
+    if (tier === 'ultimate') return true;
+    return PLUS_TIER_ROLES.includes(roleKey);
+}
+
+module.exports = {
+    ROLES,
+    PLUS_TIER_ROLES,
+    getAvailableRoles,
+    getAvailableRoleKeys,
+    isRoleAvailableForTier
+};

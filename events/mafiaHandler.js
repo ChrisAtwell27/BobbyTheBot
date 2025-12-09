@@ -41,6 +41,11 @@ const {
 } = require("../mafia/core/actionHandler");
 const { handleGameChat } = require("../mafia/core/chatHandler");
 const { CleanupMap } = require("../utils/memoryUtils");
+const {
+  checkSubscription,
+  createUpgradeEmbed,
+  TIERS,
+} = require("../utils/subscriptionUtils");
 
 // Inject action handler into game loop to resolve circular dependency
 setActionHandler({ sendNightActionPrompts, sendDuskActionPrompts });
@@ -125,6 +130,21 @@ module.exports = {
 
       // !createmafia or !createmafiadebug
       if (command === "createmafia" || command === "createmafiadebug") {
+        // Check subscription tier - PLUS TIER REQUIRED for mafia
+        const subCheck = await checkSubscription(
+          message.guild.id,
+          TIERS.PLUS,
+          message.guild.ownerId
+        );
+        if (!subCheck.hasAccess) {
+          const upgradeEmbed = createUpgradeEmbed(
+            "Bee Mafia",
+            TIERS.PLUS,
+            subCheck.guildTier
+          );
+          return message.channel.send({ embeds: [upgradeEmbed] });
+        }
+
         const mafiaTextChannelId = await getSetting(
           message.guild.id,
           "channels.mafia_text"
@@ -215,6 +235,15 @@ module.exports = {
           return message.reply("❌ A game is already in progress!");
         }
 
+        // Determine subscription tier for role availability
+        // Check if user has ULTIMATE tier for all 65+ roles
+        const ultimateCheck = await checkSubscription(
+          message.guild.id,
+          TIERS.ULTIMATE,
+          message.guild.ownerId
+        );
+        const mafiaTier = ultimateCheck.hasAccess ? "ultimate" : "plus";
+
         // Create config
         const config = {
           gameId: message.channel.id, // Use channel ID as game ID
@@ -227,6 +256,7 @@ module.exports = {
           noAI,
           specifiedRoles,
           debugMode,
+          tier: mafiaTier, // 'plus' = 20 roles, 'ultimate' = 65+ roles
         };
 
         // Store pending config
@@ -244,8 +274,11 @@ module.exports = {
             .setStyle(ButtonStyle.Secondary)
         );
 
+        const roleCountText = mafiaTier === "ultimate" ? "65+ roles" : "20 roles";
+        const tierEmoji = mafiaTier === "ultimate" ? "👑" : "⭐";
+
         await message.reply({
-          content: `🎲 **Mafia Game Setup**\n\nPlayers: ${players.length}\nMode: ${randomMode ? "Random" : "Normal"}\n\nChoose how to start:`,
+          content: `🎲 **Mafia Game Setup**\n\nPlayers: ${players.length}\nMode: ${randomMode ? "Random" : "Normal"}\n${tierEmoji} **Role Pool:** ${roleCountText} (${mafiaTier.charAt(0).toUpperCase() + mafiaTier.slice(1)} Tier)\n\nChoose how to start:`,
           components: [row],
         });
       }

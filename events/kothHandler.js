@@ -23,6 +23,11 @@ const {
   insufficientFundsMessage,
   invalidUsageMessage,
 } = require("../utils/errorMessages");
+const {
+  checkSubscription,
+  createUpgradeEmbed,
+  TIERS,
+} = require("../utils/subscriptionUtils");
 
 // Game constants
 const GAME_DURATION = 300000; // 5 minutes in milliseconds
@@ -65,6 +70,21 @@ module.exports = (client) => {
     // EARLY RETURN: Skip if not a KOTH command
     const content = message.content.toLowerCase();
     if (!content.startsWith("!koth")) return;
+
+    // Check subscription tier - PLUS TIER REQUIRED for KOTH
+    const subCheck = await checkSubscription(
+      message.guild.id,
+      TIERS.PLUS,
+      message.guild.ownerId
+    );
+    if (!subCheck.hasAccess) {
+      const upgradeEmbed = createUpgradeEmbed(
+        "King of the Hill",
+        TIERS.PLUS,
+        subCheck.guildTier
+      );
+      return message.channel.send({ embeds: [upgradeEmbed] });
+    }
 
     const args = message.content.split(" ");
     const command = args[0].toLowerCase();

@@ -3,21 +3,35 @@
  * Define preset role distributions for different game modes
  */
 
-const { ROLES } = require('../roles/mafiaRoles');
+const { ROLES, getAvailableRoleKeys } = require('../roles/mafiaRoles');
 
 /**
  * Get role distribution for a preset based on player count
  * @param {string} presetName - Name of the preset
  * @param {number} playerCount - Number of players
+ * @param {string} tier - Subscription tier ('plus' or 'ultimate')
  * @returns {Array} Array of role keys
  */
-function getPresetDistribution(presetName, playerCount) {
+function getPresetDistribution(presetName, playerCount, tier = 'plus') {
     const preset = PRESETS[presetName.toLowerCase()];
     if (!preset) {
         return null;
     }
 
-    return preset.getRoles(playerCount);
+    const roles = preset.getRoles(playerCount);
+
+    // Filter roles by tier
+    const availableRoles = getAvailableRoleKeys(tier);
+    return roles.map(role => {
+        if (availableRoles.includes(role)) {
+            return role;
+        }
+        // Replace unavailable roles with tier-appropriate alternatives
+        const roleInfo = ROLES[role];
+        if (roleInfo.team === 'bee') return 'WORKER_BEE';
+        if (roleInfo.team === 'wasp') return 'KILLER_WASP';
+        return 'BUTTERFLY'; // Default neutral replacement
+    });
 }
 
 /**

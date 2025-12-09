@@ -1040,8 +1040,23 @@ module.exports = {
 
         const command = message.content.toLowerCase().split(" ")[0];
 
-        // !valstats or !valprofile command
+        // !valstats or !valprofile command - ULTIMATE TIER REQUIRED
         if (command === "!valstats" || command === "!valprofile") {
+          // Check subscription tier (guild-based)
+          const subCheck = await checkSubscription(
+            message.guild.id,
+            TIERS.ULTIMATE,
+            message.guild.ownerId
+          );
+          if (!subCheck.hasAccess) {
+            const upgradeEmbed = createUpgradeEmbed(
+              "Valorant Stats",
+              TIERS.ULTIMATE,
+              subCheck.guildTier
+            );
+            return message.channel.send({ embeds: [upgradeEmbed] });
+          }
+
           // Use migration utility to handle legacy username registrations
           const registration = await findOrMigrateUser(message.guild.id, message.author);
 
@@ -1058,8 +1073,23 @@ module.exports = {
           await handleUpdateRegistration(message, args);
         }
 
-        // !valmatches command
+        // !valmatches command - ULTIMATE TIER REQUIRED
         if (command === "!valmatches") {
+          // Check subscription tier (guild-based)
+          const subCheck = await checkSubscription(
+            message.guild.id,
+            TIERS.ULTIMATE,
+            message.guild.ownerId
+          );
+          if (!subCheck.hasAccess) {
+            const upgradeEmbed = createUpgradeEmbed(
+              "Valorant Match History",
+              TIERS.ULTIMATE,
+              subCheck.guildTier
+            );
+            return message.channel.send({ embeds: [upgradeEmbed] });
+          }
+
           const registration = await findOrMigrateUser(message.guild.id, message.author);
           if (!registration) {
             await message.channel.send(

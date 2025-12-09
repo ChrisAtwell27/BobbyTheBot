@@ -33,7 +33,7 @@ const SETTING_REQUIREMENTS = {
   "features.birthdays": "plus",
   "features.bounties": "plus",
   "features.team_builder": "plus",
-  "features.valorant": "plus", // API intensive
+  "features.valorant": "ultimate", // Valorant API stats/matches - ULTIMATE tier
   "features.custom_branding": "ultimate",
 
   // =====================================================================
@@ -76,10 +76,6 @@ const SETTING_REQUIREMENTS = {
   "roles.valorant_team": "plus", // Role to ping for Valorant teams
   "roles.valorant_inhouse": "plus", // Role for in-house games
 
-  // =====================================================================
-  // ULTIMATE SETTINGS
-  // =====================================================================
-  openaiApiKey: "ultimate", // Custom API keys are ultimate tier
 };
 
 /**

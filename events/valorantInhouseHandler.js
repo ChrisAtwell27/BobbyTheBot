@@ -14,6 +14,11 @@ const { loadImageFromURL } = require("../utils/valorantCanvasUtils");
 // Import functions from the API handler (with persistent storage)
 const apiHandler = require("./valorantApiHandler");
 const { getSetting } = require("../utils/settingsManager");
+const {
+  checkSubscription,
+  createUpgradeEmbed,
+  TIERS,
+} = require("../utils/subscriptionUtils");
 
 // Configuration - legacy fallback ID
 const DEFAULT_VALORANT_ROLE_ID = "1058201257338228757";
@@ -891,6 +896,21 @@ module.exports = (client) => {
       const content = message.content.toLowerCase();
       if (!content.startsWith("!valinhouse") && !content.startsWith("!inhouse"))
         return;
+
+      // Check subscription tier - PLUS TIER REQUIRED for inhouse
+      const subCheck = await checkSubscription(
+        message.guild.id,
+        TIERS.PLUS,
+        message.guild.ownerId
+      );
+      if (!subCheck.hasAccess) {
+        const upgradeEmbed = createUpgradeEmbed(
+          "Valorant In-House",
+          TIERS.PLUS,
+          subCheck.guildTier
+        );
+        return message.channel.send({ embeds: [upgradeEmbed] });
+      }
 
       // Check if message is the !valinhouse command
       const isInhouseCommand = message.content.toLowerCase() === "!valinhouse";
