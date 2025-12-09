@@ -208,7 +208,6 @@ async function checkSubscription(guildId, requiredTier = TIERS.FREE, ownerId = n
  */
 function createUpgradeEmbed(featureName, requiredTier, guildTier = TIERS.FREE) {
     const normalizedRequired = normalizeTier(requiredTier);
-    const normalizedGuild = normalizeTier(guildTier);
 
     // Tier colors
     const tierColors = {
@@ -224,35 +223,20 @@ function createUpgradeEmbed(featureName, requiredTier, guildTier = TIERS.FREE) {
         [TIERS.ULTIMATE]: '👑'
     };
 
-    // Tier display names
+    // Tier display names (no pricing)
     const tierNames = {
         [TIERS.FREE]: 'Free',
-        [TIERS.PLUS]: 'Plus ($4.99/mo)',
-        [TIERS.ULTIMATE]: 'Ultimate ($9.99/mo)'
+        [TIERS.PLUS]: 'Plus',
+        [TIERS.ULTIMATE]: 'Ultimate'
     };
 
     const embed = new EmbedBuilder()
         .setColor(tierColors[normalizedRequired] || 0x3498DB)
-        .setTitle(`${tierEmojis[normalizedRequired]} ${tierNames[normalizedRequired]} Feature`)
+        .setTitle(`${tierEmojis[normalizedRequired]} Feature Unavailable`)
         .setDescription(
             `**${featureName}** requires the **${tierNames[normalizedRequired]}** tier.\n\n` +
-            `This server's current tier: ${tierEmojis[normalizedGuild]} **${tierNames[normalizedGuild]}**`
+            `[Upgrade your subscription](https://bobbybot.io/upgrade) to unlock this feature!`
         )
-        .addFields(
-            {
-                name: '🎯 What You Get',
-                value: normalizedRequired === TIERS.PLUS
-                    ? '• Blackjack & All PvP Games\n• Valorant Team Builder\n• Bee Mafia\n• Bobby AI\n• Activity Tracking & KOTH'
-                    : '• Everything in Plus\n• Audit Logs\n• Advanced Auto-Moderation\n• Custom Prefix\n• API Access\n• Priority Support\n• Monthly 10,000 Honey Bonus',
-                inline: false
-            },
-            {
-                name: '💳 Upgrade Now',
-                value: 'Visit our website to upgrade your subscription and unlock this feature!',
-                inline: false
-            }
-        )
-        .setFooter({ text: 'Subscriptions help keep BobbyTheBot running!' })
         .setTimestamp();
 
     return embed;
