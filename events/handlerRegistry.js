@@ -149,6 +149,9 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Valorant in-house handler - !inhouse
     registerCommandHandler(client, commandRouter, interactionRouter, './valorantInhouseHandler');
 
+    // Valorant leaderboard handler - !valtop, !valleaderboard
+    registerCommandHandler(client, commandRouter, interactionRouter, './valorantLeaderboardHandler');
+
     // Note: wordleHandler registered above with direct listener (needs to see bot messages)
 
     // Trivia handler - !trivia

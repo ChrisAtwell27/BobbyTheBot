@@ -61,16 +61,12 @@ module.exports = (client) => {
 
     try {
       const guildId = message.guild.id;
-      const ownerId = message.guild.ownerId;
 
-      // Get Convex client and query guild-specific subscription
+      // Get Convex client and query THIS GUILD's tier from the servers table
       const convex = getConvexClient();
-      const ownerSubscription = await convex.query(api.subscriptions.getSubscription, {
-        discordId: ownerId
+      const server = await convex.query(api.servers.getServer, {
+        guildId: guildId
       });
-
-      // Find this guild's subscription data
-      const guildSubscription = ownerSubscription?.verifiedGuilds?.find(g => g.guildId === guildId);
 
       // Tier information
       const tierEmojis = {
@@ -94,27 +90,12 @@ module.exports = (client) => {
       const tierDescriptions = {
         [TIERS.FREE]: 'Basic features including Economy, Casino, and more!',
         [TIERS.PLUS]: 'Blackjack, PvP Games, Valorant Teams, Bee Mafia, AI Chat & Activity Tracking',
-        [TIERS.ULTIMATE]: 'Everything in Plus + Audit Logs, Auto-Moderation, Custom Prefix, API Access & Priority Support'
+        [TIERS.ULTIMATE]: 'Everything in Plus + Valorant API Stats, 65+ Mafia Roles & Priority Support'
       };
 
-      // Determine current tier and status
-      // Use the main subscription tier as the source of truth, NOT the per-guild tier
-      // The per-guild tier can have stale data from previous subscriptions
-      let currentTier = TIERS.FREE;
-      let status = 'active';
-      let expiresAt = null;
-
-      if (ownerSubscription) {
-        // Use the main subscription tier (source of truth from Stripe/payment system)
-        currentTier = normalizeTier(ownerSubscription.tier || 'free');
-        status = ownerSubscription.status || 'active';
-        expiresAt = ownerSubscription.expiresAt;
-
-        // If subscription is not active, treat as free tier
-        if (status !== 'active') {
-          currentTier = TIERS.FREE;
-        }
-      }
+      // Get tier from the SERVERS table - each guild has its own tier
+      const currentTier = normalizeTier(server?.tier || 'free');
+      const status = 'active'; // Servers table doesn't track status
 
       // Create embed
       const embedColor = tierColors[currentTier];
@@ -128,28 +109,8 @@ module.exports = (client) => {
           name: '📊 Current Tier',
           value: `${tierEmojis[currentTier]} **${tierNames[currentTier]}**`,
           inline: true
-        },
-        {
-          name: '✅ Status',
-          value: status === 'active' ? 'Active' : 'Inactive',
-          inline: true
         }
       );
-
-      // Add expiration info for paid subscriptions
-      if (status === 'active' && expiresAt) {
-        const expirationDate = new Date(expiresAt);
-        const now = Date.now();
-
-        if (expirationDate > now) {
-          const daysUntilExpiry = Math.ceil((expirationDate - now) / (1000 * 60 * 60 * 24));
-          embed.addFields({
-            name: '📅 Subscription Expires',
-            value: `<t:${Math.floor(expirationDate.getTime() / 1000)}:R> (${daysUntilExpiry} days)`,
-            inline: true
-          });
-        }
-      }
 
       // Add tier benefits
       embed.addFields({

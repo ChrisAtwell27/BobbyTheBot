@@ -91,9 +91,9 @@ async function getSubscriptionByOwner(ownerId, forceRefresh = false) {
 
 /**
  * Get subscription data for a specific guild (with caching)
- * Returns the guild-specific subscription data from verifiedGuilds
+ * Uses the SERVERS table as source of truth - each guild has its own tier
  * @param {string} guildId - Discord guild (server) ID
- * @param {string} ownerId - Discord owner ID of the guild (required for Convex lookup)
+ * @param {string} ownerId - Discord owner ID (not used anymore, kept for backward compatibility)
  * @param {boolean} forceRefresh - Skip cache and force database query
  * @returns {Promise<Object|null>} - Guild subscription object with tier/status or null
  */
@@ -106,44 +106,21 @@ async function getSubscription(guildId, ownerId = null, forceRefresh = false) {
         }
     }
 
-    // If no ownerId provided, we can't look up in Convex
-    // Return null - caller should provide ownerId
-    if (!ownerId) {
-        console.warn(`[Subscription] No ownerId provided for guild ${guildId}, cannot fetch subscription`);
-        return null;
-    }
-
     try {
         const convex = getConvexClient();
-        const subscription = await convex.query(api.subscriptions.getSubscription, {
-            discordId: ownerId
+
+        // Query the SERVERS table directly - this is the source of truth for guild tiers
+        const server = await convex.query(api.servers.getServer, {
+            guildId: guildId
         });
 
-        // Find this guild's specific subscription data
-        if (subscription) {
-            const guildSubscription = subscription.verifiedGuilds?.find(g => g.guildId === guildId);
-            if (!guildSubscription) {
-                // Guild not in this subscription
-                subscriptionCache.set(guildId, {
-                    data: null,
-                    timestamp: Date.now()
-                });
-                return null;
-            }
-
-            // Return guild-specific subscription data merged with parent info
+        if (server) {
+            // Return guild-specific subscription data from servers table
             const guildSubData = {
-                // Guild-specific tier and status (THIS IS THE KEY FIX)
-                tier: guildSubscription.tier || 'free',
-                status: guildSubscription.status || 'active',
-                expiresAt: guildSubscription.expiresAt,
-                subscribedAt: guildSubscription.subscribedAt,
-                trialEndsAt: guildSubscription.trialEndsAt,
-                // Keep reference to parent subscription for metadata
+                // Guild's tier from the servers table (THIS IS THE SOURCE OF TRUTH)
+                tier: server.tier || 'free',
+                status: 'active', // Servers table doesn't track status, assume active
                 guildId: guildId,
-                ownerId: ownerId,
-                verifiedAt: guildSubscription.verifiedAt,
-                guildName: guildSubscription.guildName,
             };
 
             // Cache the guild-specific result
@@ -155,12 +132,19 @@ async function getSubscription(guildId, ownerId = null, forceRefresh = false) {
             return guildSubData;
         }
 
-        // No subscription found
+        // Server not found - return free tier (new server)
+        const defaultData = {
+            tier: 'free',
+            status: 'active',
+            guildId: guildId,
+        };
+
         subscriptionCache.set(guildId, {
-            data: null,
+            data: defaultData,
             timestamp: Date.now()
         });
-        return null;
+
+        return defaultData;
     } catch (error) {
         console.error(`[Subscription] Error fetching subscription for guild ${guildId}:`, error);
         return null;
