@@ -12,6 +12,7 @@ const { updateBobbyBucks } = require("../database/helpers/economyHelpers");
 // TARGET_GUILD_ID removed
 const { getSetting } = require("../utils/settingsManager");
 const { ROLES } = require("../mafia/roles/mafiaRoles");
+const { PRESETS, getAvailablePresets } = require("../mafia/game/mafiaPresets");
 const {
   createGame,
   getGame,
@@ -329,6 +330,111 @@ module.exports = {
           .send(`**Current Game Roles:**\n\n${roleList}`)
           .catch(() => {});
         message.reply("Sent you the role list in DMs.");
+      }
+
+      // !presets - Show available game presets
+      if (command === "presets") {
+        const presetNames = getAvailablePresets();
+
+        const embed = new EmbedBuilder()
+          .setColor(0xf1c40f)
+          .setTitle("🐝 Bee Mafia Game Presets")
+          .setDescription(
+            "Choose a preset when starting a game with `!createmafia`\n" +
+            "Use `!createmafia random` for fully randomized roles!"
+          );
+
+        for (const presetName of presetNames) {
+          const preset = PRESETS[presetName];
+          if (preset) {
+            embed.addFields({
+              name: `${preset.name}`,
+              value: preset.description,
+              inline: true,
+            });
+          }
+        }
+
+        embed.setFooter({
+          text: "Start a game: !createmafia • 6+ players in voice channel required",
+        });
+
+        return message.channel.send({ embeds: [embed] });
+      }
+
+      // !roles - Show all available mafia roles by faction
+      if (command === "roles") {
+        const faction = args[0]?.toLowerCase();
+
+        // Get all roles organized by team
+        const beeRoles = [];
+        const waspRoles = [];
+        const neutralRoles = [];
+
+        for (const [, role] of Object.entries(ROLES)) {
+          const roleInfo = `${role.emoji} **${role.name}**`;
+          if (role.team === "bee") beeRoles.push(roleInfo);
+          else if (role.team === "wasp") waspRoles.push(roleInfo);
+          else if (role.team === "neutral") neutralRoles.push(roleInfo);
+        }
+
+        // If specific faction requested
+        if (faction === "bee" || faction === "bees") {
+          const embed = new EmbedBuilder()
+            .setColor(0xf1c40f)
+            .setTitle("🐝 Bee Roles (Town)")
+            .setDescription(beeRoles.join("\n"))
+            .setFooter({ text: `${beeRoles.length} roles • Use !roles [bee|wasp|neutral] for specific factions` });
+          return message.channel.send({ embeds: [embed] });
+        }
+
+        if (faction === "wasp" || faction === "wasps") {
+          const embed = new EmbedBuilder()
+            .setColor(0xe74c3c)
+            .setTitle("🐝 Wasp Roles (Mafia)")
+            .setDescription(waspRoles.join("\n"))
+            .setFooter({ text: `${waspRoles.length} roles • Use !roles [bee|wasp|neutral] for specific factions` });
+          return message.channel.send({ embeds: [embed] });
+        }
+
+        if (faction === "neutral" || faction === "neutrals") {
+          const embed = new EmbedBuilder()
+            .setColor(0x9b59b6)
+            .setTitle("🦋 Neutral Roles")
+            .setDescription(neutralRoles.join("\n"))
+            .setFooter({ text: `${neutralRoles.length} roles • Use !roles [bee|wasp|neutral] for specific factions` });
+          return message.channel.send({ embeds: [embed] });
+        }
+
+        // Show all factions summary
+        const totalRoles = beeRoles.length + waspRoles.length + neutralRoles.length;
+        const embed = new EmbedBuilder()
+          .setColor(0xf1c40f)
+          .setTitle("🐝 Bee Mafia - All Roles")
+          .setDescription(
+            `**${totalRoles} unique roles** across 3 factions!\n\n` +
+            "Use `!roles [faction]` to see detailed role lists."
+          )
+          .addFields(
+            {
+              name: `🐝 Bee Roles (${beeRoles.length})`,
+              value: beeRoles.slice(0, 15).join(", ") + (beeRoles.length > 15 ? `\n*...and ${beeRoles.length - 15} more*` : ""),
+              inline: false,
+            },
+            {
+              name: `🐝 Wasp Roles (${waspRoles.length})`,
+              value: waspRoles.slice(0, 15).join(", ") + (waspRoles.length > 15 ? `\n*...and ${waspRoles.length - 15} more*` : ""),
+              inline: false,
+            },
+            {
+              name: `🦋 Neutral Roles (${neutralRoles.length})`,
+              value: neutralRoles.slice(0, 15).join(", ") + (neutralRoles.length > 15 ? `\n*...and ${neutralRoles.length - 15} more*` : ""),
+              inline: false,
+            }
+          )
+          .setFooter({ text: "!roles bee • !roles wasp • !roles neutral" });
+
+        return message.channel.send({ embeds: [embed] });
       }
     });
 
