@@ -829,7 +829,7 @@ module.exports = (client) => {
       const now = new Date();
       const oneMonthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
       const timeFilter = { start: oneMonthAgo, end: now };
-      const stats = await calculateStats(timeFilter);
+      const stats = await calculateStats(message.guild.id, timeFilter);
 
       if (Object.keys(stats).length === 0) {
         return await message.channel.send(
@@ -1006,6 +1006,7 @@ module.exports = (client) => {
                   // Add score but SKIP honey award (backfill only)
                   // Use message timestamp for the score
                   const scoreResult = await addScore(
+                    message.guild.id,
                     member.id,
                     result.score,
                     msg.createdTimestamp,
