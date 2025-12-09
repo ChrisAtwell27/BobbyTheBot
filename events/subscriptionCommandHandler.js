@@ -15,8 +15,46 @@ module.exports = (client) => {
     if (message.author.bot) return;
     if (!message.guild) return;
 
+    const content = message.content.toLowerCase().trim();
+
+    // Handle !setupbobby command (free tier)
+    if (content === '!setupbobby' || content === '!setup') {
+      const embed = new EmbedBuilder()
+        .setColor(0xFFD700)
+        .setTitle('⚙️ Setup Bobby The Bot')
+        .setDescription('Configure Bobby for your server through our web dashboard!')
+        .addFields(
+          {
+            name: '🔗 Setup Link',
+            value: '**[crackedgames.co/bobby-the-bot](https://crackedgames.co/bobby-the-bot)**',
+            inline: false
+          },
+          {
+            name: '📋 What You Can Configure',
+            value: [
+              '• Set custom bot prefix',
+              '• Configure moderation settings',
+              '• Manage feature toggles',
+              '• Set up role permissions',
+              '• Configure channel restrictions',
+              '• And much more!'
+            ].join('\n'),
+            inline: false
+          },
+          {
+            name: '💡 Tip',
+            value: 'Make sure you\'re logged in with the Discord account that owns this server to access all settings.',
+            inline: false
+          }
+        )
+        .setFooter({ text: 'Use !subscription to check your current tier' })
+        .setTimestamp();
+
+      await message.channel.send({ embeds: [embed] });
+      return;
+    }
+
     // Check if message is !subscription command
-    const content = message.content.toLowerCase();
     if (!content.startsWith('!subscription') && !content.startsWith('!sub') && !content.startsWith('!tier')) {
       return;
     }

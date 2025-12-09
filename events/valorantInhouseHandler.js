@@ -22,9 +22,32 @@ const DEFAULT_VALORANT_ROLE_ID = "1058201257338228757";
 async function getValorantRoleId(guildId) {
   return await getSetting(guildId, 'roles.valorant_team', DEFAULT_VALORANT_ROLE_ID);
 }
-const INHOUSE_SIZE = 10; // In-house needs 10 players (2 teams of 5)
-const MAX_INHOUSES_PER_USER = 1; // Limit active in-houses per user
-const INHOUSE_COOLDOWN = 60000; // 1 minute cooldown between in-house creations
+
+// ============ CONSTANTS ============
+// Canvas dimensions
+const INHOUSE_CANVAS_WIDTH = 1100;
+const INHOUSE_CANVAS_HEIGHT = 420;
+const PLAYER_SLOT_WIDTH = 100;
+const PLAYER_SLOT_HEIGHT = 140;
+const SLOT_SPACING = 110;
+
+// Timer intervals (milliseconds)
+const RESEND_INTERVAL = 10 * 60 * 1000; // 10 minutes
+const INHOUSE_EXPIRY_TIME = 30 * 60 * 1000; // 30 minutes
+const INHOUSE_COOLDOWN = 60000; // 1 minute
+
+// Performance thresholds (milliseconds)
+const VIZ_PERF_THRESHOLD = 500;
+const EMBED_PERF_THRESHOLD = 1000;
+
+// Game settings
+const INHOUSE_SIZE = 10;
+const TEAM_SIZE = 5;
+const MAX_INHOUSES_PER_USER = 1;
+
+// MMR calculations
+const MMR_PER_TIER = 100;
+// ===================================
 
 // Store active in-houses (auto-cleanup with size limit of 30)
 const activeInhouses = new LimitedMap(30);
@@ -34,9 +57,6 @@ const userCooldowns = new CleanupMap(2 * 60 * 1000, 1 * 60 * 1000);
 
 // Track user active in-houses count (limit to 500 users for larger servers)
 const userActiveInhouses = new LimitedMap(500);
-
-// Resend interval in milliseconds (10 minutes)
-const RESEND_INTERVAL = 10 * 60 * 1000;
 
 // Function to get user rank information
 async function getUserRankInfo(guildId, userId) {
@@ -71,7 +91,7 @@ async function getUserRankInfo(guildId, userId) {
 function calculatePlayerMMR(rankInfo) {
   if (!rankInfo) return 0;
   // Each rank tier is worth 100 points, RR adds up to 100 more
-  return rankInfo.tier * 100 + (rankInfo.rr || 0);
+  return rankInfo.tier * MMR_PER_TIER + (rankInfo.rr || 0);
 }
 
 // Team balancing algorithm - creates two balanced teams based on player ranks
@@ -127,17 +147,17 @@ async function createInhouseVisualization(
   const vizStartTime = Date.now();
   console.log("[INHOUSE] Creating canvas visualization...");
 
-  const canvas = createCanvas(1100, 420);
+  const canvas = createCanvas(INHOUSE_CANVAS_WIDTH, INHOUSE_CANVAS_HEIGHT);
   const ctx = canvas.getContext("2d");
 
   // Enhanced background gradient
-  const gradient = ctx.createLinearGradient(0, 0, 1100, 420);
+  const gradient = ctx.createLinearGradient(0, 0, INHOUSE_CANVAS_WIDTH, INHOUSE_CANVAS_HEIGHT);
   gradient.addColorStop(0, "#0a0e13");
   gradient.addColorStop(0.3, "#1e2328");
   gradient.addColorStop(0.7, "#2c3e50");
   gradient.addColorStop(1, "#0a0e13");
   ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 1100, 420);
+  ctx.fillRect(0, 0, INHOUSE_CANVAS_WIDTH, INHOUSE_CANVAS_HEIGHT);
 
   const gradientTime = Date.now() - vizStartTime;
   console.log(`[INHOUSE] Canvas gradient created in ${gradientTime}ms`);
@@ -145,8 +165,8 @@ async function createInhouseVisualization(
   // Add subtle pattern overlay
   const patternStartTime = Date.now();
   ctx.fillStyle = "rgba(255, 70, 84, 0.05)";
-  for (let i = 0; i < 1100; i += 30) {
-    for (let j = 0; j < 420; j += 30) {
+  for (let i = 0; i < INHOUSE_CANVAS_WIDTH; i += 30) {
+    for (let j = 0; j < INHOUSE_CANVAS_HEIGHT; j += 30) {
       if ((i + j) % 60 === 0) {
         ctx.fillRect(i, j, 15, 15);
       }
@@ -156,13 +176,13 @@ async function createInhouseVisualization(
   console.log(`[INHOUSE] Pattern overlay created in ${patternTime}ms`);
 
   // Enhanced Valorant-style accent
-  const accentGradient = ctx.createLinearGradient(0, 0, 1100, 0);
+  const accentGradient = ctx.createLinearGradient(0, 0, INHOUSE_CANVAS_WIDTH, 0);
   accentGradient.addColorStop(0, "#ff4654");
   accentGradient.addColorStop(0.5, "#ff6b7a");
   accentGradient.addColorStop(1, "#ff4654");
   ctx.fillStyle = accentGradient;
-  ctx.fillRect(0, 0, 1100, 6);
-  ctx.fillRect(0, 414, 1100, 6);
+  ctx.fillRect(0, 0, INHOUSE_CANVAS_WIDTH, 6);
+  ctx.fillRect(0, 414, INHOUSE_CANVAS_WIDTH, 6);
 
   // Enhanced title with glow effect
   ctx.shadowColor = "#ff4654";
@@ -181,15 +201,15 @@ async function createInhouseVisualization(
     ctx.fillStyle = "#00ff88";
     ctx.fillText("TEAMS BALANCED - READY TO PLAY!", 550, 65);
   } else {
-    ctx.fillStyle = totalMembers >= 10 ? "#00ff88" : "#ffaa00";
-    ctx.fillText(`${totalMembers}/10 PLAYERS READY`, 550, 65);
+    ctx.fillStyle = totalMembers >= INHOUSE_SIZE ? "#00ff88" : "#ffaa00";
+    ctx.fillText(`${totalMembers}/${INHOUSE_SIZE} PLAYERS READY`, 550, 65);
   }
 
   // Player slots
-  const slotWidth = 100;
-  const slotHeight = 140;
+  const slotWidth = PLAYER_SLOT_WIDTH;
+  const slotHeight = PLAYER_SLOT_HEIGHT;
   const startY = 85;
-  const spacing = 110;
+  const spacing = SLOT_SPACING;
 
   let allMembers;
 
@@ -205,7 +225,7 @@ async function createInhouseVisualization(
     ctx.fillStyle = "#e24a4a";
     ctx.fillText("TEAM 2", 40, startY + slotHeight + 30);
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < TEAM_SIZE; i++) {
       // Draw Team 1 member
       await drawPlayerSlot(
         ctx,
@@ -238,12 +258,12 @@ async function createInhouseVisualization(
     ctx.font = "bold 14px Arial";
     ctx.textAlign = "right";
     ctx.fillText(
-      `Avg MMR: ${Math.round(balancedTeams.team1MMR / 5)}`,
+      `Avg MMR: ${Math.round(balancedTeams.team1MMR / TEAM_SIZE)}`,
       1060,
       startY + 70
     );
     ctx.fillText(
-      `Avg MMR: ${Math.round(balancedTeams.team2MMR / 5)}`,
+      `Avg MMR: ${Math.round(balancedTeams.team2MMR / TEAM_SIZE)}`,
       1060,
       startY + slotHeight + 105
     );
@@ -261,9 +281,9 @@ async function createInhouseVisualization(
     // Show all 10 slots in two rows
     allMembers = [inhouse.leader, ...inhouse.members];
 
-    for (let i = 0; i < 10; i++) {
-      const row = Math.floor(i / 5);
-      const col = i % 5;
+    for (let i = 0; i < INHOUSE_SIZE; i++) {
+      const row = Math.floor(i / TEAM_SIZE);
+      const col = i % TEAM_SIZE;
       const x = 40 + col * spacing;
       const y = startY + row * (slotHeight + 20);
 
@@ -281,9 +301,9 @@ async function createInhouseVisualization(
   }
 
   const totalVizTime = Date.now() - vizStartTime;
-  if (totalVizTime > 500) {
+  if (totalVizTime > VIZ_PERF_THRESHOLD) {
     console.warn(
-      `[INHOUSE] ⚠️ Canvas visualization took ${totalVizTime}ms (>500ms threshold)`
+      `[INHOUSE] ⚠️ Canvas visualization took ${totalVizTime}ms (>${VIZ_PERF_THRESHOLD}ms threshold)`
     );
   } else {
     console.log(`[INHOUSE] Canvas visualization complete in ${totalVizTime}ms`);
@@ -335,6 +355,12 @@ async function drawPlayerSlot(
 
       const avatar = await loadImageFromURL(avatarURL);
 
+      // Validate avatar loaded successfully before drawing
+      if (!avatar) {
+        console.warn(`[INHOUSE] Failed to load avatar for user ${member.id}, using fallback`);
+        throw new Error("Avatar load failed"); // Will be caught by outer try-catch for fallback rendering
+      }
+
       // Draw circular avatar with glow for leader
       if (slotNum === 1) {
         ctx.shadowColor = "#ffd700";
@@ -375,13 +401,26 @@ async function drawPlayerSlot(
       const userRankInfo =
         member.rankInfo || (await getUserRankInfo(guildId, member.id));
       if (userRankInfo) {
-        // Try to load rank image
-        const rankImage = await apiHandler.loadRankImage(userRankInfo.tier);
-        if (rankImage) {
-          // Draw rank image in bottom section
-          ctx.drawImage(rankImage, x + width / 2 - 15, y + 85, 30, 30);
-        } else {
-          // Use fallback rank icon
+        // Try to load rank image with null validation
+        try {
+          const rankImage = await apiHandler.loadRankImage(userRankInfo.tier);
+          if (rankImage) {
+            // Draw rank image in bottom section
+            ctx.drawImage(rankImage, x + width / 2 - 15, y + 85, 30, 30);
+          } else {
+            // Use fallback rank icon when image is null
+            console.log(`[INHOUSE] Rank image null for tier ${userRankInfo.tier}, using fallback`);
+            apiHandler.createFallbackRankIcon(
+              ctx,
+              x + width / 2 - 15,
+              y + 85,
+              30,
+              userRankInfo
+            );
+          }
+        } catch (rankError) {
+          console.error(`[INHOUSE] Error loading rank image for tier ${userRankInfo.tier}:`, rankError.message);
+          // Use fallback rank icon on error
           apiHandler.createFallbackRankIcon(
             ctx,
             x + width / 2 - 15,
@@ -524,7 +563,7 @@ async function createInhouseEmbed(
     : "Not Registered - Use !valstats";
 
   const embed = new EmbedBuilder()
-    .setColor(totalMembers >= 10 ? "#00ff88" : "#ff4654")
+    .setColor(totalMembers >= INHOUSE_SIZE ? "#00ff88" : "#ff4654")
     .setTitle("🏆 Valorant In-House Match")
     .setDescription(
       `**Match Host:** ${inhouse.leader.displayName}\n**Host Rank:** ${leaderRankText}\n**Status:** ${totalMembers}/10 Players`
@@ -559,7 +598,7 @@ async function createInhouseEmbed(
       },
       {
         name: "📊 Balance Info",
-        value: `**Team 1 Avg MMR:** ${Math.round(balancedTeams.team1MMR / 5)}\n**Team 2 Avg MMR:** ${Math.round(balancedTeams.team2MMR / 5)}\n**MMR Difference:** ${Math.round(balancedTeams.mmrDifference)}`,
+        value: `**Team 1 Avg MMR:** ${Math.round(balancedTeams.team1MMR / TEAM_SIZE)}\n**Team 2 Avg MMR:** ${Math.round(balancedTeams.team2MMR / TEAM_SIZE)}\n**MMR Difference:** ${Math.round(balancedTeams.mmrDifference)}`,
         inline: false,
       }
     );
@@ -574,7 +613,7 @@ async function createInhouseEmbed(
   embed
     .setFooter({
       text:
-        totalMembers < 10
+        totalMembers < INHOUSE_SIZE
           ? "🔄 Match updates every 10 minutes • Register with !valstats to show your rank!"
           : 'All players ready! Click "Create Teams" to balance the match!',
     })
@@ -651,7 +690,7 @@ async function formatInhouseMembersList(inhouse) {
   }
 
   // Add empty slots count
-  const emptySlots = 10 - getTotalMembers(inhouse);
+  const emptySlots = INHOUSE_SIZE - getTotalMembers(inhouse);
   if (emptySlots > 0) {
     members.push(
       `\n*🔍 Looking for ${emptySlots} more player${emptySlots > 1 ? "s" : ""}...*`
@@ -671,16 +710,20 @@ module.exports = (client) => {
       "Features: 10-player matches, automatic team balancing, rank-based MMR system"
     );
 
-    // Track resend operations to prevent overlap
-    let resendInProgress = false;
+    // Track resend operations to prevent overlap (per-inhouse)
+    const resendInProgress = new Map(); // Track per-inhouse resend state
 
     // Function to resend in-house message to keep it at the bottom of chat
     async function resendInhouseMessage(inhouseId) {
       const inhouse = activeInhouses.get(inhouseId);
-      if (!inhouse) return; // In-house no longer exists
+      if (!inhouse) {
+        // Clean up resend flag if inhouse no longer exists
+        resendInProgress.delete(inhouseId);
+        return;
+      }
 
-      // Prevent multiple resends from happening simultaneously
-      if (resendInProgress) {
+      // Prevent multiple resends from happening simultaneously for this specific inhouse
+      if (resendInProgress.get(inhouseId)) {
         console.log(
           `[INHOUSE] Resend already in progress, skipping inhouseId: ${inhouseId}`
         );
@@ -694,17 +737,35 @@ module.exports = (client) => {
       }
 
       const startTime = Date.now();
-      resendInProgress = true;
+      resendInProgress.set(inhouseId, true);
 
       try {
         console.log(`[INHOUSE] Starting resend for inhouseId: ${inhouseId}`);
 
-        // Get the channel
-        const channel = await client.channels.fetch(inhouse.channelId);
-        if (!channel) {
-          console.log(
-            `[INHOUSE] Channel not found for inhouseId: ${inhouseId}`
+        // Get the channel with error handling
+        let channel;
+        try {
+          channel = await client.channels.fetch(inhouse.channelId);
+          if (!channel) {
+            console.error(
+              `[INHOUSE] Channel not found (null) for inhouseId: ${inhouseId}, channelId: ${inhouse.channelId}`
+            );
+            // Channel no longer exists, clean up inhouse
+            activeInhouses.delete(inhouseId);
+            decrementUserInhouseCount(inhouse.leader.id);
+            return;
+          }
+        } catch (fetchError) {
+          console.error(
+            `[INHOUSE] Failed to fetch channel ${inhouse.channelId} for inhouseId: ${inhouseId}:`,
+            fetchError.message
           );
+          if (fetchError.code === 10003) {
+            // Unknown Channel - channel was deleted
+            console.error(`[INHOUSE] Channel ${inhouse.channelId} was deleted, cleaning up inhouse`);
+            activeInhouses.delete(inhouseId);
+            decrementUserInhouseCount(inhouse.leader.id);
+          }
           return;
         }
 
@@ -716,9 +777,9 @@ module.exports = (client) => {
         const updatedEmbed = await createInhouseEmbed(inhouse);
         const embedDuration = Date.now() - embedStartTime;
 
-        if (embedDuration > 1000) {
+        if (embedDuration > EMBED_PERF_THRESHOLD) {
           console.warn(
-            `[INHOUSE] ⚠️ Embed creation took ${embedDuration}ms (>1s threshold)`
+            `[INHOUSE] ⚠️ Embed creation took ${embedDuration}ms (>${EMBED_PERF_THRESHOLD}ms threshold)`
           );
         } else {
           console.log(`[INHOUSE] Embed created in ${embedDuration}ms`);
@@ -733,19 +794,50 @@ module.exports = (client) => {
         // Delete the old message if it exists
         try {
           const oldMessage = await channel.messages.fetch(inhouse.messageId);
-          if (oldMessage) await oldMessage.delete();
-        } catch (error) {
+          if (oldMessage) {
+            await oldMessage.delete();
+          }
+        } catch (deleteError) {
           console.log(
-            `[INHOUSE] Couldn't delete old message: ${error.message}`
+            `[INHOUSE] Couldn't delete old message ${inhouse.messageId}: ${deleteError.message}`
           );
+          if (deleteError.code === 10008) {
+            // Unknown Message - already deleted
+            console.log(`[INHOUSE] Old message ${inhouse.messageId} was already deleted`);
+          } else if (deleteError.code === 50001) {
+            // Missing Access
+            console.error(`[INHOUSE] Bot lacks permission to delete message in channel ${inhouse.channelId}`);
+          }
+          // Continue anyway - we'll send a new message
         }
 
-        // Send a new message
-        const newMessage = await channel.send({
-          embeds: [updatedEmbed.embed],
-          files: updatedEmbed.files,
-          components: [updatedComponents],
-        });
+        // Send a new message with error handling
+        let newMessage;
+        try {
+          newMessage = await channel.send({
+            embeds: [updatedEmbed.embed],
+            files: updatedEmbed.files,
+            components: [updatedComponents],
+          });
+        } catch (sendError) {
+          console.error(
+            `[INHOUSE] Failed to send message to channel ${inhouse.channelId}:`,
+            sendError.message
+          );
+          if (sendError.code === 50001) {
+            // Missing Access
+            console.error(`[INHOUSE] Bot lacks permission to send messages in channel ${inhouse.channelId}`);
+            // Clean up since we can't post to this channel
+            activeInhouses.delete(inhouseId);
+            decrementUserInhouseCount(inhouse.leader.id);
+          } else if (sendError.code === 50013) {
+            // Missing Permissions
+            console.error(`[INHOUSE] Bot lacks required permissions in channel ${inhouse.channelId}`);
+            activeInhouses.delete(inhouseId);
+            decrementUserInhouseCount(inhouse.leader.id);
+          }
+          return;
+        }
 
         // Update the in-house with the new message ID
         inhouse.messageId = newMessage.id;
@@ -770,9 +862,22 @@ module.exports = (client) => {
           );
         }
       } catch (error) {
-        console.error(`[INHOUSE] Error resending in-house message:`, error);
+        console.error(
+          `[INHOUSE] Unexpected error resending in-house message for ${inhouseId}:`,
+          error.message,
+          error.stack
+        );
+        // On unexpected errors, consider cleaning up
+        if (activeInhouses.has(inhouseId)) {
+          console.error(`[INHOUSE] Cleaning up inhouse ${inhouseId} due to repeated errors`);
+          const inhouseData = activeInhouses.get(inhouseId);
+          if (inhouseData) {
+            decrementUserInhouseCount(inhouseData.leader.id);
+          }
+          activeInhouses.delete(inhouseId);
+        }
       } finally {
-        resendInProgress = false;
+        resendInProgress.delete(inhouseId);
       }
     }
 
@@ -860,8 +965,8 @@ module.exports = (client) => {
           );
 
           // Delete after 30 minutes if in-house isn't full
-          inhouse.expiryTimer = setTimeout(
-            () => {
+          inhouse.expiryTimer = setTimeout(async () => {
+            try {
               const currentInhouse = activeInhouses.get(inhouseId);
               if (
                 currentInhouse &&
@@ -872,31 +977,40 @@ module.exports = (client) => {
                   clearTimeout(currentInhouse.resendTimer);
                 }
 
+                // Clean up resend flag
+                resendInProgress.delete(inhouseId);
+
                 // Decrement user's active in-house count
                 decrementUserInhouseCount(currentInhouse.leader.id);
 
                 activeInhouses.delete(inhouseId);
 
-                // Attempt to delete the most recent message
-                client.channels
-                  .fetch(currentInhouse.channelId)
-                  .then((channel) => {
-                    channel.messages
-                      .fetch(currentInhouse.messageId)
-                      .then((msg) => {
-                        msg.delete().catch(() => {});
-                      })
-                      .catch(() => {});
-                  })
-                  .catch(() => {});
+                // Attempt to delete the most recent message with proper error handling
+                try {
+                  const channel = await client.channels.fetch(currentInhouse.channelId);
+                  if (channel) {
+                    try {
+                      const msg = await channel.messages.fetch(currentInhouse.messageId);
+                      if (msg) {
+                        await msg.delete();
+                        console.log(`[INHOUSE] Expired message ${currentInhouse.messageId} deleted`);
+                      }
+                    } catch (msgError) {
+                      console.log(`[INHOUSE] Could not delete expired message: ${msgError.message}`);
+                    }
+                  }
+                } catch (channelError) {
+                  console.log(`[INHOUSE] Could not fetch channel for expired inhouse: ${channelError.message}`);
+                }
 
                 console.log(
                   `⏰ In-house ${inhouseId} expired after 30 minutes`
                 );
               }
-            },
-            30 * 60 * 1000
-          ); // 30 minutes
+            } catch (error) {
+              console.error(`[INHOUSE] Error in expiry timer for ${inhouseId}:`, error.message);
+            }
+          }, INHOUSE_EXPIRY_TIME); // 30 minutes
         } catch (error) {
           console.error("❌ Error creating in-house message:", error);
           message
@@ -958,7 +1072,7 @@ module.exports = (client) => {
         }
 
         // Check if in-house is full
-        if (getTotalMembers(inhouse) >= 10) {
+        if (getTotalMembers(inhouse) >= INHOUSE_SIZE) {
           return interaction.reply({
             content: "❌ This in-house match is already full!",
             ephemeral: true,
@@ -1017,9 +1131,20 @@ module.exports = (client) => {
               )
               .setTimestamp();
 
-            await interaction.followUp({
-              embeds: [readyEmbed],
-            });
+            try {
+              await interaction.followUp({
+                embeds: [readyEmbed],
+              });
+            } catch (followUpError) {
+              console.error(
+                `[INHOUSE] Failed to send follow-up message for full inhouse ${fullInhouseId}:`,
+                followUpError.message
+              );
+              // Non-critical error - just log it
+              if (followUpError.code === 10062) {
+                console.error(`[INHOUSE] Interaction expired or unknown`);
+              }
+            }
 
             console.log(
               `🎉 In-house ${fullInhouseId} is full and ready for team creation`
@@ -1103,7 +1228,7 @@ module.exports = (client) => {
         }
 
         // Check if in-house is full
-        if (getTotalMembers(inhouse) < 10) {
+        if (getTotalMembers(inhouse) < INHOUSE_SIZE) {
           return interaction.reply({
             content: "❌ The match needs 10 players before creating teams!",
             ephemeral: true,
@@ -1142,13 +1267,31 @@ module.exports = (client) => {
           console.log(`⚖️ Teams created for in-house ${fullInhouseId}`);
 
           // Auto-delete in-house after 10 minutes
-          inhouse.deleteTimer = setTimeout(
-            () => {
+          inhouse.deleteTimer = setTimeout(async () => {
+            try {
+              resendInProgress.delete(fullInhouseId);
               activeInhouses.delete(fullInhouseId);
-              interaction.message.delete().catch(() => {});
-            },
-            10 * 60 * 1000
-          );
+
+              // Check if message exists before deleting
+              if (interaction.message) {
+                try {
+                  await interaction.message.delete();
+                  console.log(`[INHOUSE] Auto-deleted completed inhouse message ${fullInhouseId}`);
+                } catch (deleteError) {
+                  console.log(
+                    `[INHOUSE] Could not auto-delete message for ${fullInhouseId}: ${deleteError.message}`
+                  );
+                  if (deleteError.code === 10008) {
+                    console.log(`[INHOUSE] Message already deleted`);
+                  }
+                }
+              } else {
+                console.log(`[INHOUSE] No message to delete for ${fullInhouseId}`);
+              }
+            } catch (error) {
+              console.error(`[INHOUSE] Error in delete timer for ${fullInhouseId}:`, error.message);
+            }
+          }, 10 * 60 * 1000);
         } catch (error) {
           console.error("Error creating teams:", error);
           // If interaction is already acknowledged, we can't reply again
@@ -1183,6 +1326,9 @@ module.exports = (client) => {
             clearTimeout(inhouse.deleteTimer);
           }
 
+          // Clean up resend flag
+          resendInProgress.delete(fullInhouseId);
+
           // Decrement user's active in-house count
           decrementUserInhouseCount(inhouse.leader.id);
 
@@ -1211,9 +1357,23 @@ module.exports = (client) => {
             `🗑️ In-house ${fullInhouseId} disbanded by ${interaction.user.username}`
           );
 
-          // Delete the message after 5 seconds
-          setTimeout(() => {
-            interaction.message.delete().catch(() => {});
+          // Delete the message after 5 seconds with proper error handling
+          setTimeout(async () => {
+            try {
+              if (interaction.message) {
+                await interaction.message.delete();
+                console.log(`[INHOUSE] Disbanded message deleted for ${fullInhouseId}`);
+              } else {
+                console.log(`[INHOUSE] No message to delete for disbanded ${fullInhouseId}`);
+              }
+            } catch (deleteError) {
+              console.log(
+                `[INHOUSE] Could not delete disbanded message: ${deleteError.message}`
+              );
+              if (deleteError.code === 10008) {
+                console.log(`[INHOUSE] Message already deleted`);
+              }
+            }
           }, 5000);
         } catch (error) {
           console.error("❌ Error disbanding in-house:", error);

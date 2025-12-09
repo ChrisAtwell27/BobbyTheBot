@@ -23,23 +23,55 @@ const apiHandler = require("./valorantApiHandler");
 const { saveTeamToHistory } = require("../database/helpers/teamHistoryHelpers");
 const { getSetting } = require("../utils/settingsManager");
 
+// ============ CONSTANTS ============
 // Configuration - legacy fallback ID
 const DEFAULT_VALORANT_ROLE_ID = "1058201257338228757";
+
+// Canvas dimensions
+const CANVAS_WIDTH = 700;
+const CANVAS_HEIGHT = 220;
+const SLOT_WIDTH = 120;
+const SLOT_HEIGHT = 120;
+const SLOT_SPACING = 130;
+const CANVAS_START_X = 40;
+const CANVAS_START_Y = 75;
+
+// Visual settings
+const ACCENT_BORDER_WIDTH = 6;
+const AVATAR_RADIUS = 30;
+const RANK_BADGE_RADIUS = 12;
+const GLOW_BLUR_LEADER = 15;
+const AVATAR_FALLBACK_SIZE = 60;
+
+// Team settings
+const TEAM_SIZE = 5;
+const MAX_WAITLIST_SIZE = 5;
+const MIN_CLOSE_TEAM_SIZE = 2;
+
+// Timer intervals (milliseconds)
+const RESEND_INTERVAL = 10 * 60 * 1000; // 10 minutes
+const AUTO_DISBAND_WARNING = 25 * 60 * 1000; // 25 minutes
+const AUTO_DISBAND_FINAL = 30 * 60 * 1000; // 30 minutes (5 minutes after warning)
+const AUTO_CLEANUP_DELAY = 10 * 60 * 1000; // 10 minutes
+const CLOSE_CLEANUP_DELAY = 5 * 60 * 1000; // 5 minutes
+const DISBAND_DELETE_DELAY = 5000; // 5 seconds
+
+// Cache settings
+const RANK_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const RANK_CACHE_SIZE = 100;
+const ACTIVE_TEAMS_CACHE_SIZE = 50;
+// ===================================
 
 // Helper to get Valorant role from settings
 async function getValorantRoleId(guildId) {
   return await getSetting(guildId, 'roles.valorant_team', DEFAULT_VALORANT_ROLE_ID);
 }
 
-// Store active teams (auto-cleanup with size limit of 50)
-const activeTeams = new LimitedMap(50);
+// Store active teams (auto-cleanup with size limit)
+const activeTeams = new LimitedMap(ACTIVE_TEAMS_CACHE_SIZE);
 
-// Cache for rank data to avoid repeated API calls (TTL: 5 minutes)
-const rankCache = new LimitedMap(100);
-const RANK_CACHE_TTL = 5 * 60 * 1000;
-
-// Resend interval in milliseconds (10 minutes)
-const RESEND_INTERVAL = 10 * 60 * 1000;
+// Cache for rank data to avoid repeated API calls
+const rankCache = new LimitedMap(RANK_CACHE_SIZE);
 
 /**
  * Batch fetch rank info for multiple users with caching
@@ -105,12 +137,12 @@ function getTotalMembers(team) {
  * Create optimized team visualization with batch rank loading
  */
 async function createTeamVisualization(team) {
-  const canvas = createCanvas(700, 220);
+  const canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
   const ctx = canvas.getContext("2d");
 
   // Use shared background utility
-  createValorantBackground(ctx, 700, 220);
-  createAccentBorder(ctx, 700, 220, "#ff4654", 6);
+  createValorantBackground(ctx, CANVAS_WIDTH, CANVAS_HEIGHT);
+  createAccentBorder(ctx, CANVAS_WIDTH, CANVAS_HEIGHT, "#ff4654", ACCENT_BORDER_WIDTH);
 
   // Title with glow
   const titleText = team.name
@@ -123,22 +155,15 @@ async function createTeamVisualization(team) {
 
   // Team status
   const totalMembers = getTotalMembers(team);
-  const isFull = totalMembers >= 5;
+  const isFull = totalMembers >= TEAM_SIZE;
   ctx.font = "bold 16px Arial";
   ctx.fillStyle = isFull ? "#00ff88" : "#ffaa00";
   ctx.textAlign = "center";
   ctx.fillText(
-    `${totalMembers}/5 PLAYERS ${isFull ? "READY" : "NEEDED"}`,
+    `${totalMembers}/${TEAM_SIZE} PLAYERS ${isFull ? "READY" : "NEEDED"}`,
     350,
     65
   );
-
-  // Layout constants
-  const slotWidth = 120;
-  const slotHeight = 120;
-  const startX = 40;
-  const startY = 75;
-  const spacing = 130;
 
   const allMembers = [team.leader, ...team.members];
 
@@ -161,9 +186,9 @@ async function createTeamVisualization(team) {
   const avatars = await Promise.all(avatarPromises);
 
   // Draw all slots
-  for (let i = 0; i < 5; i++) {
-    const x = startX + i * spacing;
-    const y = startY;
+  for (let i = 0; i < TEAM_SIZE; i++) {
+    const x = CANVAS_START_X + i * SLOT_SPACING;
+    const y = CANVAS_START_Y;
     const member = allMembers[i];
     const isFilled = !!member;
 
@@ -172,8 +197,8 @@ async function createTeamVisualization(team) {
       ctx,
       x,
       y,
-      slotWidth,
-      slotHeight,
+      SLOT_WIDTH,
+      SLOT_HEIGHT,
       isFilled,
       "#ff4654"
     );
@@ -185,27 +210,27 @@ async function createTeamVisualization(team) {
       // Leader glow
       if (isLeader) {
         ctx.shadowColor = "#ffd700";
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = GLOW_BLUR_LEADER;
       }
 
       // Draw avatar
       if (avatar) {
         ctx.save();
         ctx.beginPath();
-        ctx.arc(x + slotWidth / 2, y + 40, 30, 0, Math.PI * 2);
+        ctx.arc(x + SLOT_WIDTH / 2, y + 40, AVATAR_RADIUS, 0, Math.PI * 2);
         ctx.clip();
-        ctx.drawImage(avatar, x + slotWidth / 2 - 30, y + 10, 60, 60);
+        ctx.drawImage(avatar, x + SLOT_WIDTH / 2 - AVATAR_RADIUS, y + 10, AVATAR_FALLBACK_SIZE, AVATAR_FALLBACK_SIZE);
         ctx.restore();
       } else {
         // Fallback avatar
         ctx.fillStyle = "#5865f2";
         ctx.beginPath();
-        ctx.arc(x + slotWidth / 2, y + 40, 30, 0, Math.PI * 2);
+        ctx.arc(x + SLOT_WIDTH / 2, y + 40, AVATAR_RADIUS, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = "#ffffff";
         ctx.font = "30px Arial";
         ctx.textAlign = "center";
-        ctx.fillText("👤", x + slotWidth / 2, y + 50);
+        ctx.fillText("👤", x + SLOT_WIDTH / 2, y + 50);
       }
       ctx.shadowBlur = 0;
 
@@ -216,7 +241,7 @@ async function createTeamVisualization(team) {
         ctx.shadowColor = "#ffd700";
         ctx.shadowBlur = 5;
         ctx.textAlign = "center";
-        ctx.fillText("👑", x + slotWidth / 2, y - 5);
+        ctx.fillText("👑", x + SLOT_WIDTH / 2, y - 5);
         ctx.shadowBlur = 0;
       }
 
@@ -229,7 +254,7 @@ async function createTeamVisualization(team) {
         displayName.length > 12
           ? displayName.substring(0, 11) + "…"
           : displayName;
-      ctx.fillText(truncatedName, x + slotWidth / 2, y + 85);
+      ctx.fillText(truncatedName, x + SLOT_WIDTH / 2, y + 85);
 
       // Rank info (from batch fetch)
       const userRankInfo = rankInfoMap.get(member.id);
@@ -238,7 +263,7 @@ async function createTeamVisualization(team) {
         const rankColor = userRankInfo.color || getRankColor(userRankInfo.tier);
         ctx.fillStyle = rankColor;
         ctx.beginPath();
-        ctx.arc(x + slotWidth - 20, y + slotHeight - 20, 12, 0, Math.PI * 2);
+        ctx.arc(x + SLOT_WIDTH - 20, y + SLOT_HEIGHT - 20, RANK_BADGE_RADIUS, 0, Math.PI * 2);
         ctx.fill();
 
         // Rank text
@@ -249,36 +274,36 @@ async function createTeamVisualization(team) {
           .split(" ")[0]
           .substring(0, 3)
           .toUpperCase();
-        ctx.fillText(rankAbbr, x + slotWidth - 20, y + slotHeight - 17);
+        ctx.fillText(rankAbbr, x + SLOT_WIDTH - 20, y + SLOT_HEIGHT - 17);
 
         // RR display
         if (userRankInfo.rr !== undefined) {
           ctx.font = "bold 10px Arial";
           ctx.fillStyle = rankColor;
-          ctx.fillText(`${userRankInfo.rr} RR`, x + slotWidth / 2, y + 102);
+          ctx.fillText(`${userRankInfo.rr} RR`, x + SLOT_WIDTH / 2, y + 102);
         }
       } else {
         // Not registered indicator
         ctx.font = "bold 9px Arial";
         ctx.fillStyle = "#666";
         ctx.textAlign = "center";
-        ctx.fillText("!valstats", x + slotWidth / 2, y + 102);
+        ctx.fillText("!valstats", x + SLOT_WIDTH / 2, y + 102);
       }
     } else {
       // Empty slot
       ctx.fillStyle = "#555";
       ctx.font = "bold 13px Arial";
       ctx.textAlign = "center";
-      ctx.fillText("OPEN", x + slotWidth / 2, y + slotHeight / 2 - 5);
+      ctx.fillText("OPEN", x + SLOT_WIDTH / 2, y + SLOT_HEIGHT / 2 - 5);
       ctx.font = "11px Arial";
       ctx.fillStyle = "#888";
-      ctx.fillText("Click Join", x + slotWidth / 2, y + slotHeight / 2 + 12);
+      ctx.fillText("Click Join", x + SLOT_WIDTH / 2, y + SLOT_HEIGHT / 2 + 12);
 
       // Dashed border for empty
       ctx.strokeStyle = "rgba(255, 70, 84, 0.4)";
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]);
-      ctx.strokeRect(x + 8, y + 8, slotWidth - 16, slotHeight - 16);
+      ctx.strokeRect(x + 8, y + 8, SLOT_WIDTH - 16, SLOT_HEIGHT - 16);
       ctx.setLineDash([]);
     }
 
@@ -286,7 +311,7 @@ async function createTeamVisualization(team) {
     ctx.fillStyle = "#aaa";
     ctx.font = "bold 12px Arial";
     ctx.textAlign = "center";
-    ctx.fillText(`${i + 1}`, x + slotWidth / 2, y + slotHeight + 15);
+    ctx.fillText(`${i + 1}`, x + SLOT_WIDTH / 2, y + SLOT_HEIGHT + 15);
   }
 
   return canvas.toBuffer();
@@ -297,7 +322,7 @@ async function createTeamVisualization(team) {
  */
 async function createTeamEmbed(team) {
   const totalMembers = getTotalMembers(team);
-  const isFull = totalMembers >= 5;
+  const isFull = totalMembers >= TEAM_SIZE;
 
   const teamImageBuffer = await createTeamVisualization(team);
   const attachment = new AttachmentBuilder(teamImageBuffer, {
@@ -338,7 +363,7 @@ async function createTeamEmbed(team) {
         `**Leader:** ${team.leader.displayName}`,
         `**Rank:** ${leaderRankText}`,
         `**Avg Rank:** ${avgRank}`,
-        `**Status:** ${totalMembers}/5 Players`,
+        `**Status:** ${totalMembers}/${TEAM_SIZE} Players`,
         team.targetTime
           ? `**Event Time:** <t:${Math.floor(team.targetTime / 1000)}:R>`
           : "",
@@ -372,12 +397,12 @@ function createTeamButtons(teamId, isFull, team = null) {
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`valorant_join_${messageId}`)
-      .setLabel(isFull ? "Full (5/5)" : `Join (${teamCount}/5)`)
+      .setLabel(isFull ? `Full (${TEAM_SIZE}/${TEAM_SIZE})` : `Join (${teamCount}/${TEAM_SIZE})`)
       .setStyle(isFull ? ButtonStyle.Secondary : ButtonStyle.Success)
       .setEmoji(isFull ? "✅" : "➕")
       .setDisabled(
-        isFull && team && team.waitlist && team.waitlist.length >= 5
-      ), // Cap waitlist at 5
+        isFull && team && team.waitlist && team.waitlist.length >= MAX_WAITLIST_SIZE
+      ), // Cap waitlist
     new ButtonBuilder()
       .setCustomId(`valorant_leave_${messageId}`)
       .setLabel("Leave")
@@ -402,7 +427,7 @@ function createTeamButtons(teamId, isFull, team = null) {
   }
 
   // Add Close button if 2-4 players
-  if (teamCount >= 2 && teamCount < 5) {
+  if (teamCount >= MIN_CLOSE_TEAM_SIZE && teamCount < TEAM_SIZE) {
     row1.addComponents(
       new ButtonBuilder()
         .setCustomId(`valorant_close_${messageId}`)
@@ -510,8 +535,9 @@ module.exports = (client) => {
     if (!team) return;
 
     try {
-      const channel = await client.channels.fetch(team.channelId);
+      const channel = await client.channels.fetch(team.channelId).catch(() => null);
       if (!channel) {
+        console.error("[Team] Channel not found:", team.channelId, "for team:", teamId);
         activeTeams.delete(teamId);
         return;
       }
@@ -520,11 +546,12 @@ module.exports = (client) => {
         .fetch(team.messageId)
         .catch(() => null);
       if (!message) {
+        console.error("[Team] Message not found:", team.messageId, "for team:", teamId);
         activeTeams.delete(teamId);
         return;
       }
 
-      const isFull = getTotalMembers(team) >= 5;
+      const isFull = getTotalMembers(team) >= TEAM_SIZE;
       const updatedEmbed = await createTeamEmbed(team);
       const updatedComponents = createTeamButtons(teamId, isFull, team);
 
@@ -543,7 +570,9 @@ module.exports = (client) => {
         );
       }
     } catch (error) {
-      if (error.code === 10008) {
+      console.error("[Team] Failed to update message:", error.message, "for team:", teamId);
+      if (error.code === 10008) { // Unknown Message
+        console.error("[Team] Message was deleted, cleaning up team:", teamId);
         activeTeams.delete(teamId);
       }
     }
@@ -585,7 +614,11 @@ module.exports = (client) => {
 
     try {
       // Send "Creating team..." message for immediate feedback
-      const loadingMsg = await channel.send("⏳ Creating team...");
+      const loadingMsg = await channel.send("⏳ Creating team...").catch(() => null);
+      if (!loadingMsg) {
+        console.error("[Team] Failed to send loading message to channel:", channel.id);
+        return false;
+      }
 
       const embed = await createTeamEmbed(team);
       const components = createTeamButtons(teamId, false, team);
@@ -594,7 +627,17 @@ module.exports = (client) => {
         embeds: [embed.embed],
         files: embed.files,
         components,
+      }).catch((error) => {
+        console.error("[Team] Failed to send team message:", error.message);
+        return null;
       });
+
+      if (!teamMessage) {
+        console.error("[Team] Team message creation failed for channel:", channel.id);
+        // Clean up loading message
+        loadingMsg.delete().catch(() => {});
+        return false;
+      }
 
       // Delete loading message
       loadingMsg.delete().catch(() => {});
@@ -616,15 +659,24 @@ module.exports = (client) => {
             const currentTeam = activeTeams.get(teamId);
             if (currentTeam) {
               try {
-                const ch = await client.channels.fetch(currentTeam.channelId);
+                const ch = await client.channels.fetch(currentTeam.channelId).catch(() => null);
+                if (!ch) {
+                  console.error("[Team] Channel not found for event timer:", currentTeam.channelId, "team:", teamId);
+                  activeTeams.delete(teamId);
+                  return;
+                }
+
                 const memberPings = [currentTeam.leader, ...currentTeam.members]
                   .map((m) => `<@${m.id}>`)
                   .join(" ");
+
                 await ch.send(
                   `🚨 **EVENT STARTING NOW!** 🚨\n${memberPings}\n\nGood luck! 🎮`
-                );
+                ).catch((error) => {
+                  console.error("[Team] Failed to send event start message:", error.message);
+                });
 
-                // Auto-cleanup 10 minutes AFTER event starts
+                // Auto-cleanup after event starts
                 if (currentTeam.deleteTimer)
                   clearTimeout(currentTeam.deleteTimer);
                 currentTeam.deleteTimer = setTimeout(
@@ -636,33 +688,44 @@ module.exports = (client) => {
                       .then((msg) => msg.delete())
                       .catch(() => {});
                   },
-                  10 * 60 * 1000
+                  AUTO_CLEANUP_DELAY
                 );
               } catch (err) {
-                console.error("[Team] Event timer error:", err);
+                console.error("[Team] Event timer error:", err.message, "for team:", teamId);
+                activeTeams.delete(teamId);
               }
             }
           }, timeUntil);
         }
       }
 
-      // Auto-disband warning at 25 minutes (only if no timer set, or if timer is far out)
+      // Auto-disband warning (only if no timer set, or if timer is far out)
       if (!team.targetTime) {
         team.warningTimer = setTimeout(
           async () => {
             const currentTeam = activeTeams.get(teamId);
-            if (currentTeam && getTotalMembers(currentTeam) < 5) {
+            if (currentTeam && getTotalMembers(currentTeam) < TEAM_SIZE) {
               try {
-                const ch = await client.channels.fetch(currentTeam.channelId);
+                const ch = await client.channels.fetch(currentTeam.channelId).catch(() => null);
+                if (!ch) {
+                  console.error("[Team] Channel not found for warning:", currentTeam.channelId, "team:", teamId);
+                  activeTeams.delete(teamId);
+                  return;
+                }
+
                 await ch.send(
                   `⏰ Team will auto-disband in **5 minutes** if not filled! (${getTotalMembers(
                     currentTeam
-                  )}/5)`
-                );
-              } catch {}
+                  )}/${TEAM_SIZE})`
+                ).catch((error) => {
+                  console.error("[Team] Failed to send warning message:", error.message);
+                });
+              } catch (error) {
+                console.error("[Team] Warning timer error:", error.message, "for team:", teamId);
+              }
             }
           },
-          25 * 60 * 1000
+          AUTO_DISBAND_WARNING
         );
       }
 
@@ -739,16 +802,37 @@ module.exports = (client) => {
         team.name = newName;
 
         try {
-          const isFull = getTotalMembers(team) >= 5;
+          const isFull = getTotalMembers(team) >= TEAM_SIZE;
           const updatedEmbed = await createTeamEmbed(team);
           const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
 
-          const channel = await client.channels.fetch(team.channelId);
-          const message = await channel.messages.fetch(team.messageId);
+          const channel = await client.channels.fetch(team.channelId).catch(() => null);
+          if (!channel) {
+            console.error("[Team] Channel not found for name modal:", team.channelId, "team:", fullTeamId);
+            activeTeams.delete(fullTeamId);
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Team channel not found.",
+              ephemeral: true,
+            });
+          }
+
+          const message = await channel.messages.fetch(team.messageId).catch(() => null);
+          if (!message) {
+            console.error("[Team] Message not found for name modal:", team.messageId, "team:", fullTeamId);
+            activeTeams.delete(fullTeamId);
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Team message not found.",
+              ephemeral: true,
+            });
+          }
+
           await message.edit({
             embeds: [updatedEmbed.embed],
             files: updatedEmbed.files,
             components: updatedComponents,
+          }).catch((error) => {
+            console.error("[Team] Failed to edit message for name:", error.message);
+            throw error;
           });
 
           await safeInteractionResponse(interaction, "reply", {
@@ -756,7 +840,14 @@ module.exports = (client) => {
             ephemeral: true,
           });
         } catch (error) {
-          console.error("[Team] Set name error:", error);
+          console.error("[Team] Set name error:", error.message, "team:", fullTeamId);
+          if (error.code === 10008) { // Unknown Message
+            activeTeams.delete(fullTeamId);
+          }
+          await safeInteractionResponse(interaction, "reply", {
+            content: "❌ Failed to update team name.",
+            ephemeral: true,
+          });
         }
         return;
       }
@@ -802,15 +893,24 @@ module.exports = (client) => {
           const currentTeam = activeTeams.get(fullTeamId);
           if (currentTeam) {
             try {
-              const ch = await client.channels.fetch(currentTeam.channelId);
+              const ch = await client.channels.fetch(currentTeam.channelId).catch(() => null);
+              if (!ch) {
+                console.error("[Team] Channel not found for timer event:", currentTeam.channelId, "team:", fullTeamId);
+                activeTeams.delete(fullTeamId);
+                return;
+              }
+
               const memberPings = [currentTeam.leader, ...currentTeam.members]
                 .map((m) => `<@${m.id}>`)
                 .join(" ");
+
               await ch.send(
                 `🚨 **EVENT STARTING NOW!** 🚨\n${memberPings}\n\nGood luck! 🎮`
-              );
+              ).catch((error) => {
+                console.error("[Team] Failed to send timer event message:", error.message);
+              });
 
-              // Auto-cleanup 10 minutes AFTER event starts
+              // Auto-cleanup after event starts
               if (currentTeam.deleteTimer)
                 clearTimeout(currentTeam.deleteTimer);
               currentTeam.deleteTimer = setTimeout(
@@ -821,10 +921,11 @@ module.exports = (client) => {
                     .then((msg) => msg.delete())
                     .catch(() => {});
                 },
-                10 * 60 * 1000
+                AUTO_CLEANUP_DELAY
               );
             } catch (err) {
-              console.error("[Team] Event timer error:", err);
+              console.error("[Team] Event timer error:", err.message, "for team:", fullTeamId);
+              activeTeams.delete(fullTeamId);
             }
           }
         }, timeUntil);
@@ -833,16 +934,37 @@ module.exports = (client) => {
         if (team.warningTimer) clearTimeout(team.warningTimer);
 
         try {
-          const isFull = getTotalMembers(team) >= 5;
+          const isFull = getTotalMembers(team) >= TEAM_SIZE;
           const updatedEmbed = await createTeamEmbed(team);
           const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
 
-          const channel = await client.channels.fetch(team.channelId);
-          const message = await channel.messages.fetch(team.messageId);
+          const channel = await client.channels.fetch(team.channelId).catch(() => null);
+          if (!channel) {
+            console.error("[Team] Channel not found for timer modal:", team.channelId, "team:", fullTeamId);
+            activeTeams.delete(fullTeamId);
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Team channel not found.",
+              ephemeral: true,
+            });
+          }
+
+          const message = await channel.messages.fetch(team.messageId).catch(() => null);
+          if (!message) {
+            console.error("[Team] Message not found for timer modal:", team.messageId, "team:", fullTeamId);
+            activeTeams.delete(fullTeamId);
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Team message not found.",
+              ephemeral: true,
+            });
+          }
+
           await message.edit({
             embeds: [updatedEmbed.embed],
             files: updatedEmbed.files,
             components: updatedComponents,
+          }).catch((error) => {
+            console.error("[Team] Failed to edit message for timer:", error.message);
+            throw error;
           });
 
           await safeInteractionResponse(interaction, "reply", {
@@ -850,7 +972,14 @@ module.exports = (client) => {
             ephemeral: true,
           });
         } catch (error) {
-          console.error("[Team] Set timer error:", error);
+          console.error("[Team] Set timer error:", error.message, "team:", fullTeamId);
+          if (error.code === 10008) { // Unknown Message
+            activeTeams.delete(fullTeamId);
+          }
+          await safeInteractionResponse(interaction, "reply", {
+            content: "❌ Failed to update timer.",
+            ephemeral: true,
+          });
         }
         return;
       }
@@ -887,16 +1016,37 @@ module.exports = (client) => {
         team.leader = newLeader;
 
         try {
-          const isFull = getTotalMembers(team) >= 5;
+          const isFull = getTotalMembers(team) >= TEAM_SIZE;
           const updatedEmbed = await createTeamEmbed(team);
           const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
 
-          const channel = await client.channels.fetch(team.channelId);
-          const message = await channel.messages.fetch(team.messageId);
+          const channel = await client.channels.fetch(team.channelId).catch(() => null);
+          if (!channel) {
+            console.error("[Team] Channel not found for leader transfer:", team.channelId, "team:", fullTeamId);
+            activeTeams.delete(fullTeamId);
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Team channel not found.",
+              ephemeral: true,
+            });
+          }
+
+          const message = await channel.messages.fetch(team.messageId).catch(() => null);
+          if (!message) {
+            console.error("[Team] Message not found for leader transfer:", team.messageId, "team:", fullTeamId);
+            activeTeams.delete(fullTeamId);
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Team message not found.",
+              ephemeral: true,
+            });
+          }
+
           await message.edit({
             embeds: [updatedEmbed.embed],
             files: updatedEmbed.files,
             components: updatedComponents,
+          }).catch((error) => {
+            console.error("[Team] Failed to edit message for leader transfer:", error.message);
+            throw error;
           });
 
           await safeInteractionResponse(interaction, "reply", {
@@ -904,7 +1054,10 @@ module.exports = (client) => {
             ephemeral: true,
           });
         } catch (error) {
-          console.error("[Team] Leader transfer error:", error);
+          console.error("[Team] Leader transfer error:", error.message, "team:", fullTeamId);
+          if (error.code === 10008) { // Unknown Message
+            activeTeams.delete(fullTeamId);
+          }
           await safeInteractionResponse(interaction, "reply", {
             content: "❌ Failed to transfer leadership.",
             ephemeral: true,
@@ -954,7 +1107,7 @@ module.exports = (client) => {
           });
         }
 
-        if (getTotalMembers(team) >= 5) {
+        if (getTotalMembers(team) >= TEAM_SIZE) {
           return safeInteractionResponse(interaction, "reply", {
             content: "❌ Team is full!",
             ephemeral: true,
@@ -967,7 +1120,7 @@ module.exports = (client) => {
         team.members.push(userInfo);
 
         try {
-          const isFull = getTotalMembers(team) >= 5;
+          const isFull = getTotalMembers(team) >= TEAM_SIZE;
           const updatedEmbed = await createTeamEmbed(team);
           const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
 
@@ -1026,18 +1179,26 @@ module.exports = (client) => {
               .setTimestamp();
 
             try {
-              const channel = await client.channels.fetch(team.channelId);
-              await channel.send({ embeds: [celebrationEmbed] });
-            } catch {}
+              const channel = await client.channels.fetch(team.channelId).catch(() => null);
+              if (!channel) {
+                console.error("[Team] Channel not found for celebration:", team.channelId, "team:", fullTeamId);
+              } else {
+                await channel.send({ embeds: [celebrationEmbed] }).catch((error) => {
+                  console.error("[Team] Failed to send celebration message:", error.message);
+                });
+              }
+            } catch (error) {
+              console.error("[Team] Celebration error:", error.message);
+            }
 
-            // Auto-cleanup after 10 minutes ONLY if no future event is scheduled
+            // Auto-cleanup ONLY if no future event is scheduled
             if (!team.targetTime || team.targetTime < Date.now()) {
               team.deleteTimer = setTimeout(
                 () => {
                   activeTeams.delete(fullTeamId);
                   interaction.message?.delete().catch(() => {});
                 },
-                10 * 60 * 1000
+                AUTO_CLEANUP_DELAY
               );
             }
 
@@ -1085,7 +1246,7 @@ module.exports = (client) => {
         }
 
         try {
-          const isFull = getTotalMembers(team) >= 5;
+          const isFull = getTotalMembers(team) >= TEAM_SIZE;
           const updatedEmbed = await createTeamEmbed(team);
           const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
 
@@ -1096,10 +1257,20 @@ module.exports = (client) => {
           });
 
           if (promotedUser) {
-            const channel = await client.channels.fetch(team.channelId);
-            await channel.send(
-              `🎉 <@${promotedUser.id}> has been promoted from the waitlist!`
-            );
+            try {
+              const channel = await client.channels.fetch(team.channelId).catch(() => null);
+              if (!channel) {
+                console.error("[Team] Channel not found for promotion message:", team.channelId, "team:", fullTeamId);
+              } else {
+                await channel.send(
+                  `🎉 <@${promotedUser.id}> has been promoted from the waitlist!`
+                ).catch((error) => {
+                  console.error("[Team] Failed to send promotion message:", error.message);
+                });
+              }
+            } catch (error) {
+              console.error("[Team] Promotion message error:", error.message);
+            }
           }
 
           // Restart refresh timer if needed
@@ -1225,9 +1396,9 @@ module.exports = (client) => {
           });
         }
 
-        if (getTotalMembers(team) < 2) {
+        if (getTotalMembers(team) < MIN_CLOSE_TEAM_SIZE) {
           return safeInteractionResponse(interaction, "reply", {
-            content: "❌ Need at least 2 players to close the team!",
+            content: `❌ Need at least ${MIN_CLOSE_TEAM_SIZE} players to close the team!`,
             ephemeral: true,
           });
         }
@@ -1249,8 +1420,19 @@ module.exports = (client) => {
 
         try {
           // Update original message to show closed state
-          const channel = await client.channels.fetch(team.channelId);
-          const message = await channel.messages.fetch(team.messageId);
+          const channel = await client.channels.fetch(team.channelId).catch(() => null);
+          if (!channel) {
+            console.error("[Team] Channel not found for close:", team.channelId, "team:", fullTeamId);
+            activeTeams.delete(fullTeamId);
+            return;
+          }
+
+          const message = await channel.messages.fetch(team.messageId).catch(() => null);
+          if (!message) {
+            console.error("[Team] Message not found for close:", team.messageId, "team:", fullTeamId);
+            activeTeams.delete(fullTeamId);
+            return;
+          }
 
           // Disable all buttons
           const disabledRow = new ActionRowBuilder().addComponents(
@@ -1265,6 +1447,9 @@ module.exports = (client) => {
             embeds: [closedEmbed],
             components: [disabledRow],
             files: [], // Remove image to save space/indicate closure
+          }).catch((error) => {
+            console.error("[Team] Failed to edit message for close:", error.message);
+            throw error;
           });
 
           // Auto-cleanup
@@ -1273,7 +1458,7 @@ module.exports = (client) => {
               activeTeams.delete(fullTeamId);
               message.delete().catch(() => {});
             },
-            5 * 60 * 1000
+            CLOSE_CLEANUP_DELAY
           );
 
           // Save to history
@@ -1284,7 +1469,10 @@ module.exports = (client) => {
             status: "completed", // Closed teams count as completed for history
           }).catch(console.error);
         } catch (error) {
-          console.error("[Team] Close error:", error);
+          console.error("[Team] Close error:", error.message, "team:", fullTeamId);
+          if (error.code === 10008) { // Unknown Message
+            activeTeams.delete(fullTeamId);
+          }
         }
       }
 
@@ -1310,10 +1498,10 @@ module.exports = (client) => {
           files: [],
         });
 
-        // Delete after 5 seconds
+        // Delete after short delay
         setTimeout(() => {
           interaction.message?.delete().catch(() => {});
-        }, 5000);
+        }, DISBAND_DELETE_DELAY);
       }
     } catch (error) {
       console.error("[Team] Handler error:", error);

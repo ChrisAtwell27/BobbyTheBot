@@ -1,37 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(del diagnose-cpu.js add-early-returns.js)",
-      "Bash(node -e:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git push)",
-      "Bash(git ls-tree:*)",
-      "Bash(python -m http.server:*)",
-      "Bash(dir:*)",
-      "Bash(tree:*)",
-      "Bash(if not exist \"e:\\BobbyTheBot\\BobbyTheBot\\api\" mkdir \"e:\\BobbyTheBot\\BobbyTheBot\\api\")",
-      "Bash(mkdir:*)",
-      "Bash(npm install:*)",
-      "Bash(test:*)",
-      "Bash(netstat:*)",
-      "Bash(curl:*)",
-      "Bash(taskkill:*)",
-      "Bash(tasklist:*)",
-      "Bash(node:*)",
-      "Bash(if not exist \"e:\\BobbyTheBot\\BobbyTheBot\\commands\" mkdir \"e:\\BobbyTheBot\\BobbyTheBot\\commands\")",
-      "Bash(find:*)",
-      "Bash(done)",
-      "Bash(grep:*)",
-      "Bash(ls:*)",
-      "Bash(cat:*)",
-      "Bash(npx convex dev:*)",
-      "Bash(npx convex deploy)",
-      "Bash(npx convex:*)",
-      "Bash(tee:*)",
-      "Bash(findstr:*)"
+      "mcp__ruv-swarm",
+      "mcp__claude-flow@alpha",
+      "mcp__flow-nexus",
+      "Bash(npx claude-flow@alpha:*)",
+      "Bash(git checkout:*)",
+      "Bash(timeout:*)",
+      "Bash(git apply:*)",
+      "Bash(git diff:*)"
     ],
-    "deny": [],
-    "ask": []
+    "deny": []
   }
 }
