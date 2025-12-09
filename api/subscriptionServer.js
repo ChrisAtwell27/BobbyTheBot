@@ -453,15 +453,13 @@ class SubscriptionServer {
                 const existingSubscription = await ConvexHelper.getSubscriptionByDiscordId(discordId);
                 const existingGuildIds = existingSubscription?.verifiedGuilds?.map(g => g.guildId) || [];
 
-                // Add verified guilds with automatic trials for new guilds
+                // Add verified guilds for new guilds
                 for (const guild of verifiedGuilds) {
                     if (!existingGuildIds.includes(guild.guildId)) {
-                        // New guild - start a 7-day trial
                         await ConvexHelper.addVerifiedGuild(
                             discordId,
                             guild.guildId,
-                            guild.guildName,
-                            true // Start trial
+                            guild.guildName
                         );
                     }
                 }
@@ -483,7 +481,6 @@ class SubscriptionServer {
                         // Per-guild subscription data
                         tier: formatted?.tier || 'free',
                         status: formatted?.status || 'active',
-                        trialEndsAt: formatted?.trialEndsAt || null,
                         expiresAt: formatted?.expiresAt || null,
                         subscribedAt: formatted?.subscribedAt || Date.now(),
                     };
@@ -502,7 +499,7 @@ class SubscriptionServer {
                     guilds: {
                         total: userGuilds.length,
                         withBot: verifiedGuilds.length,
-                        verified: formattedGuilds // Now includes per-guild tier/status/trial data
+                        verified: formattedGuilds // Per-guild tier/status data
                     },
                     // Include invite URL if not verified
                     ...(botVerified ? {} : {
@@ -743,6 +740,31 @@ class SubscriptionServer {
                 await ConvexHelper.updateGuildSubscription(discordId, guildId, updates);
 
                 console.log(`[Subscription API] Updated subscription for ${discordId} in guild ${guildId}:`, updates);
+
+                // Update Convex if guildId is provided
+                if (guildId) {
+                    try {
+                        // Update guild subscription in Convex subscriptions table
+                        const guildUpdateData = {};
+                        if (tier) guildUpdateData.tier = tier;
+                        if (status) guildUpdateData.status = status;
+                        if (expiresAt) guildUpdateData.expiresAt = new Date(expiresAt).getTime();
+
+                        if (Object.keys(guildUpdateData).length > 0) {
+                            await ConvexHelper.updateGuildSubscription(discordId, guildId, guildUpdateData);
+                            console.log(`[Subscription API] Updated guild subscription for ${guildId}: tier=${tier}, status=${status}`);
+                        }
+
+                        // Also update server tier in servers table for tier-gating
+                        if (tier) {
+                            await ConvexHelper.updateServerTier(guildId, tier);
+                            console.log(`[Subscription API] Updated server tier for guild ${guildId} to ${tier}`);
+                        }
+                    } catch (convexError) {
+                        console.error('[Subscription API] Failed to update Convex:', convexError);
+                        // Don't fail the request - MongoDB update succeeded
+                    }
+                }
 
                 res.json({
                     success: true,

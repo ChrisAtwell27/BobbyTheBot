@@ -264,3 +264,39 @@ export const patchSettings = mutation({
     }
   },
 });
+
+/**
+ * Update server subscription tier
+ * Called by the website when subscription status changes
+ */
+export const updateTier = mutation({
+  args: {
+    guildId: v.string(),
+    tier: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const server = await ctx.db
+      .query("servers")
+      .withIndex("by_guild", (q) => q.eq("guildId", args.guildId))
+      .first();
+
+    const now = Date.now();
+
+    if (server) {
+      await ctx.db.patch(server._id, {
+        tier: args.tier,
+        updatedAt: now,
+      });
+      return server._id;
+    } else {
+      const newServer = await ctx.db.insert("servers", {
+        guildId: args.guildId,
+        houseBalance: 0,
+        tier: args.tier,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return newServer;
+    }
+  },
+});

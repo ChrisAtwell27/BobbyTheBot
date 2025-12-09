@@ -306,12 +306,10 @@ export default defineSchema({
       )),
       status: v.optional(v.union(
         v.literal("active"),
-        v.literal("trial"),
         v.literal("expired"),
         v.literal("cancelled"),
         v.literal("pending")
       )),
-      trialEndsAt: v.optional(v.number()),
       expiresAt: v.optional(v.number()),
       subscribedAt: v.optional(v.number()),
     })),
