@@ -9,7 +9,7 @@ const {
   getUserRankData,
 } = require("../valorantApi/registrationManager");
 const { getPlayerMatchStats } = require("../valorantApi/matchStats");
-const { RANK_MAPPING } = require("../valorantApi/rankUtils");
+const { RANK_MAPPING, loadRankImage, createFallbackRankIcon } = require("../valorantApi/rankUtils");
 
 // Import subscription utilities
 const {
@@ -27,18 +27,19 @@ const { LimitedMap } = require("../utils/memoryUtils");
 // Provides !valtop command to display server leaderboard
 // Based on recent 30 competitive matches stats
 // ULTIMATE TIER REQUIRED
+// Visual style matches !valstats command
 // ===============================================
 
 // Cache for leaderboard data (5 minute TTL)
 const leaderboardCache = new LimitedMap(50);
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-// Canvas dimensions for leaderboard
-const CANVAS_WIDTH = 800;
-const CANVAS_HEIGHT = 600;
-const HEADER_HEIGHT = 80;
-const ROW_HEIGHT = 45;
-const PADDING = 20;
+// Canvas dimensions for leaderboard (matching !valstats style)
+const CANVAS_WIDTH = 1000;
+const CANVAS_HEIGHT = 800;
+const HEADER_HEIGHT = 100;
+const ROW_HEIGHT = 55;
+const PADDING = 25;
 
 /**
  * Calculate a performance score based on match stats
@@ -97,127 +98,214 @@ function formatKDA(stats) {
 }
 
 /**
- * Create leaderboard canvas image
+ * Create leaderboard canvas image with !valstats visual style
  * @param {Array} leaderboard - Sorted leaderboard data
  * @param {Object} guild - Discord guild object
  * @returns {Promise<Buffer>} - Canvas buffer
  */
 async function createLeaderboardCanvas(leaderboard, guild) {
   const displayCount = Math.min(leaderboard.length, 10);
-  const canvasHeight = HEADER_HEIGHT + displayCount * ROW_HEIGHT + PADDING * 2;
+  const canvasHeight = HEADER_HEIGHT + 60 + displayCount * ROW_HEIGHT + PADDING * 3;
 
   const canvas = createCanvas(CANVAS_WIDTH, canvasHeight);
   const ctx = canvas.getContext("2d");
 
-  // Background gradient
-  const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
-  gradient.addColorStop(0, "#1a1a2e");
-  gradient.addColorStop(1, "#16213e");
+  // Enhanced background with pattern (matching !valstats style)
+  const gradient = ctx.createLinearGradient(0, 0, CANVAS_WIDTH, canvasHeight);
+  gradient.addColorStop(0, "#0a0e13");
+  gradient.addColorStop(0.3, "#1e2328");
+  gradient.addColorStop(0.7, "#2c3e50");
+  gradient.addColorStop(1, "#0a0e13");
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, CANVAS_WIDTH, canvasHeight);
 
-  // Header
-  ctx.fillStyle = "#ff4655";
-  ctx.fillRect(0, 0, CANVAS_WIDTH, HEADER_HEIGHT);
+  // Add subtle pattern overlay (matching !valstats)
+  ctx.fillStyle = "rgba(255, 70, 84, 0.03)";
+  for (let i = 0; i < CANVAS_WIDTH; i += 50) {
+    for (let j = 0; j < canvasHeight; j += 50) {
+      if ((i + j) % 100 === 0) {
+        ctx.fillRect(i, j, 25, 25);
+      }
+    }
+  }
 
+  // Enhanced Valorant-style border accents
+  const accentGradient = ctx.createLinearGradient(0, 0, CANVAS_WIDTH, 0);
+  accentGradient.addColorStop(0, "#ff4654");
+  accentGradient.addColorStop(0.5, "#ff6b7a");
+  accentGradient.addColorStop(1, "#ff4654");
+  ctx.fillStyle = accentGradient;
+  ctx.fillRect(0, 0, CANVAS_WIDTH, 8);
+  ctx.fillRect(0, canvasHeight - 8, CANVAS_WIDTH, 8);
+  ctx.fillRect(0, 0, 8, canvasHeight);
+  ctx.fillRect(CANVAS_WIDTH - 8, 0, 8, canvasHeight);
+
+  // Enhanced header section
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 28px Arial";
+  ctx.font = "bold 36px Arial";
   ctx.textAlign = "center";
-  ctx.fillText(`${guild.name} - Valorant Leaderboard`, CANVAS_WIDTH / 2, 35);
+  ctx.fillText("VALORANT SERVER LEADERBOARD", CANVAS_WIDTH / 2, 50);
 
-  ctx.font = "16px Arial";
+  // Subtitle with guild name
+  ctx.font = "18px Arial";
   ctx.fillStyle = "#cccccc";
-  ctx.fillText("Based on last 30 competitive matches", CANVAS_WIDTH / 2, 60);
+  ctx.fillText(`${guild.name} • Top Performers`, CANVAS_WIDTH / 2, 75);
 
-  // Column headers
-  const startY = HEADER_HEIGHT + 15;
+  // Section description
+  ctx.font = "14px Arial";
+  ctx.fillStyle = "#888888";
+  ctx.fillText("Based on last 30 competitive matches • Score = (KDA × 35%) + (Win Rate × 30%) + (ACS × 25%) + (Matches × 10%)", CANVAS_WIDTH / 2, 95);
+
+  // Column headers with styled box
+  const headerY = HEADER_HEIGHT + 20;
+  const headerBoxGradient = ctx.createLinearGradient(PADDING, headerY, CANVAS_WIDTH - PADDING, headerY + 35);
+  headerBoxGradient.addColorStop(0, "rgba(255, 70, 84, 0.2)");
+  headerBoxGradient.addColorStop(1, "rgba(255, 107, 122, 0.2)");
+  ctx.fillStyle = headerBoxGradient;
+  ctx.fillRect(PADDING, headerY, CANVAS_WIDTH - PADDING * 2, 35);
+
   ctx.font = "bold 14px Arial";
-  ctx.fillStyle = "#ff4655";
+  ctx.fillStyle = "#ff4654";
   ctx.textAlign = "left";
-  ctx.fillText("RANK", PADDING, startY);
-  ctx.fillText("PLAYER", 80, startY);
-  ctx.fillText("COMP RANK", 280, startY);
-  ctx.fillText("K/D/A", 400, startY);
-  ctx.fillText("WIN%", 520, startY);
-  ctx.fillText("ACS", 600, startY);
-  ctx.fillText("SCORE", 680, startY);
-
-  // Draw separator line
-  ctx.strokeStyle = "#ff4655";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(PADDING, startY + 10);
-  ctx.lineTo(CANVAS_WIDTH - PADDING, startY + 10);
-  ctx.stroke();
+  ctx.fillText("#", PADDING + 15, headerY + 23);
+  ctx.fillText("PLAYER", PADDING + 60, headerY + 23);
+  ctx.fillText("RANK", PADDING + 280, headerY + 23);
+  ctx.fillText("K/D/A", PADDING + 420, headerY + 23);
+  ctx.fillText("WIN%", PADDING + 560, headerY + 23);
+  ctx.fillText("ACS", PADDING + 680, headerY + 23);
+  ctx.fillText("SCORE", PADDING + 800, headerY + 23);
 
   // Draw rows
+  const rowStartY = headerY + 50;
   for (let i = 0; i < displayCount; i++) {
     const player = leaderboard[i];
-    const rowY = startY + 35 + i * ROW_HEIGHT;
+    const rowY = rowStartY + i * ROW_HEIGHT;
 
-    // Alternating row backgrounds
-    if (i % 2 === 0) {
-      ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
-      ctx.fillRect(PADDING, rowY - 15, CANVAS_WIDTH - PADDING * 2, ROW_HEIGHT);
+    // Row background with gradient (alternating + top 3 special colors)
+    let rowGradient;
+    if (i === 0) {
+      // Gold for 1st place
+      rowGradient = ctx.createLinearGradient(PADDING, rowY, CANVAS_WIDTH - PADDING, rowY + ROW_HEIGHT - 5);
+      rowGradient.addColorStop(0, "rgba(255, 215, 0, 0.2)");
+      rowGradient.addColorStop(1, "rgba(255, 215, 0, 0.05)");
+    } else if (i === 1) {
+      // Silver for 2nd place
+      rowGradient = ctx.createLinearGradient(PADDING, rowY, CANVAS_WIDTH - PADDING, rowY + ROW_HEIGHT - 5);
+      rowGradient.addColorStop(0, "rgba(192, 192, 192, 0.2)");
+      rowGradient.addColorStop(1, "rgba(192, 192, 192, 0.05)");
+    } else if (i === 2) {
+      // Bronze for 3rd place
+      rowGradient = ctx.createLinearGradient(PADDING, rowY, CANVAS_WIDTH - PADDING, rowY + ROW_HEIGHT - 5);
+      rowGradient.addColorStop(0, "rgba(205, 127, 50, 0.2)");
+      rowGradient.addColorStop(1, "rgba(205, 127, 50, 0.05)");
+    } else if (i % 2 === 0) {
+      // Subtle alternate row
+      rowGradient = ctx.createLinearGradient(PADDING, rowY, CANVAS_WIDTH - PADDING, rowY + ROW_HEIGHT - 5);
+      rowGradient.addColorStop(0, "rgba(255, 255, 255, 0.05)");
+      rowGradient.addColorStop(1, "rgba(255, 255, 255, 0.02)");
     }
 
-    // Position highlight for top 3
+    if (rowGradient) {
+      ctx.fillStyle = rowGradient;
+      ctx.fillRect(PADDING, rowY, CANVAS_WIDTH - PADDING * 2, ROW_HEIGHT - 5);
+    }
+
+    // Row border for top 3
+    if (i < 3) {
+      ctx.strokeStyle = i === 0 ? "#ffd700" : i === 1 ? "#c0c0c0" : "#cd7f32";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(PADDING, rowY, CANVAS_WIDTH - PADDING * 2, ROW_HEIGHT - 5);
+    }
+
+    const textY = rowY + 32;
+
+    // Position with medal emoji/number
+    ctx.font = "bold 20px Arial";
+    ctx.textAlign = "left";
     if (i < 3) {
       ctx.fillStyle = i === 0 ? "#ffd700" : i === 1 ? "#c0c0c0" : "#cd7f32";
+      ctx.fillText(getPositionEmoji(i + 1), PADDING + 12, textY);
     } else {
       ctx.fillStyle = "#ffffff";
+      ctx.fillText(`${i + 1}`, PADDING + 15, textY);
     }
 
-    ctx.font = "bold 16px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText(getPositionEmoji(i + 1), PADDING, rowY);
-
-    // Player name
+    // Player name (valorant name)
     ctx.fillStyle = "#ffffff";
-    ctx.font = "14px Arial";
+    ctx.font = "bold 16px Arial";
     const displayName =
-      player.valorantName.length > 15
-        ? player.valorantName.substring(0, 15) + "..."
+      player.valorantName.length > 18
+        ? player.valorantName.substring(0, 18) + "..."
         : player.valorantName;
-    ctx.fillText(displayName, 80, rowY);
+    ctx.fillText(displayName, PADDING + 60, textY);
 
-    // Comp rank (display only, not in score calculation)
+    // Discord name below (smaller)
+    ctx.font = "11px Arial";
+    ctx.fillStyle = "#888888";
+    const discordDisplay =
+      player.discordName.length > 20
+        ? player.discordName.substring(0, 20) + "..."
+        : player.discordName;
+    ctx.fillText(discordDisplay, PADDING + 60, textY + 14);
+
+    // Comp rank with color
     const rankInfo = RANK_MAPPING[player.rankTier] || RANK_MAPPING[0];
     ctx.fillStyle = rankInfo.color;
-    ctx.fillText(rankInfo.name, 280, rowY);
+    ctx.font = "bold 14px Arial";
+    ctx.fillText(rankInfo.name, PADDING + 280, textY);
 
     // KDA
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(formatKDA(player.stats), 400, rowY);
+    ctx.font = "14px Arial";
+    const kdaStr = formatKDA(player.stats);
+    ctx.fillText(kdaStr, PADDING + 420, textY - 5);
+    // KDA ratio below
+    ctx.font = "11px Arial";
+    ctx.fillStyle = player.stats.avgKDA >= 1.5 ? "#00ff88" : player.stats.avgKDA >= 1.0 ? "#ffff00" : "#ff8800";
+    ctx.fillText(`${player.stats.avgKDA.toFixed(2)} K/D`, PADDING + 420, textY + 10);
 
-    // Win rate
+    // Win rate with color coding
     const winColor =
-      player.stats.winRate >= 50
-        ? "#4ade80"
-        : player.stats.winRate >= 40
-          ? "#fbbf24"
-          : "#f87171";
+      player.stats.winRate >= 55
+        ? "#00ff88"
+        : player.stats.winRate >= 50
+          ? "#4ade80"
+          : player.stats.winRate >= 45
+            ? "#ffff00"
+            : player.stats.winRate >= 40
+              ? "#ff8800"
+              : "#ff4444";
     ctx.fillStyle = winColor;
-    ctx.fillText(`${player.stats.winRate.toFixed(1)}%`, 520, rowY);
-
-    // ACS
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(Math.round(player.stats.avgACS).toString(), 600, rowY);
-
-    // Performance score
-    ctx.fillStyle = "#ff4655";
     ctx.font = "bold 16px Arial";
-    ctx.fillText(player.score.toFixed(1), 680, rowY);
+    ctx.fillText(`${player.stats.winRate.toFixed(1)}%`, PADDING + 560, textY);
+
+    // ACS with color coding
+    const acsColor =
+      player.stats.avgACS >= 250
+        ? "#00ff88"
+        : player.stats.avgACS >= 200
+          ? "#ffff00"
+          : player.stats.avgACS >= 150
+            ? "#ff8800"
+            : "#ff4444";
+    ctx.fillStyle = acsColor;
+    ctx.font = "bold 16px Arial";
+    ctx.fillText(Math.round(player.stats.avgACS).toString(), PADDING + 680, textY);
+
+    // Performance score (highlighted)
+    ctx.fillStyle = "#ff4654";
+    ctx.font = "bold 20px Arial";
+    ctx.fillText(player.score.toFixed(1), PADDING + 800, textY);
   }
 
-  // Footer
+  // Footer with branding
   ctx.fillStyle = "#666666";
   ctx.font = "12px Arial";
   ctx.textAlign = "center";
   ctx.fillText(
-    "Score = (KDA × 35%) + (Win Rate × 30%) + (ACS × 25%) + (Matches × 10%)",
+    "Powered by HenrikDev API • Data cached for 10 minutes • Use !valstats to register",
     CANVAS_WIDTH / 2,
-    canvasHeight - 10
+    canvasHeight - 20
   );
 
   return canvas.toBuffer("image/png");
@@ -321,18 +409,24 @@ async function buildLeaderboard(guildId, client) {
  */
 function createLeaderboardEmbed(leaderboard, guild) {
   const embed = new EmbedBuilder()
-    .setColor(0xff4655)
-    .setTitle(`🏆 ${guild.name} - Valorant Leaderboard`)
+    .setColor(0xff4654) // Valorant red
+    .setTitle(`🏆 VALORANT SERVER LEADERBOARD`)
     .setDescription(
-      "Rankings based on last 30 competitive matches\n*Score = (KDA × 35%) + (Win Rate × 30%) + (ACS × 25%) + (Matches × 10%)*"
+      `**${guild.name}** • Top Performers\n\n` +
+      "*Based on last 30 competitive matches*\n" +
+      "*Score = (KDA × 35%) + (Win Rate × 30%) + (ACS × 25%) + (Matches × 10%)*"
     )
     .setTimestamp();
 
   if (leaderboard.length === 0) {
     embed.addFields({
-      name: "No Players",
+      name: "No Players Found",
       value:
-        "No registered players with competitive match data found.\nUse `!valstats` to register your Valorant account!",
+        "No registered players with competitive match data found.\n\n" +
+        "**How to join the leaderboard:**\n" +
+        "1. Use `!valstats YourName#TAG` to register\n" +
+        "2. Play competitive matches\n" +
+        "3. Check back here!",
     });
     return embed;
   }
@@ -344,22 +438,24 @@ function createLeaderboardEmbed(leaderboard, guild) {
     const player = leaderboard[i];
     const rankInfo = RANK_MAPPING[player.rankTier] || RANK_MAPPING[0];
 
-    leaderboardText += `${getPositionEmoji(i + 1)} **${player.valorantName}**\n`;
-    leaderboardText += `   ${rankInfo.name} | K/D/A: ${formatKDA(player.stats)} | `;
-    leaderboardText += `Win: ${player.stats.winRate.toFixed(1)}% | ACS: ${Math.round(player.stats.avgACS)} | `;
-    leaderboardText += `**Score: ${player.score.toFixed(1)}**\n\n`;
+    // Medal emoji for top 3
+    const positionDisplay = getPositionEmoji(i + 1);
+
+    leaderboardText += `${positionDisplay} **${player.valorantName}**\n`;
+    leaderboardText += `┗ ${rankInfo.name} • K/D/A: \`${formatKDA(player.stats)}\` (${player.stats.avgKDA.toFixed(2)})\n`;
+    leaderboardText += `   Win: \`${player.stats.winRate.toFixed(1)}%\` • ACS: \`${Math.round(player.stats.avgACS)}\` • **Score: ${player.score.toFixed(1)}**\n\n`;
   }
 
   embed.addFields({
-    name: `Top ${displayCount} Players`,
+    name: `📊 Top ${displayCount} Players`,
     value: leaderboardText || "No data available",
   });
 
-  if (leaderboard.length > 10) {
-    embed.setFooter({
-      text: `Showing top 10 of ${leaderboard.length} registered players`,
-    });
-  }
+  embed.setFooter({
+    text: leaderboard.length > 10
+      ? `Showing top 10 of ${leaderboard.length} players • Data cached for 10 minutes`
+      : `${leaderboard.length} registered players • Data cached for 10 minutes`,
+  });
 
   return embed;
 }
@@ -421,15 +517,10 @@ module.exports = (client) => {
           });
 
           const embed = new EmbedBuilder()
-            .setColor(0xff4655)
-            .setTitle(`🏆 ${message.guild.name} - Valorant Leaderboard`)
-            .setDescription(
-              `Showing top ${Math.min(leaderboard.length, 10)} of ${leaderboard.length} registered players\n` +
-                `*Rankings based on last 30 competitive matches*`
-            )
+            .setColor(0xff4654) // Valorant red
             .setImage("attachment://leaderboard.png")
             .setFooter({
-              text: "Use !valstats to register • Data refreshes every 5 minutes",
+              text: `${leaderboard.length} registered players • Match stats cached for 10 minutes`,
             })
             .setTimestamp();
 

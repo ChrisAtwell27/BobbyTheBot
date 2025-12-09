@@ -4,16 +4,94 @@
 // Handles fetching and processing player match statistics
 
 const { getStoredMatches, getMatches } = require('./apiClient');
+const { LimitedMap } = require('../utils/memoryUtils');
 
 // Competitive game modes for filtering
 const COMPETITIVE_MODES = ['competitive', 'ranked'];
 
+// ===============================================
+// MATCH STATS CACHE
+// ===============================================
+// Cache player match stats for 10 minutes to reduce API calls
+// Key: "name#tag" (lowercase), Value: { stats: Object, timestamp: number }
+const matchStatsCache = new LimitedMap(100); // Max 100 players cached
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Get cache key for a player
+ * @param {Object} registration - User registration data
+ * @returns {string} - Cache key
+ */
+function getCacheKey(registration) {
+    return `${registration.name.toLowerCase()}#${registration.tag.toLowerCase()}`;
+}
+
+/**
+ * Get cached stats for a player if valid
+ * @param {Object} registration - User registration data
+ * @returns {Object|null} - Cached stats or null
+ */
+function getCachedStats(registration) {
+    const key = getCacheKey(registration);
+    const cached = matchStatsCache.get(key);
+
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        console.log(`[Match Stats] Using cached stats for ${registration.name}#${registration.tag}`);
+        return cached.stats;
+    }
+
+    return null;
+}
+
+/**
+ * Set cached stats for a player
+ * @param {Object} registration - User registration data
+ * @param {Object} stats - Stats to cache
+ */
+function setCachedStats(registration, stats) {
+    const key = getCacheKey(registration);
+    matchStatsCache.set(key, {
+        stats,
+        timestamp: Date.now()
+    });
+    console.log(`[Match Stats] Cached stats for ${registration.name}#${registration.tag}`);
+}
+
+/**
+ * Clear cached stats for a player (useful after manual refresh)
+ * @param {Object} registration - User registration data
+ */
+function clearCachedStats(registration) {
+    const key = getCacheKey(registration);
+    matchStatsCache.delete(key);
+    console.log(`[Match Stats] Cleared cache for ${registration.name}#${registration.tag}`);
+}
+
+/**
+ * Clear all cached stats
+ */
+function clearAllCachedStats() {
+    const size = matchStatsCache.size;
+    matchStatsCache.clear();
+    console.log(`[Match Stats] Cleared ${size} cached player stats`);
+}
+
 /**
  * Gets player match statistics from stored matches (v1 endpoint)
+ * Uses caching to reduce API calls (10 minute TTL)
  * @param {Object} registration - User registration data
+ * @param {boolean} forceRefresh - Skip cache and force API call
  * @returns {Promise<Object>} - Match statistics
  */
-async function getPlayerMatchStats(registration) {
+async function getPlayerMatchStats(registration, forceRefresh = false) {
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+        const cachedStats = getCachedStats(registration);
+        if (cachedStats) {
+            return cachedStats;
+        }
+    }
+
     try {
         // Use stored-matches endpoint for more comprehensive data
         const storedMatchData = await getStoredMatches(registration.region, registration.name, registration.tag);
@@ -93,7 +171,7 @@ async function getPlayerMatchStats(registration) {
         console.log(`  - Win Rate: ${winRate.toFixed(1)}%`);
         console.log(`  - Avg ACS: ${avgACS.toFixed(0)}`);
 
-        return {
+        const stats = {
             totalKills,
             totalDeaths: Math.max(totalDeaths, 1), // Ensure never 0
             totalAssists,
@@ -104,19 +182,34 @@ async function getPlayerMatchStats(registration) {
             avgACS
         };
 
+        // Cache the results
+        setCachedStats(registration, stats);
+
+        return stats;
+
     } catch (error) {
         console.error('[Match Stats] Error fetching stored match stats:', error);
         // Fall back to legacy method
-        return await getPlayerMatchStatsLegacy(registration);
+        return await getPlayerMatchStatsLegacy(registration, forceRefresh);
     }
 }
 
 /**
  * Gets player match statistics using legacy endpoint (v4) - fallback
+ * Uses caching to reduce API calls (10 minute TTL)
  * @param {Object} registration - User registration data
+ * @param {boolean} forceRefresh - Skip cache and force API call
  * @returns {Promise<Object>} - Match statistics
  */
-async function getPlayerMatchStatsLegacy(registration) {
+async function getPlayerMatchStatsLegacy(registration, forceRefresh = false) {
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+        const cachedStats = getCachedStats(registration);
+        if (cachedStats) {
+            return cachedStats;
+        }
+    }
+
     try {
         const matchData = await getMatches(registration.region, registration.name, registration.tag);
 
@@ -181,7 +274,7 @@ async function getPlayerMatchStatsLegacy(registration) {
 
         console.log(`[Match Stats] Legacy: Player ${registration.name}#${registration.tag} stats from ${validMatches} matches`);
 
-        return {
+        const stats = {
             totalKills,
             totalDeaths: Math.max(totalDeaths, 1),
             totalAssists,
@@ -191,6 +284,11 @@ async function getPlayerMatchStatsLegacy(registration) {
             winRate,
             avgACS
         };
+
+        // Cache the results
+        setCachedStats(registration, stats);
+
+        return stats;
 
     } catch (error) {
         console.error('[Match Stats] Error fetching legacy match stats:', error);
@@ -244,5 +342,7 @@ module.exports = {
     calculateKDA,
     calculateWinRate,
     calculateAverageACS,
+    clearCachedStats,
+    clearAllCachedStats,
     COMPETITIVE_MODES
 };
