@@ -1389,6 +1389,31 @@ module.exports = (client) => {
       }
     });
 
+    // Listen for guild cleanup event (bot kicked from server)
+    client.on('guildCleanup', (guildId) => {
+      let cleanedCount = 0;
+      for (const [inhouseId, inhouse] of activeInhouses.entries()) {
+        if (inhouse.guildId === guildId) {
+          // Clear all timers
+          if (inhouse.resendTimer) clearTimeout(inhouse.resendTimer);
+          if (inhouse.expiryTimer) clearTimeout(inhouse.expiryTimer);
+          if (inhouse.deleteTimer) clearTimeout(inhouse.deleteTimer);
+
+          // Clean up resend flag
+          resendInProgress.delete(inhouseId);
+
+          // Decrement user's active in-house count
+          decrementUserInhouseCount(inhouse.leader.id);
+
+          activeInhouses.delete(inhouseId);
+          cleanedCount++;
+        }
+      }
+      if (cleanedCount > 0) {
+        console.log(`[INHOUSE] 🧹 Cleaned up ${cleanedCount} active inhouse(es) for guild ${guildId}`);
+      }
+    });
+
     // Clear any existing in-houses from memory on restart
     activeInhouses.clear();
     client._valorantInhouseHandlerInitialized = true;

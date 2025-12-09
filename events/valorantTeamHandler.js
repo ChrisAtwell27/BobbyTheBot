@@ -1508,6 +1508,26 @@ module.exports = (client) => {
     }
   });
 
+  // Listen for guild cleanup event (bot kicked from server)
+  client.on('guildCleanup', (guildId) => {
+    let cleanedCount = 0;
+    for (const [teamId, team] of activeTeams.entries()) {
+      if (team.guildId === guildId) {
+        // Clear all timers
+        if (team.resendTimer) clearTimeout(team.resendTimer);
+        if (team.eventTimer) clearTimeout(team.eventTimer);
+        if (team.warningTimer) clearTimeout(team.warningTimer);
+        if (team.deleteTimer) clearTimeout(team.deleteTimer);
+
+        activeTeams.delete(teamId);
+        cleanedCount++;
+      }
+    }
+    if (cleanedCount > 0) {
+      console.log(`[Team] 🧹 Cleaned up ${cleanedCount} active team(s) for guild ${guildId}`);
+    }
+  });
+
   activeTeams.clear();
   client._valorantTeamHandlerInitialized = true;
 };
