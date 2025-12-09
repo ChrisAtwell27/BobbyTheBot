@@ -171,18 +171,6 @@ module.exports = (client, interactionRouter) => {
     });
   });
 
-  interactionRouter.registerSlashCommand("poker", async (interaction) => {
-    const subcommand = interaction.options.getSubcommand();
-    const buyin =
-      subcommand === "create" ? interaction.options.getInteger("buyin") : null;
-
-    await interaction.reply({
-      content:
-        `🃏 Poker - ${subcommand}${buyin ? ` (Buy-in: ${buyin})` : ""}!\n` +
-        `Full integration coming soon. Use \`!createpoker\` and \`!joinpoker\` for now.`,
-    });
-  });
-
   // VALORANT COMMANDS
   interactionRouter.registerSlashCommand("valstats", async (interaction) => {
     const targetUser = interaction.options.getUser("user") || interaction.user;
@@ -254,24 +242,6 @@ module.exports = (client, interactionRouter) => {
       content:
         `🏟️ Creating in-house match (${mode})!\n` +
         `Full integration coming soon. Use \`!inhouse\` for now.`,
-    });
-  });
-
-  // PET COMMANDS
-  interactionRouter.registerSlashCommand("pet", async (interaction) => {
-    const subcommand = interaction.options.getSubcommand();
-    const name =
-      subcommand === "adopt" ? interaction.options.getString("name") : null;
-    const targetUser =
-      subcommand === "view" ? interaction.options.getUser("user") : null;
-
-    await interaction.reply({
-      content:
-        `🐾 Pet ${subcommand}${name ? `: ${name}` : ""}${
-          targetUser ? ` - viewing ${targetUser}'s pet` : ""
-        }!\n` +
-        `Full integration coming soon. Use \`!adopt\`, \`!feed\`, \`!pet\`, etc. for now.`,
-      ephemeral: subcommand === "status",
     });
   });
 

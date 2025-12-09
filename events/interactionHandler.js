@@ -36,23 +36,12 @@ const COMMAND_KEYWORDS = {
     gladiator: { commands: ['!gladiator'], category: 'PvP', description: 'Arena combat' },
     arena: { commands: ['!gladiator', '!arenastats'], category: 'PvP', description: 'Gladiator arena' },
     
-    // Poker & High Stakes
-    poker: { commands: ['!poker'], category: 'Poker', description: 'Play Texas Hold\'em poker' },
-    holdem: { commands: ['!poker'], category: 'Poker', description: 'Texas Hold\'em poker' },
-    roulette: { commands: ['!russianroulette'], category: 'High Stakes', description: 'Russian Roulette (dangerous!)' },
-    
     // Teams
     team: { commands: ['!valorantteam', '!valinhouse'], category: 'Teams', description: 'Create game teams' },
     valorant: { commands: ['!valorantteam', '!valinhouse', '!valstats'], category: 'Valorant', description: 'Valorant team building' },
     inhouse: { commands: ['!valinhouse'], category: 'Valorant', description: 'Create 10-player in-house match' },
     rank: { commands: ['!valstats'], category: 'Valorant', description: 'Register your Valorant rank' },
     stats: { commands: ['!valstats', '!arenastats', '!activity'], category: 'Stats', description: 'View statistics' },
-    
-    // Pets
-    pet: { commands: ['!adopt', '!pet', '!petshop'], category: 'Pets', description: 'Manage virtual pets' },
-    adopt: { commands: ['!adopt'], category: 'Pets', description: 'Adopt a virtual pet' },
-    feed: { commands: ['!feed'], category: 'Pets', description: 'Feed your pet' },
-    train: { commands: ['!train'], category: 'Pets', description: 'Train your pet' },
     
     // Activity
     activity: { commands: ['!activity', '!activetop'], category: 'Activity', description: 'Track daily activity' },
@@ -153,9 +142,9 @@ module.exports = (client) => {
                         { name: '💰 Economy', value: 'Try `!balance`, `!beg`, or `!baltop`', inline: true },
                         { name: '🎰 Casino', value: 'Try `!gamble`, `!flip`, or `!blackjack`', inline: true },
                         { name: '⚔️ PvP Games', value: 'Try `!gladiator` or `!rps`', inline: true },
-                        { name: '🃏 Poker', value: 'Try `!poker` for Texas Hold\'em', inline: true },
+                        { name: '🐝 Bee Mafia', value: 'Try `!createmafia` or `!mafiaroles`', inline: true },
                         { name: '👥 Teams', value: 'Try `!valorantteam` or `!valinhouse`', inline: true },
-                        { name: '🐕 Pets', value: 'Try `!adopt` or `!pet`', inline: true }
+                        { name: '🧠 Trivia', value: 'Try `!trivia` or `!wordletop`', inline: true }
                     )
                     .setFooter({ text: 'Type !help for the complete command list!' })
                     .setTimestamp();

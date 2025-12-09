@@ -79,8 +79,14 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // ==========================================
 
     // Help handler - !help, !commands, !cmdlist, !commandlist
-    registerCommandHandler(client, commandRouter, interactionRouter, './helpHandler',
-        ['help', 'commands', 'cmdlist', 'commandlist']);
+    const helpHandler = require('./helpHandler');
+    const helpWrapper = createHandlerWrapper(client, () => helpHandler);
+    if (helpWrapper.messageHandler) {
+        commandRouter.registerMessageProcessor(helpWrapper.messageHandler);
+    }
+    if (helpWrapper.interactionHandler) {
+        interactionRouter.registerSelectMenu('help_category_', helpWrapper.interactionHandler);
+    }
 
     // Valorant rank role handler - !setrankroles, !rankroles, etc.
     registerCommandHandler(client, commandRouter, interactionRouter, './valorantRankRoleHandler');

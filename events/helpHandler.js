@@ -93,7 +93,8 @@ const HELP_CATEGORIES = {
       },
       {
         name: "!clearhoney",
-        description: "**[ADMIN]** Reset all balances to 5000 (requires confirmation)",
+        description:
+          "**[ADMIN]** Reset all balances to 5000 (requires confirmation)",
         usage: "!clearhoney",
       },
     ],
@@ -219,29 +220,6 @@ const HELP_CATEGORIES = {
         name: "!challenges",
         description: "View all active PvP challenges waiting for opponents",
         usage: "!challenges",
-      },
-    ],
-  },
-  poker: {
-    name: "🃏 Poker & High Stakes",
-    emoji: "🃏",
-    description: "High-stakes poker tables and dangerous games",
-    tier: "free",
-    commands: [
-      {
-        name: "!poker",
-        description: "Create a Texas Hold'em poker lobby",
-        usage: "!poker [buy-in]",
-      },
-      {
-        name: "!holdem",
-        description: "Alternative poker lobby command",
-        usage: "!holdem [buy-in]",
-      },
-      {
-        name: "!russianroulette",
-        description: "**DANGEROUS** - Winner takes all, loser loses EVERYTHING",
-        usage: "!russianroulette (or !rr)",
       },
     ],
   },
@@ -425,54 +403,6 @@ const HELP_CATEGORIES = {
       },
     ],
   },
-  pets: {
-    name: "🐕 Virtual Pets",
-    emoji: "🐕",
-    description: "Adopt, feed, and train virtual companions",
-    tier: "free",
-    commands: [
-      {
-        name: "!adopt",
-        description: "Adopt a new virtual pet (costs Honey)",
-        usage: "!adopt",
-      },
-      {
-        name: "!pet",
-        description: "Check your pet's status, hunger, and happiness",
-        usage: "!pet",
-      },
-      {
-        name: "!feed",
-        description: "Feed your pet with food from inventory",
-        usage: "!feed <food_item>",
-      },
-      {
-        name: "!train",
-        description: "Train your pet for XP and level ups",
-        usage: "!train",
-      },
-      {
-        name: "!petshop",
-        description: "Buy food and items for your pet",
-        usage: "!petshop",
-      },
-      {
-        name: "!petinventory",
-        description: "View your pet's food and item inventory",
-        usage: "!petinventory (or !petinv)",
-      },
-      {
-        name: "!use",
-        description: "Use an item on your pet (toys, treats)",
-        usage: "!use <item>",
-      },
-      {
-        name: "!petleaderboard",
-        description: "View top pets in the server by level",
-        usage: "!petleaderboard (or !pettop)",
-      },
-    ],
-  },
   birthday: {
     name: "🎂 Birthdays",
     emoji: "🎂",
@@ -509,7 +439,8 @@ const HELP_CATEGORIES = {
     commands: [
       {
         name: "!activity",
-        description: "Check your daily activity stats (messages, reactions, voice)",
+        description:
+          "Check your daily activity stats (messages, reactions, voice)",
         usage: "!activity [@user]",
       },
       {
@@ -742,10 +673,15 @@ async function createHelpMenuCard(user) {
 
     // Subtitle with command count
     const totalCommands = Object.values(HELP_CATEGORIES).reduce(
-      (sum, cat) => sum + cat.commands.length, 0
+      (sum, cat) => sum + cat.commands.length,
+      0
     );
     ctx.font = "22px Arial";
-    ctx.fillText(`${Object.keys(HELP_CATEGORIES).length} Categories | ${totalCommands}+ Commands`, 400, 105);
+    ctx.fillText(
+      `${Object.keys(HELP_CATEGORIES).length} Categories | ${totalCommands}+ Commands`,
+      400,
+      105
+    );
 
     try {
       // User avatar with timeout protection
@@ -922,7 +858,11 @@ async function createCategoryCard(category) {
     // Tier badge
     const tierInfo = TIER_INFO[category.tier] || TIER_INFO.free;
     ctx.font = "16px Arial";
-    ctx.fillText(`${tierInfo.emoji} ${tierInfo.name} Tier  |  ${commandCount} Commands`, 375, 75);
+    ctx.fillText(
+      `${tierInfo.emoji} ${tierInfo.name} Tier  |  ${commandCount} Commands`,
+      375,
+      75
+    );
 
     // Description
     ctx.font = "15px Arial";
@@ -940,7 +880,9 @@ async function createCategoryCard(category) {
     ctx.textAlign = "left";
     category.commands.forEach((cmd, index) => {
       const y = 150 + index * 38;
-      const isAdmin = cmd.description.includes("[ADMIN]") || cmd.description.includes("[DEBUG]");
+      const isAdmin =
+        cmd.description.includes("[ADMIN]") ||
+        cmd.description.includes("[DEBUG]");
 
       // Alternating row background
       if (index % 2 === 0) {
@@ -951,20 +893,23 @@ async function createCategoryCard(category) {
       // Command name with admin badge
       ctx.fillStyle = isAdmin ? "#e74c3c" : colors.primary;
       ctx.font = "bold 15px Arial";
-      const cmdName = cmd.name.length > 20 ? cmd.name.substring(0, 20) + "..." : cmd.name;
+      const cmdName =
+        cmd.name.length > 20 ? cmd.name.substring(0, 20) + "..." : cmd.name;
       ctx.fillText(cmdName, 40, y);
 
       // Usage hint
       ctx.fillStyle = "#7f8c8d";
       ctx.font = "11px Arial";
-      const usageText = cmd.usage.length > 25 ? cmd.usage.substring(0, 25) + "..." : cmd.usage;
+      const usageText =
+        cmd.usage.length > 25 ? cmd.usage.substring(0, 25) + "..." : cmd.usage;
       ctx.fillText(usageText, 40, y + 14);
 
       // Description (truncated)
       ctx.fillStyle = "#2c3e50";
       ctx.font = "13px Arial";
       const desc = cmd.description.replace(/\*\*\[.*?\]\*\*\s*/g, ""); // Remove badges
-      const truncatedDesc = desc.length > 50 ? desc.substring(0, 50) + "..." : desc;
+      const truncatedDesc =
+        desc.length > 50 ? desc.substring(0, 50) + "..." : desc;
       ctx.fillText(truncatedDesc, 230, y);
     });
 
@@ -972,7 +917,11 @@ async function createCategoryCard(category) {
     ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
     ctx.font = "12px Arial";
     ctx.textAlign = "center";
-    ctx.fillText("Use !help to return to main menu  |  !subscription to check your tier", 375, canvasHeight - 15);
+    ctx.fillText(
+      "Use !help to return to main menu  |  !subscription to check your tier",
+      375,
+      canvasHeight - 15
+    );
 
     return canvas;
   } catch (error) {
@@ -1072,7 +1021,8 @@ module.exports = (client) => {
   async function showQuickCommandList(message) {
     // Count totals
     const totalCommands = Object.values(HELP_CATEGORIES).reduce(
-      (sum, cat) => sum + cat.commands.length, 0
+      (sum, cat) => sum + cat.commands.length,
+      0
     );
 
     const embed = new EmbedBuilder()
@@ -1080,8 +1030,8 @@ module.exports = (client) => {
       .setTitle("📋 Bobby Bot Quick Command Reference")
       .setDescription(
         `**${Object.keys(HELP_CATEGORIES).length} Categories** | **${totalCommands}+ Commands**\n\n` +
-        `🆓 Free | ⭐ Plus | 👑 Ultimate\n` +
-        `Use \`!help <category>\` for detailed info`
+          `🆓 Free | ⭐ Plus | 👑 Ultimate\n` +
+          `Use \`!help <category>\` for detailed info`
       );
 
     for (const [, category] of Object.entries(HELP_CATEGORIES)) {
@@ -1121,15 +1071,20 @@ module.exports = (client) => {
       });
 
       // Build select menu options (Discord limit is 25 options)
-      const categoryOptions = Object.entries(HELP_CATEGORIES).map(([key, category]) => {
-        const tierLabel = category.tier !== "free" ? ` [${TIER_INFO[category.tier]?.name}]` : "";
-        return {
-          label: category.name.replace(/^.+? /, "").substring(0, 25),
-          description: (category.description + tierLabel).substring(0, 100),
-          value: key,
-          emoji: category.emoji,
-        };
-      });
+      const categoryOptions = Object.entries(HELP_CATEGORIES).map(
+        ([key, category]) => {
+          const tierLabel =
+            category.tier !== "free"
+              ? ` [${TIER_INFO[category.tier]?.name}]`
+              : "";
+          return {
+            label: category.name.replace(/^.+? /, "").substring(0, 25),
+            description: (category.description + tierLabel).substring(0, 100),
+            value: key,
+            emoji: category.emoji,
+          };
+        }
+      );
 
       const selectMenu = new StringSelectMenuBuilder()
         .setCustomId(`help_category_${message.author.id}`)
@@ -1148,7 +1103,8 @@ module.exports = (client) => {
 
       // Count total commands
       const totalCommands = Object.values(HELP_CATEGORIES).reduce(
-        (sum, cat) => sum + cat.commands.length, 0
+        (sum, cat) => sum + cat.commands.length,
+        0
       );
 
       const embed = new EmbedBuilder()
@@ -1156,24 +1112,27 @@ module.exports = (client) => {
         .setColor("#f5a623")
         .setDescription(
           `**Welcome to Bobby Bot!** Your all-in-one Discord companion!\n\n` +
-          `📊 **${Object.keys(HELP_CATEGORIES).length} Categories** | **${totalCommands}+ Commands**\n\n` +
-          `🆓 = Free Tier | ⭐ = Plus Tier | 👑 = Ultimate Tier`
+            `📊 **${Object.keys(HELP_CATEGORIES).length} Categories** | **${totalCommands}+ Commands**\n\n` +
+            `🆓 = Free Tier | ⭐ = Plus Tier | 👑 = Ultimate Tier`
         )
         .setImage("attachment://help-menu.png")
         .addFields(
           {
             name: "🆓 Free Features",
-            value: "💰 Economy & Honey\n🎰 Casino Games\n🃏 Poker Tables\n🐕 Virtual Pets\n🧠 Trivia & Wordle\n📊 Activity Tracking\n🤖 Bobby AI Chat",
+            value:
+              "💰 Economy & Honey\n🎰 Casino Games\n🧠 Trivia & Wordle\n📊 Activity Tracking\n",
             inline: true,
           },
           {
             name: "⭐ Plus Features",
-            value: "⚔️ PvP Games\n👑 King of the Hill\n🐝 Bee Mafia (65+ roles)\n🎯 Bounty System\n👥 Team Builder\n🎂 Birthday Tracking",
+            value:
+              "⚔️ PvP Games\n👑 King of the Hill\n🐝 Bee Mafia (65+ roles)\n🎯 Bounty System\n👥 Team Builder\n🎂 Birthday Tracking\n🤖 Bobby AI Chat",
             inline: true,
           },
           {
             name: "👑 Ultimate Features",
-            value: "🎮 Valorant API Stats\n📈 Match History\n🏆 Rank Tracking\n⚖️ Team Balancing\n📊 Skill Analysis",
+            value:
+              "🎮 Valorant API Stats\n📈 Match History\n🏆 Rank Tracking\n⚖️ Team Balancing\n📊 Skill Analysis",
             inline: true,
           }
         )
@@ -1193,7 +1152,8 @@ module.exports = (client) => {
         })
         .addFields({
           name: "📖 Category Navigation",
-          value: "Use the **dropdown menu** below or type `!help <category>`\n" +
+          value:
+            "Use the **dropdown menu** below or type `!help <category>`\n" +
             "Example: `!help economy`, `!help mafia`, `!help valorant`",
           inline: false,
         })
@@ -1225,9 +1185,10 @@ module.exports = (client) => {
 
       // Get tier info for this category
       const tierInfo = TIER_INFO[category.tier] || TIER_INFO.free;
-      const tierBadge = category.tier !== "free"
-        ? `\n\n${tierInfo.emoji} **Requires ${tierInfo.name} Tier** - Use \`!subscription\` to check your tier`
-        : "";
+      const tierBadge =
+        category.tier !== "free"
+          ? `\n\n${tierInfo.emoji} **Requires ${tierInfo.name} Tier** - Use \`!subscription\` to check your tier`
+          : "";
 
       // Split commands into chunks to avoid field limits
       const commandChunks = [];
@@ -1259,8 +1220,9 @@ module.exports = (client) => {
       });
 
       // Add usage examples for the first 3 commands
-      const usageExamples = category.commands.slice(0, 3)
-        .map(cmd => `\`${cmd.usage}\``)
+      const usageExamples = category.commands
+        .slice(0, 3)
+        .map((cmd) => `\`${cmd.usage}\``)
         .join("\n");
 
       embed.addFields({
@@ -1270,7 +1232,7 @@ module.exports = (client) => {
       });
 
       embed.setFooter({
-        text: `Use !help to return to main menu | ${category.commands.length} commands in this category`
+        text: `Use !help to return to main menu | ${category.commands.length} commands in this category`,
       });
       embed.setTimestamp();
 
@@ -1279,9 +1241,10 @@ module.exports = (client) => {
       console.error("Error showing category help:", error);
       // Fallback to text-only version
       const tierInfo = TIER_INFO[category.tier] || TIER_INFO.free;
-      const tierBadge = category.tier !== "free"
-        ? `\n\n${tierInfo.emoji} **Requires ${tierInfo.name} Tier**`
-        : "";
+      const tierBadge =
+        category.tier !== "free"
+          ? `\n\n${tierInfo.emoji} **Requires ${tierInfo.name} Tier**`
+          : "";
 
       const embed = new EmbedBuilder()
         .setTitle(`${category.emoji} ${category.name}`)
@@ -1294,9 +1257,12 @@ module.exports = (client) => {
         const chunk = category.commands.slice(i, i + commandsPerField);
         embed.addFields({
           name: i === 0 ? "📋 Commands" : "⠀", // invisible character for continuation
-          value: chunk.map((cmd) =>
-            `**${cmd.name}**\n${cmd.description}\nUsage: \`${cmd.usage}\``
-          ).join("\n\n"),
+          value: chunk
+            .map(
+              (cmd) =>
+                `**${cmd.name}**\n${cmd.description}\nUsage: \`${cmd.usage}\``
+            )
+            .join("\n\n"),
           inline: false,
         });
       }
@@ -1318,7 +1284,8 @@ module.exports = (client) => {
 
       // Count total commands
       const totalCommands = Object.values(HELP_CATEGORIES).reduce(
-        (sum, cat) => sum + cat.commands.length, 0
+        (sum, cat) => sum + cat.commands.length,
+        0
       );
 
       const embed = new EmbedBuilder()
@@ -1326,24 +1293,27 @@ module.exports = (client) => {
         .setColor("#f5a623")
         .setDescription(
           `**Welcome to Bobby Bot!** Your all-in-one Discord companion!\n\n` +
-          `📊 **${Object.keys(HELP_CATEGORIES).length} Categories** | **${totalCommands}+ Commands**\n\n` +
-          `🆓 = Free Tier | ⭐ = Plus Tier | 👑 = Ultimate Tier`
+            `📊 **${Object.keys(HELP_CATEGORIES).length} Categories** | **${totalCommands}+ Commands**\n\n` +
+            `🆓 = Free Tier | ⭐ = Plus Tier | 👑 = Ultimate Tier`
         )
         .setImage("attachment://help-menu.png")
         .addFields(
           {
             name: "🆓 Free Features",
-            value: "💰 Economy & Honey\n🎰 Casino Games\n🃏 Poker Tables\n🐕 Virtual Pets\n🧠 Trivia & Wordle\n📊 Activity Tracking\n🤖 Bobby AI Chat",
+            value:
+              "💰 Economy & Honey\n🎰 Casino Games\n🧠 Trivia & Wordle\n📊 Activity Tracking\n🤖 Bobby AI Chat\n🎬 Clip Submissions",
             inline: true,
           },
           {
             name: "⭐ Plus Features",
-            value: "⚔️ PvP Games\n👑 King of the Hill\n🐝 Bee Mafia (65+ roles)\n🎯 Bounty System\n👥 Team Builder\n🎂 Birthday Tracking",
+            value:
+              "⚔️ PvP Games\n👑 King of the Hill\n🐝 Bee Mafia (65+ roles)\n🎯 Bounty System\n👥 Team Builder\n🎂 Birthday Tracking",
             inline: true,
           },
           {
             name: "👑 Ultimate Features",
-            value: "🎮 Valorant API Stats\n📈 Match History\n🏆 Rank Tracking\n⚖️ Team Balancing\n📊 Skill Analysis",
+            value:
+              "🎮 Valorant API Stats\n📈 Match History\n🏆 Rank Tracking\n⚖️ Team Balancing\n📊 Skill Analysis",
             inline: true,
           }
         )
@@ -1389,9 +1359,10 @@ module.exports = (client) => {
 
       // Get tier info for this category
       const tierInfo = TIER_INFO[category.tier] || TIER_INFO.free;
-      const tierBadge = category.tier !== "free"
-        ? `\n\n${tierInfo.emoji} **Requires ${tierInfo.name} Tier** - Use \`!subscription\` to check your tier`
-        : "";
+      const tierBadge =
+        category.tier !== "free"
+          ? `\n\n${tierInfo.emoji} **Requires ${tierInfo.name} Tier** - Use \`!subscription\` to check your tier`
+          : "";
 
       // Split commands into chunks to avoid field limits
       const commandChunks = [];
@@ -1423,8 +1394,9 @@ module.exports = (client) => {
       });
 
       // Add usage examples for the first 3 commands
-      const usageExamples = category.commands.slice(0, 3)
-        .map(cmd => `\`${cmd.usage}\``)
+      const usageExamples = category.commands
+        .slice(0, 3)
+        .map((cmd) => `\`${cmd.usage}\``)
         .join("\n");
 
       embed.addFields({
@@ -1434,7 +1406,7 @@ module.exports = (client) => {
       });
 
       embed.setFooter({
-        text: `Use dropdown for other categories | ${category.commands.length} commands`
+        text: `Use dropdown for other categories | ${category.commands.length} commands`,
       });
       embed.setTimestamp();
 

@@ -240,11 +240,7 @@ opponent's Hives
 - !arena @opponent [amount] [class] - Same as gladiator command
 - !arenastats [@user] - View gladiator combat statistics and win rates
 
-🃏 **POKER & HIGH STAKES:**
-- !poker [buy-in] - Create Texas Hold'em poker lobby (2-6 players, full game)
-- !holdem [buy-in] - Same as poker command
-- !russianroulette - EXTREME DANGER: 2-6 players, one random loser loses EVERYTHING
-- !rr - Short command for Russian Roulette
+👑 **KING OF THE HILL:**
 - !koth [amount] - King of the Hill: Challenge current king or start new game (min 100 Honey)
 - !kothstatus - View current King of the Hill status and pot
 
@@ -329,24 +325,6 @@ opponent's Hives
 
 **Supported Agents (28):** Jett, Reyna, Phoenix, Sage, Brimstone, Omen, Viper, Cypher, Sova, Raze, Killjoy, Breach, Skye, Yoru, Astra, KAY/O, Chamber, Neon, Fade, Harbor, Gekko, Deadlock, Iso, Clove, Vyse, Veto, Waylay, Tejo
 
-🐕 **VIRTUAL PETS (16 commands):**
-- !adopt - Adopt your first virtual pet (choose from 10+ species)
-- !pet - Check pet status (hunger, happiness, health, energy, mood)
-- !petshop or !shop - Buy food, toys, treats, and items for your pet
-- !feed [food_item] - Feed your pet specific food from inventory
-- !petinventory or !petinv - View your pet's inventory
-- !use [item] - Use toys or items on your pet
-- !train - Train pet for XP and level up (costs energy)
-- !petmood or !mood - Check your pet's detailed mood status
-- !fetch - Play fetch minigame with your pet for Honey rewards
-- !treasure or !hunt - Go treasure hunting with your pet (find items/Honey)
-- !race - Enter your pet in a race competition
-- !adventure or !explore - Go on adventures for rewards and encounters
-- !petach or !achievements - View your pet's earned achievements
-- !playdate - Arrange playdate with another user's pet (social interaction)
-- !renamepet [new_name] - Rename your pet
-- !petleaderboard or !pettop - View top level pets in server
-
 🎲 **WORDLE TRACKING:**
 - !wordletop - All-time Wordle leaderboard
 - !wordleweekly - Weekly Wordle leaderboard
@@ -396,7 +374,7 @@ opponent's Hives
 - Explain commands clearly but casually: !command [required] [optional]
 - Suggest 2-4 relevant commands based on user's question/context
 - For money questions: Recommend !beg (instant), !activetop (5K daily), or gambling
-- For boredom: Suggest games matching their vibe (action = gladiator, luck = casino, chill = pets)
+- For boredom: Suggest games matching their vibe (action = gladiator, luck = casino, chill = trivia)
 - Keep responses concise but informative - usually 1-3 sentences unless they need more detail
 - Use command syntax when mentioning commands
 - Be encouraging and positive but not overly enthusiastic - keep it real
@@ -409,7 +387,7 @@ opponent's Hives
 
 **Smart Suggestions:**
 - When users ask about earning money, suggest: !beg (instant free), !activetop (5K daily), or profitable gambling (!flip, !roulette)
-- When users say they're bored: action games (!gladiator), luck games (!flip, !dice), chill (!adopt pet)
+- When users say they're bored: action games (!gladiator), luck games (!flip, !dice), chill (!trivia, !wordle)
 - When users ask about a specific game, explain it briefly and show exact command to start
 - Tailor suggestions based on conversation history and what they've mentioned liking
 - Make suggestions natural, not forced - integrate into conversation flow
@@ -429,7 +407,7 @@ When users ask about gambling, give them CLEAR, STRATEGIC advice based on game m
 **Mood Detection & Adaptation:**
 - Pay close attention to user's emotional tone from their message
 - Adjust your entire response style based on detected mood:
-  * SAD/DOWN 😔 → Be very encouraging, supportive, reassuring. Suggest easy wins (!beg, pets)
+  * SAD/DOWN 😔 → Be very encouraging, supportive, reassuring. Suggest easy wins (!beg, !trivia)
   * EXCITED/HAPPY 😄 → Match their high energy! Use more exclamation marks and enthusiasm!
   * FRUSTRATED/ANGRY 😤 → Be extra patient, calm, helpful. Break things down step-by-step
   * TIRED/EXHAUSTED 😴 → Keep it low-key, suggest chill activities, acknowledge their tiredness
@@ -616,9 +594,9 @@ const fallbackResponses = {
     "Hi there! Bobby's ready to help! Check out `!help` to see all my features! 😊",
   ],
   help: [
-    "I'd love to help! Try `!help` to see all my commands, or ask me about: money (💰), games (🎰), teams (👥), or pets (🐕)!",
+    "I'd love to help! Try `!help` to see all my commands, or ask me about: money (💰), games (🎰), teams (👥), or mafia (🐝)!",
     "Need assistance? Use `!help` for a full command list! I can help with economy, casino games, PvP battles, and more!",
-    "Sure thing! Type `!help` to explore all my features. I've got economy, gambling, team building, virtual pets, and tons more!",
+    "Sure thing! Type `!help` to explore all my features. I've got economy, gambling, team building, Bee Mafia, and tons more!",
   ],
   error: [
     "Oops! Something went wrong on my end. Try asking again, or use `!help` for commands!",

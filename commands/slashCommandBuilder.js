@@ -252,28 +252,6 @@ commands.push({
   category: "games",
 });
 
-commands.push({
-  data: new SlashCommandBuilder()
-    .setName("poker")
-    .setDescription("Play Texas Hold'em Poker")
-    .addSubcommand((subcommand) =>
-      subcommand
-        .setName("create")
-        .setDescription("Create a poker game")
-        .addIntegerOption((option) =>
-          option
-            .setName("buyin")
-            .setDescription("Buy-in amount")
-            .setRequired(true)
-            .setMinValue(10)
-        )
-    )
-    .addSubcommand((subcommand) =>
-      subcommand.setName("join").setDescription("Join an active poker game")
-    ),
-  category: "games",
-});
-
 // ==========================================
 // VALORANT COMMANDS
 // ==========================================
@@ -378,49 +356,6 @@ commands.push({
         )
     ),
   category: "valorant",
-});
-
-// ==========================================
-// PET COMMANDS
-// ==========================================
-
-commands.push({
-  data: new SlashCommandBuilder()
-    .setName("pet")
-    .setDescription("Manage your virtual pet")
-    .addSubcommand((subcommand) =>
-      subcommand
-        .setName("adopt")
-        .setDescription("Adopt a new pet")
-        .addStringOption((option) =>
-          option
-            .setName("name")
-            .setDescription("Name for your pet")
-            .setRequired(true)
-            .setMaxLength(20)
-        )
-    )
-    .addSubcommand((subcommand) =>
-      subcommand.setName("feed").setDescription("Feed your pet")
-    )
-    .addSubcommand((subcommand) =>
-      subcommand.setName("play").setDescription("Play with your pet")
-    )
-    .addSubcommand((subcommand) =>
-      subcommand.setName("status").setDescription("Check your pet's status")
-    )
-    .addSubcommand((subcommand) =>
-      subcommand
-        .setName("view")
-        .setDescription("View a pet")
-        .addUserOption((option) =>
-          option
-            .setName("user")
-            .setDescription("User whose pet to view")
-            .setRequired(false)
-        )
-    ),
-  category: "pets",
 });
 
 // ==========================================
