@@ -704,19 +704,19 @@ class SubscriptionServer {
 
         /**
          * Create or update subscription (for payment webhook callbacks)
+         * Writes to Convex database (per-guild subscriptions)
          */
         this.app.post('/api/subscription', this.verifyApiKey.bind(this), async (req, res) => {
             try {
                 const {
                     discordId,
+                    guildId,
                     tier,
                     status,
-                    expiresAt,
-                    paymentReference,
-                    features,
-                    metadata
+                    expiresAt
                 } = req.body;
 
+                // Validate required fields
                 if (!discordId) {
                     return res.status(400).json({
                         success: false,
@@ -725,34 +725,32 @@ class SubscriptionServer {
                     });
                 }
 
-                const updateData = {};
-                if (tier) updateData.tier = tier;
-                if (status) updateData.status = status;
-                if (expiresAt) updateData.expiresAt = new Date(expiresAt);
-                if (paymentReference) updateData.paymentReference = paymentReference;
-                if (features) updateData.features = features;
-                if (metadata) updateData.metadata = metadata;
+                if (!guildId) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Missing required field',
+                        message: 'guildId is required for per-guild subscriptions'
+                    });
+                }
 
-                const subscription = await Subscription.findOneAndUpdate(
-                    { discordId },
-                    {
-                        $set: updateData,
-                        $setOnInsert: {
-                            subscribedAt: new Date()
-                        }
-                    },
-                    { upsert: true, new: true }
-                );
+                // Build updates object for Convex
+                const updates = {};
+                if (tier) updates.tier = tier;
+                if (status) updates.status = status;
+                if (expiresAt) updates.expiresAt = typeof expiresAt === 'number' ? expiresAt : new Date(expiresAt).getTime();
+
+                // Update Convex database
+                await ConvexHelper.updateGuildSubscription(discordId, guildId, updates);
+
+                console.log(`[Subscription API] Updated subscription for ${discordId} in guild ${guildId}:`, updates);
 
                 res.json({
                     success: true,
                     message: 'Subscription updated successfully',
                     subscription: {
-                        discordId: subscription.discordId,
-                        tier: subscription.tier,
-                        status: subscription.status,
-                        features: Subscription.getTierFeatures(subscription.tier),
-                        expiresAt: subscription.expiresAt
+                        discordId,
+                        guildId,
+                        ...updates
                     }
                 });
 
