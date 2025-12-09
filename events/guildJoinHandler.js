@@ -47,38 +47,6 @@ module.exports = (client) => {
 
                     console.log(`[Guild Join] ✅ Registered guild ${guildName} (${guildId})`);
 
-                    // Try to send welcome message to the guild owner or system channel
-                    try {
-                        const welcomeMessage = `🎉 **Welcome to Bobby The Bot!**\n\n` +
-                            `Thanks for adding me to **${guildName}**!\n\n` +
-                            `**What you can do:**\n` +
-                            `• Casino games: \`!blackjack\`, \`!roulette\`, \`!dice\`\n` +
-                            `• PvP challenges: \`!rps\`, \`!gladiator\`\n` +
-                            `• Bee Mafia game: \`!createmafia\`\n` +
-                            `• Valorant teams: \`!valorant\`\n` +
-                            `• Activity tracking: \`!activity\`\n` +
-                            `• And much more!\n\n` +
-                            `Use \`!help\` to see all commands.\n` +
-                            `Use \`!subscription\` to check your subscription status.\n\n` +
-                            `Upgrade at https://crackedgames.co/bobby-the-bot/`;
-
-                        // Try to send to system channel first
-                        if (guild.systemChannel) {
-                            await guild.systemChannel.send(welcomeMessage);
-                        } else {
-                            // Try to find the first text channel we can send to
-                            const channel = guild.channels.cache.find(ch =>
-                                ch.type === 0 && // Text channel
-                                ch.permissionsFor(guild.members.me).has('SendMessages')
-                            );
-                            if (channel) {
-                                await channel.send(welcomeMessage);
-                            }
-                        }
-                    } catch (msgError) {
-                        console.log(`[Guild Join] Could not send welcome message: ${msgError.message}`);
-                    }
-
                     // DM the server owner with setup instructions
                     try {
                         const owner = await guild.fetchOwner();
@@ -139,36 +107,6 @@ module.exports = (client) => {
                 });
 
                 console.log(`[Guild Join] ✅ Created new subscription and registered guild ${guildName}`);
-
-                // Send welcome message
-                try {
-                    const welcomeMessage = `🎉 **Welcome to Bobby The Bot!**\n\n` +
-                        `Thanks for adding me to **${guildName}**!\n\n` +
-                        `**What you can do:**\n` +
-                        `• Casino games: \`!blackjack\`, \`!roulette\`, \`!dice\`\n` +
-                        `• PvP challenges: \`!rps\`, \`!gladiator\`\n` +
-                        `• Bee Mafia game: \`!createmafia\`\n` +
-                        `• Valorant teams: \`!valorant\`\n` +
-                        `• Activity tracking: \`!activity\`\n` +
-                        `• And much more!\n\n` +
-                        `Use \`!help\` to see all commands.\n` +
-                        `Use \`!subscription\` to check your subscription status.\n\n` +
-                        `Upgrade at https://crackedgames.co/bobby-the-bot/`;
-
-                    if (guild.systemChannel) {
-                        await guild.systemChannel.send(welcomeMessage);
-                    } else {
-                        const channel = guild.channels.cache.find(ch =>
-                            ch.type === 0 &&
-                            ch.permissionsFor(guild.members.me).has('SendMessages')
-                        );
-                        if (channel) {
-                            await channel.send(welcomeMessage);
-                        }
-                    }
-                } catch (msgError) {
-                    console.log(`[Guild Join] Could not send welcome message: ${msgError.message}`);
-                }
 
                 // DM the server owner with setup instructions
                 try {
