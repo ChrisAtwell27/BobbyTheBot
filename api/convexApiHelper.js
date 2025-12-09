@@ -171,6 +171,107 @@ async function updateServerTier(guildId, tier) {
     }
 }
 
+/**
+ * Get subscription by metadata key/value (e.g., Clerk user ID)
+ * @param {string} key - Metadata key to search
+ * @param {string} value - Metadata value to match
+ * @returns {Promise<Object|null>} Subscription or null
+ */
+async function getSubscriptionByMetadata(key, value) {
+    const client = initConvexClient();
+    try {
+        const subscription = await client.query(api.subscriptions.getSubscriptionByMetadata, {
+            key,
+            value
+        });
+        return subscription;
+    } catch (error) {
+        console.error('[Convex API Helper] Error getting subscription by metadata:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get all subscriptions with optional filters
+ * @param {Object} filters - Optional filters (tier, status, botVerified, limit)
+ * @returns {Promise<Object>} { subscriptions, total, hasMore }
+ */
+async function getAllSubscriptions(filters = {}) {
+    const client = initConvexClient();
+    try {
+        const result = await client.query(api.subscriptions.getAllSubscriptions, filters);
+        return result;
+    } catch (error) {
+        console.error('[Convex API Helper] Error getting all subscriptions:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get subscription statistics
+ * @returns {Promise<Object>} Stats object with total, verified, byTier, byStatus
+ */
+async function getSubscriptionStats() {
+    const client = initConvexClient();
+    try {
+        const stats = await client.query(api.subscriptions.getSubscriptionStats, {});
+        return stats;
+    } catch (error) {
+        console.error('[Convex API Helper] Error getting subscription stats:', error);
+        throw error;
+    }
+}
+
+/**
+ * Cancel subscription (set to cancelled and free tier)
+ * @param {string} discordId - Discord user ID
+ * @returns {Promise<Object|null>} Updated subscription or null if not found
+ */
+async function cancelSubscription(discordId) {
+    const client = initConvexClient();
+    try {
+        const result = await client.mutation(api.subscriptions.cancelSubscription, {
+            discordId
+        });
+        return result;
+    } catch (error) {
+        console.error('[Convex API Helper] Error cancelling subscription:', error);
+        throw error;
+    }
+}
+
+/**
+ * Update verification check timestamp
+ * @param {string} discordId - Discord user ID
+ * @returns {Promise<string>} Subscription ID
+ */
+async function updateVerificationCheck(discordId) {
+    const client = initConvexClient();
+    try {
+        const result = await client.mutation(api.subscriptions.updateVerificationCheck, {
+            discordId
+        });
+        return result;
+    } catch (error) {
+        console.error('[Convex API Helper] Error updating verification check:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get tier features based on tier level
+ * @param {string} tier - Subscription tier (free, plus, ultimate)
+ * @returns {string[]} Array of feature names
+ */
+function getTierFeatures(tier) {
+    const tierFeatures = {
+        free: ['basic_commands', 'economy', 'casino_basic'],
+        plus: ['basic_commands', 'economy', 'casino_basic', 'blackjack', 'pvp_games', 'valorant_team', 'bee_mafia', 'bobby_ai', 'activity_tracking'],
+        ultimate: ['basic_commands', 'economy', 'casino_basic', 'blackjack', 'pvp_games', 'valorant_team', 'bee_mafia', 'bobby_ai', 'activity_tracking', 'audit_logs', 'auto_moderation', 'custom_prefix', 'api_access', 'priority_support']
+    };
+    return tierFeatures[tier] || tierFeatures.free;
+}
+
 module.exports = {
     initConvexClient,
     getSubscriptionByDiscordId,
@@ -180,4 +281,10 @@ module.exports = {
     upsertSubscription,
     formatGuildForResponse,
     updateServerTier,
+    getSubscriptionByMetadata,
+    getAllSubscriptions,
+    getSubscriptionStats,
+    cancelSubscription,
+    updateVerificationCheck,
+    getTierFeatures,
 };

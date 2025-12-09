@@ -2,8 +2,10 @@
 // SUBSCRIPTION UTILITIES
 // ===============================================
 // Utilities for checking user subscription tiers and access control
+// Uses Convex as the source of truth for subscription data
 
-const Subscription = require('../database/models/Subscription');
+const { getConvexClient } = require('./convexClient');
+const { api } = require('../convex/_generated/api');
 const { EmbedBuilder } = require('discord.js');
 
 // Tier constants (hierarchical: free < plus < ultimate)
@@ -51,13 +53,52 @@ function normalizeTier(tier) {
 }
 
 /**
- * Get subscription data for a guild/server (with caching)
+ * Get subscription data for a guild/server by owner ID (with caching)
  * @param {string} guildId - Discord guild (server) ID
+ * @param {string} ownerId - Discord owner ID of the guild
  * @param {boolean} forceRefresh - Skip cache and force database query
  * @returns {Promise<Object|null>} - Subscription object or null if not found
  */
-async function getSubscription(guildId, forceRefresh = false) {
+async function getSubscriptionByOwner(ownerId, forceRefresh = false) {
+    const cacheKey = `owner_${ownerId}`;
+
     // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+        const cached = subscriptionCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+            return cached.data;
+        }
+    }
+
+    try {
+        const convex = getConvexClient();
+        const subscription = await convex.query(api.subscriptions.getSubscription, {
+            discordId: ownerId
+        });
+
+        // Cache the result (including null results to prevent repeated queries)
+        subscriptionCache.set(cacheKey, {
+            data: subscription,
+            timestamp: Date.now()
+        });
+
+        return subscription;
+    } catch (error) {
+        console.error(`[Subscription] Error fetching subscription for owner ${ownerId}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Get subscription data for a guild/server (with caching)
+ * This function requires the guild object or ownerId to look up the subscription
+ * @param {string} guildId - Discord guild (server) ID
+ * @param {string} ownerId - Discord owner ID of the guild (required for Convex lookup)
+ * @param {boolean} forceRefresh - Skip cache and force database query
+ * @returns {Promise<Object|null>} - Subscription object or null if not found
+ */
+async function getSubscription(guildId, ownerId = null, forceRefresh = false) {
+    // Check guild cache first
     if (!forceRefresh) {
         const cached = subscriptionCache.get(guildId);
         if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
@@ -65,12 +106,31 @@ async function getSubscription(guildId, forceRefresh = false) {
         }
     }
 
+    // If no ownerId provided, we can't look up in Convex
+    // Return null - caller should provide ownerId
+    if (!ownerId) {
+        console.warn(`[Subscription] No ownerId provided for guild ${guildId}, cannot fetch subscription`);
+        return null;
+    }
+
     try {
-        // Query database - find subscription where this guild is in verifiedGuilds array
-        const subscription = await Subscription.findOne({
-            'verifiedGuilds.guildId': guildId,
-            status: 'active'
+        const convex = getConvexClient();
+        const subscription = await convex.query(api.subscriptions.getSubscription, {
+            discordId: ownerId
         });
+
+        // Verify this guild is in the subscription's verifiedGuilds
+        if (subscription) {
+            const guildInSubscription = subscription.verifiedGuilds?.find(g => g.guildId === guildId);
+            if (!guildInSubscription) {
+                // Guild not in this subscription
+                subscriptionCache.set(guildId, {
+                    data: null,
+                    timestamp: Date.now()
+                });
+                return null;
+            }
+        }
 
         // Cache the result (including null results to prevent repeated queries)
         subscriptionCache.set(guildId, {
@@ -89,14 +149,15 @@ async function getSubscription(guildId, forceRefresh = false) {
  * Check if a guild/server has access to a specific tier (or higher)
  * @param {string} guildId - Discord guild (server) ID
  * @param {string} requiredTier - Required tier level (TIERS.FREE, TIERS.PLUS, or TIERS.ULTIMATE)
+ * @param {string} ownerId - Discord owner ID of the guild (required for Convex lookup)
  * @returns {Promise<Object>} - { hasAccess: boolean, guildTier: string, subscription: Object|null }
  */
-async function checkSubscription(guildId, requiredTier = TIERS.FREE) {
+async function checkSubscription(guildId, requiredTier = TIERS.FREE, ownerId = null) {
     // Normalize the required tier
     const normalizedRequired = normalizeTier(requiredTier);
 
     // Get guild's subscription
-    const subscription = await getSubscription(guildId);
+    const subscription = await getSubscription(guildId, ownerId);
 
     // If no subscription found, default to free tier
     if (!subscription) {
@@ -108,12 +169,12 @@ async function checkSubscription(guildId, requiredTier = TIERS.FREE) {
         };
     }
 
-    // Normalize guild's tier
+    // Use the MAIN subscription tier as source of truth (not per-guild tier)
     const guildTier = normalizeTier(subscription.tier);
 
     // Check if subscription is active and valid
     const isValid = subscription.status === 'active' &&
-                   (!subscription.expiresAt || new Date() <= subscription.expiresAt);
+                   (!subscription.expiresAt || Date.now() <= subscription.expiresAt);
 
     // If subscription is invalid, treat as free tier
     if (!isValid) {
@@ -207,6 +268,15 @@ function clearSubscriptionCache(guildId) {
 }
 
 /**
+ * Clear cached subscription for an owner (useful after subscription updates)
+ * @param {string} ownerId - Discord owner ID
+ */
+function clearOwnerSubscriptionCache(ownerId) {
+    subscriptionCache.delete(`owner_${ownerId}`);
+    console.log(`[Subscription] Cache cleared for owner ${ownerId}`);
+}
+
+/**
  * Clear all subscription cache (useful for debugging or major updates)
  */
 function clearAllSubscriptionCache() {
@@ -225,15 +295,15 @@ function clearAllSubscriptionCache() {
  *
  * @example
  * const checkTier = requireTier(TIERS.PLUS, 'Blackjack');
- * const result = await checkTier(message.guild.id);
+ * const result = await checkTier(message.guild.id, message.guild.ownerId);
  * if (!result.allowed) {
  *   await message.reply({ embeds: [result.embed] });
  *   return;
  * }
  */
 function requireTier(requiredTier, featureName) {
-    return async function(guildId) {
-        const result = await checkSubscription(guildId, requiredTier);
+    return async function(guildId, ownerId) {
+        const result = await checkSubscription(guildId, requiredTier, ownerId);
 
         if (result.hasAccess) {
             return {
@@ -260,6 +330,7 @@ module.exports = {
 
     // Core functions
     getSubscription,
+    getSubscriptionByOwner,
     checkSubscription,
     normalizeTier,
 
@@ -268,6 +339,7 @@ module.exports = {
 
     // Cache management
     clearSubscriptionCache,
+    clearOwnerSubscriptionCache,
     clearAllSubscriptionCache,
 
     // Middleware

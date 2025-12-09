@@ -1102,7 +1102,8 @@ module.exports = {
           // Check subscription tier (guild-based)
           const subCheck = await checkSubscription(
             message.guild.id,
-            TIERS.PLUS
+            TIERS.PLUS,
+            message.guild.ownerId
           );
           if (!subCheck.hasAccess) {
             const upgradeEmbed = createUpgradeEmbed(

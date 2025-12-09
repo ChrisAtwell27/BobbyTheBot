@@ -545,7 +545,7 @@ module.exports = (client) => {
       const houseBalance = await getHouseBalance();
 
       // Get user's tier
-      const subCheck = await checkSubscription(message.guild.id, TIERS.FREE);
+      const subCheck = await checkSubscription(message.guild.id, TIERS.FREE, message.guild.ownerId);
       const userTier = subCheck.guildTier || TIERS.FREE;
 
       // Build embed with tier-appropriate commands
@@ -587,7 +587,7 @@ module.exports = (client) => {
     // PvP games (PLUS TIER REQUIRED)
     else if (command === "!rps") {
       // Check subscription tier for PvP games (guild-based)
-      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS, message.guild.ownerId);
       if (!subCheck.hasAccess) {
         const upgradeEmbed = createUpgradeEmbed(
           "PvP Casino Games",
@@ -613,7 +613,7 @@ module.exports = (client) => {
       });
     } else if (command === "!highercard") {
       // Check subscription tier for PvP games (guild-based)
-      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS, message.guild.ownerId);
       if (!subCheck.hasAccess) {
         const upgradeEmbed = createUpgradeEmbed(
           "PvP Casino Games",
@@ -639,7 +639,7 @@ module.exports = (client) => {
       });
     } else if (command === "!quickdraw") {
       // Check subscription tier for PvP games (guild-based)
-      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS, message.guild.ownerId);
       if (!subCheck.hasAccess) {
         const upgradeEmbed = createUpgradeEmbed(
           "PvP Casino Games",
@@ -665,7 +665,7 @@ module.exports = (client) => {
       });
     } else if (command === "!numberduel") {
       // Check subscription tier for PvP games (guild-based)
-      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS, message.guild.ownerId);
       if (!subCheck.hasAccess) {
         const upgradeEmbed = createUpgradeEmbed(
           "PvP Casino Games",

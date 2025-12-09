@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
-const Subscription = require('../database/models/Subscription');
 const ConvexHelper = require('./convexApiHelper');
 
 /**
@@ -12,6 +11,8 @@ const ConvexHelper = require('./convexApiHelper');
  * - Managing subscription data
  * - Integration with Clerk authentication
  *
+ * Uses Convex as the single source of truth for all subscription data.
+ *
  * Authentication Flow with Clerk:
  * 1. User logs into website using Clerk with Discord OAuth provider
  * 2. Clerk stores the Discord OAuth tokens (access_token, refresh_token)
@@ -19,13 +20,6 @@ const ConvexHelper = require('./convexApiHelper');
  * 4. Website calls /api/subscription/verify with the Discord access token
  * 5. API fetches user's guilds from Discord and checks bot installation
  * 6. Returns verification status and list of verified guilds
- *
- * Getting Discord Token from Clerk (Frontend):
- * ```javascript
- * const { user } = useUser();
- * const discordAccount = user.externalAccounts.find(acc => acc.provider === 'discord');
- * // For server-side, use Clerk Backend API to get OAuth tokens
- * ```
  */
 class SubscriptionServer {
     constructor(client) {
@@ -51,7 +45,6 @@ class SubscriptionServer {
         this.app.use(express.json());
 
         // Enable CORS for web applications
-        // Supports multiple origins via comma-separated list: "http://localhost:3000,https://mysite.com"
         const allowedOrigins = process.env.SUBSCRIPTION_WEB_ORIGIN
             ? process.env.SUBSCRIPTION_WEB_ORIGIN.split(',').map(o => o.trim())
             : null;
@@ -59,7 +52,6 @@ class SubscriptionServer {
         this.app.use(cors({
             origin: allowedOrigins
                 ? (origin, callback) => {
-                    // Allow requests with no origin (like mobile apps or curl)
                     if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
                         callback(null, true);
                     } else {
@@ -83,7 +75,6 @@ class SubscriptionServer {
      * Verify API key for authenticated requests
      */
     verifyApiKey(req, res, next) {
-        // Skip if no secret is configured
         if (!this.apiSecret) {
             return next();
         }
@@ -91,12 +82,10 @@ class SubscriptionServer {
         const apiKey = req.headers['x-api-key'];
         const authHeader = req.headers['authorization'];
 
-        // Check for API key header
         if (apiKey && apiKey === this.apiSecret) {
             return next();
         }
 
-        // Check for Bearer token
         if (authHeader && authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
             if (token === this.apiSecret) {
@@ -132,13 +121,11 @@ class SubscriptionServer {
             const decoded = Buffer.from(token, 'base64').toString('utf-8');
             const [discordId, timestamp, signature] = decoded.split(':');
 
-            // Check token age (valid for 10 minutes)
             const age = Date.now() - parseInt(timestamp);
             if (age > 10 * 60 * 1000) {
                 return { valid: false, error: 'Token expired' };
             }
 
-            // Verify signature
             const expectedSignature = crypto
                 .createHmac('sha256', this.apiSecret || 'default-secret')
                 .update(`${discordId}:${timestamp}`)
@@ -156,7 +143,6 @@ class SubscriptionServer {
 
     /**
      * Fetch user's guilds from Discord API using their access token
-     * Requires 'guilds' scope in Discord OAuth
      */
     async fetchUserGuilds(accessToken) {
         const response = await fetch(`${this.discordApiBase}/users/@me/guilds`, {
@@ -174,7 +160,7 @@ class SubscriptionServer {
             });
 
             if (response.status === 401) {
-                throw new Error('Discord API error: 401 - Token invalid or expired. Ensure Clerk has "guilds" scope enabled for Discord OAuth.');
+                throw new Error('Discord API error: 401 - Token invalid or expired.');
             }
             throw new Error(error.message || `Discord API error: ${response.status}`);
         }
@@ -184,7 +170,6 @@ class SubscriptionServer {
 
     /**
      * Fetch user info from Discord API
-     * Requires 'identify' scope in Discord OAuth
      */
     async fetchUserInfo(accessToken) {
         const response = await fetch(`${this.discordApiBase}/users/@me`, {
@@ -202,7 +187,7 @@ class SubscriptionServer {
             });
 
             if (response.status === 401) {
-                throw new Error('Discord API error: 401 - Token invalid or expired. Ensure Clerk has "identify" scope enabled for Discord OAuth.');
+                throw new Error('Discord API error: 401 - Token invalid or expired.');
             }
             throw new Error(error.message || `Discord API error: ${response.status}`);
         }
@@ -218,7 +203,6 @@ class SubscriptionServer {
             const guild = await this.client.guilds.fetch(guildId);
             return guild ? true : false;
         } catch (error) {
-            // Bot is not in this guild or doesn't have access
             return false;
         }
     }
@@ -229,9 +213,6 @@ class SubscriptionServer {
     setupRoutes() {
         // ==================== Health & Info ====================
 
-        /**
-         * Health check endpoint
-         */
         this.app.get('/health', (req, res) => {
             res.json({
                 success: true,
@@ -243,9 +224,6 @@ class SubscriptionServer {
             });
         });
 
-        /**
-         * Get bot info (public endpoint for invite link generation)
-         */
         this.app.get('/api/subscription/bot-info', (req, res) => {
             res.json({
                 success: true,
@@ -263,11 +241,6 @@ class SubscriptionServer {
 
         /**
          * Verify if user has bot installed in any of their servers
-         *
-         * This is the main verification endpoint. The website should call this
-         * after the user logs in with Discord OAuth.
-         *
-         * Required: Discord access token with 'guilds' scope
          */
         this.app.post('/api/subscription/verify', this.verifyApiKey.bind(this), async (req, res) => {
             try {
@@ -283,7 +256,6 @@ class SubscriptionServer {
                     });
                 }
 
-                // Fetch user info and guilds from Discord
                 const [userInfo, userGuilds] = await Promise.all([
                     this.fetchUserInfo(accessToken),
                     this.fetchUserGuilds(accessToken)
@@ -308,29 +280,38 @@ class SubscriptionServer {
 
                 const botVerified = verifiedGuilds.length > 0;
 
-                // Update or create subscription record
-                const subscription = await Subscription.findOneAndUpdate(
-                    { discordId },
-                    {
-                        $set: {
-                            discordUsername: userInfo.username,
-                            discordAvatar: userInfo.avatar,
-                            botVerified,
-                            lastVerificationCheck: new Date(),
-                            verifiedGuilds: verifiedGuilds.map(g => ({
-                                guildId: g.guildId,
-                                guildName: g.guildName,
-                                verifiedAt: new Date()
-                            }))
-                        },
-                        $setOnInsert: {
-                            tier: 'free',
-                            status: 'pending',
-                            subscribedAt: new Date()
-                        }
-                    },
-                    { upsert: true, new: true }
-                );
+                // Upsert subscription in Convex
+                await ConvexHelper.upsertSubscription({
+                    discordId,
+                    discordUsername: userInfo.username,
+                    discordAvatar: userInfo.avatar,
+                    botVerified,
+                });
+
+                // Update verification check timestamp
+                try {
+                    await ConvexHelper.updateVerificationCheck(discordId);
+                } catch (e) {
+                    // Ignore if subscription doesn't exist yet
+                }
+
+                // Get current subscription to check existing guilds
+                const existingSubscription = await ConvexHelper.getSubscriptionByDiscordId(discordId);
+                const existingGuildIds = existingSubscription?.verifiedGuilds?.map(g => g.guildId) || [];
+
+                // Add verified guilds for new guilds
+                for (const guild of verifiedGuilds) {
+                    if (!existingGuildIds.includes(guild.guildId)) {
+                        await ConvexHelper.addVerifiedGuild(
+                            discordId,
+                            guild.guildId,
+                            guild.guildName
+                        );
+                    }
+                }
+
+                // Fetch updated subscription
+                const subscription = await ConvexHelper.getSubscriptionByDiscordId(discordId);
 
                 res.json({
                     success: true,
@@ -347,17 +328,16 @@ class SubscriptionServer {
                         verified: verifiedGuilds
                     },
                     subscription: {
-                        tier: subscription.tier,
-                        status: subscription.status,
-                        features: Subscription.getTierFeatures(subscription.tier),
-                        expiresAt: subscription.expiresAt
+                        tier: subscription?.tier || 'free',
+                        status: subscription?.status || 'pending',
+                        features: ConvexHelper.getTierFeatures(subscription?.tier || 'free'),
+                        expiresAt: subscription?.expiresAt
                     }
                 });
 
             } catch (error) {
                 console.error('[Subscription API] Verification error:', error);
 
-                // Handle Discord API errors specifically
                 if (error.message.includes('Discord API error')) {
                     return res.status(401).json({
                         success: false,
@@ -376,15 +356,6 @@ class SubscriptionServer {
 
         /**
          * Clerk-specific verification endpoint
-         *
-         * Use this when you have Clerk user data available.
-         * The website should fetch the Discord OAuth token from Clerk's Backend API
-         * and include the Clerk user ID for tracking.
-         *
-         * Request body:
-         * - clerkUserId: The Clerk user ID (for linking accounts)
-         * - discordToken: The Discord access token from Clerk's OAuth
-         * - discordId: (optional) Discord user ID if already known
          */
         this.app.post('/api/subscription/verify-clerk', this.verifyApiKey.bind(this), async (req, res) => {
             try {
@@ -406,7 +377,6 @@ class SubscriptionServer {
                     });
                 }
 
-                // Fetch user info and guilds from Discord
                 const [userInfo, userGuilds] = await Promise.all([
                     this.fetchUserInfo(discordToken),
                     this.fetchUserGuilds(discordToken)
@@ -414,7 +384,6 @@ class SubscriptionServer {
 
                 const discordId = userInfo.id;
 
-                // Verify Discord ID matches if provided
                 if (providedDiscordId && providedDiscordId !== discordId) {
                     return res.status(400).json({
                         success: false,
@@ -478,8 +447,7 @@ class SubscriptionServer {
                         guildIcon: guild.guildIcon,
                         isOwner: guild.isOwner,
                         permissions: guild.permissions,
-                        // Per-guild subscription data
-                        tier: formatted?.tier || 'free',
+                        tier: subscription?.tier || 'free',  // Use main subscription tier
                         status: formatted?.status || 'active',
                         expiresAt: formatted?.expiresAt || null,
                         subscribedAt: formatted?.subscribedAt || Date.now(),
@@ -499,9 +467,8 @@ class SubscriptionServer {
                     guilds: {
                         total: userGuilds.length,
                         withBot: verifiedGuilds.length,
-                        verified: formattedGuilds // Per-guild tier/status data
+                        verified: formattedGuilds
                     },
-                    // Include invite URL if not verified
                     ...(botVerified ? {} : {
                         action: 'invite_required',
                         inviteUrl: `https://discord.com/api/oauth2/authorize?client_id=${this.client.user?.id}&permissions=8&scope=bot%20applications.commands`
@@ -535,7 +502,7 @@ class SubscriptionServer {
             try {
                 const { clerkUserId } = req.params;
 
-                const subscription = await Subscription.findOne({ 'metadata.clerkUserId': clerkUserId });
+                const subscription = await ConvexHelper.getSubscriptionByMetadata('clerkUserId', clerkUserId);
 
                 if (!subscription) {
                     return res.status(404).json({
@@ -555,7 +522,7 @@ class SubscriptionServer {
                         status: subscription.status,
                         botVerified: subscription.botVerified,
                         verifiedGuilds: subscription.verifiedGuilds,
-                        features: Subscription.getTierFeatures(subscription.tier),
+                        features: ConvexHelper.getTierFeatures(subscription.tier),
                         subscribedAt: subscription.subscribedAt,
                         expiresAt: subscription.expiresAt,
                         lastVerificationCheck: subscription.lastVerificationCheck
@@ -574,13 +541,12 @@ class SubscriptionServer {
 
         /**
          * Quick verify endpoint - check if a Discord user ID has verified guilds
-         * This doesn't require a Discord token, just checks our database
          */
         this.app.get('/api/subscription/verify/:discordId', this.verifyApiKey.bind(this), async (req, res) => {
             try {
                 const { discordId } = req.params;
 
-                const subscription = await Subscription.findOne({ discordId });
+                const subscription = await ConvexHelper.getSubscriptionByDiscordId(discordId);
 
                 if (!subscription) {
                     return res.json({
@@ -598,8 +564,8 @@ class SubscriptionServer {
                     subscription: {
                         tier: subscription.tier,
                         status: subscription.status,
-                        features: Subscription.getTierFeatures(subscription.tier),
-                        verifiedGuilds: subscription.verifiedGuilds.length,
+                        features: ConvexHelper.getTierFeatures(subscription.tier),
+                        verifiedGuilds: subscription.verifiedGuilds?.length || 0,
                         lastCheck: subscription.lastVerificationCheck,
                         expiresAt: subscription.expiresAt
                     }
@@ -663,7 +629,7 @@ class SubscriptionServer {
             try {
                 const { discordId } = req.params;
 
-                const subscription = await Subscription.findOne({ discordId });
+                const subscription = await ConvexHelper.getSubscriptionByDiscordId(discordId);
 
                 if (!subscription) {
                     return res.status(404).json({
@@ -682,7 +648,7 @@ class SubscriptionServer {
                         status: subscription.status,
                         botVerified: subscription.botVerified,
                         verifiedGuilds: subscription.verifiedGuilds,
-                        features: Subscription.getTierFeatures(subscription.tier),
+                        features: ConvexHelper.getTierFeatures(subscription.tier),
                         subscribedAt: subscription.subscribedAt,
                         expiresAt: subscription.expiresAt,
                         lastVerificationCheck: subscription.lastVerificationCheck
@@ -701,7 +667,6 @@ class SubscriptionServer {
 
         /**
          * Create or update subscription (for payment webhook callbacks)
-         * Writes to Convex database (per-guild subscriptions)
          */
         this.app.post('/api/subscription', this.verifyApiKey.bind(this), async (req, res) => {
             try {
@@ -713,7 +678,6 @@ class SubscriptionServer {
                     expiresAt
                 } = req.body;
 
-                // Validate required fields
                 if (!discordId) {
                     return res.status(400).json({
                         success: false,
@@ -730,41 +694,30 @@ class SubscriptionServer {
                     });
                 }
 
-                // Build updates object for Convex
+                // Build updates object
                 const updates = {};
                 if (tier) updates.tier = tier;
                 if (status) updates.status = status;
                 if (expiresAt) updates.expiresAt = typeof expiresAt === 'number' ? expiresAt : new Date(expiresAt).getTime();
 
-                // Update Convex database
+                // Update Convex database - guild subscription
                 await ConvexHelper.updateGuildSubscription(discordId, guildId, updates);
 
-                console.log(`[Subscription API] Updated subscription for ${discordId} in guild ${guildId}:`, updates);
-
-                // Update Convex if guildId is provided
-                if (guildId) {
-                    try {
-                        // Update guild subscription in Convex subscriptions table
-                        const guildUpdateData = {};
-                        if (tier) guildUpdateData.tier = tier;
-                        if (status) guildUpdateData.status = status;
-                        if (expiresAt) guildUpdateData.expiresAt = new Date(expiresAt).getTime();
-
-                        if (Object.keys(guildUpdateData).length > 0) {
-                            await ConvexHelper.updateGuildSubscription(discordId, guildId, guildUpdateData);
-                            console.log(`[Subscription API] Updated guild subscription for ${guildId}: tier=${tier}, status=${status}`);
-                        }
-
-                        // Also update server tier in servers table for tier-gating
-                        if (tier) {
-                            await ConvexHelper.updateServerTier(guildId, tier);
-                            console.log(`[Subscription API] Updated server tier for guild ${guildId} to ${tier}`);
-                        }
-                    } catch (convexError) {
-                        console.error('[Subscription API] Failed to update Convex:', convexError);
-                        // Don't fail the request - MongoDB update succeeded
-                    }
+                // Also update the main subscription tier
+                if (tier) {
+                    await ConvexHelper.upsertSubscription({
+                        discordId,
+                        tier,
+                        status: status || 'active'
+                    });
                 }
+
+                // Update server tier for tier-gating
+                if (tier) {
+                    await ConvexHelper.updateServerTier(guildId, tier);
+                }
+
+                console.log(`[Subscription API] Updated subscription for ${discordId} in guild ${guildId}:`, updates);
 
                 res.json({
                     success: true,
@@ -793,18 +746,9 @@ class SubscriptionServer {
             try {
                 const { discordId } = req.params;
 
-                const subscription = await Subscription.findOneAndUpdate(
-                    { discordId },
-                    {
-                        $set: {
-                            status: 'cancelled',
-                            tier: 'free'
-                        }
-                    },
-                    { new: true }
-                );
+                const result = await ConvexHelper.cancelSubscription(discordId);
 
-                if (!subscription) {
+                if (!result) {
                     return res.status(404).json({
                         success: false,
                         error: 'Not found',
@@ -816,9 +760,9 @@ class SubscriptionServer {
                     success: true,
                     message: 'Subscription cancelled successfully',
                     subscription: {
-                        discordId: subscription.discordId,
-                        status: subscription.status,
-                        tier: subscription.tier
+                        discordId: result.discordId,
+                        status: result.status,
+                        tier: result.tier
                     }
                 });
 
@@ -840,21 +784,18 @@ class SubscriptionServer {
         this.app.get('/api/subscriptions', this.verifyApiKey.bind(this), async (req, res) => {
             try {
                 const { tier, status, verified, page = 1, limit = 50 } = req.query;
+
+                const filters = {};
+                if (tier) filters.tier = tier;
+                if (status) filters.status = status;
+                if (verified !== undefined) filters.botVerified = verified === 'true';
+                filters.limit = parseInt(limit) * parseInt(page); // Get enough for pagination
+
+                const result = await ConvexHelper.getAllSubscriptions(filters);
+
+                // Apply pagination offset manually (skip)
                 const skip = (parseInt(page) - 1) * parseInt(limit);
-
-                const query = {};
-                if (tier) query.tier = tier;
-                if (status) query.status = status;
-                if (verified !== undefined) query.botVerified = verified === 'true';
-
-                const [subscriptions, total] = await Promise.all([
-                    Subscription.find(query)
-                        .sort({ subscribedAt: -1 })
-                        .skip(skip)
-                        .limit(parseInt(limit))
-                        .lean(),
-                    Subscription.countDocuments(query)
-                ]);
+                const subscriptions = result.subscriptions.slice(skip, skip + parseInt(limit));
 
                 res.json({
                     success: true,
@@ -871,8 +812,8 @@ class SubscriptionServer {
                     pagination: {
                         page: parseInt(page),
                         limit: parseInt(limit),
-                        total,
-                        pages: Math.ceil(total / parseInt(limit))
+                        total: result.total,
+                        pages: Math.ceil(result.total / parseInt(limit))
                     }
                 });
 
@@ -891,35 +832,15 @@ class SubscriptionServer {
          */
         this.app.get('/api/subscriptions/stats', this.verifyApiKey.bind(this), async (req, res) => {
             try {
-                const [
-                    totalSubscriptions,
-                    tierCounts,
-                    statusCounts,
-                    verifiedCount
-                ] = await Promise.all([
-                    Subscription.countDocuments(),
-                    Subscription.aggregate([
-                        { $group: { _id: '$tier', count: { $sum: 1 } } }
-                    ]),
-                    Subscription.aggregate([
-                        { $group: { _id: '$status', count: { $sum: 1 } } }
-                    ]),
-                    Subscription.countDocuments({ botVerified: true })
-                ]);
+                const stats = await ConvexHelper.getSubscriptionStats();
 
                 res.json({
                     success: true,
                     stats: {
-                        total: totalSubscriptions,
-                        verified: verifiedCount,
-                        byTier: tierCounts.reduce((acc, { _id, count }) => {
-                            acc[_id] = count;
-                            return acc;
-                        }, {}),
-                        byStatus: statusCounts.reduce((acc, { _id, count }) => {
-                            acc[_id] = count;
-                            return acc;
-                        }, {}),
+                        total: stats.total,
+                        verified: stats.verified,
+                        byTier: stats.byTier,
+                        byStatus: stats.byStatus,
                         botGuildCount: this.client.guilds.cache.size
                     }
                 });

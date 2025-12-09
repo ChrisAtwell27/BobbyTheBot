@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getSubscription, normalizeTier, TIERS } = require('../utils/subscriptionUtils');
+const { normalizeTier, TIERS } = require('../utils/subscriptionUtils');
 const { getConvexClient } = require('../utils/convexClient');
 const { api } = require('../convex/_generated/api');
 
@@ -98,14 +98,22 @@ module.exports = (client) => {
       };
 
       // Determine current tier and status
+      // Use the main subscription tier as the source of truth, NOT the per-guild tier
+      // The per-guild tier can have stale data from previous subscriptions
       let currentTier = TIERS.FREE;
       let status = 'active';
       let expiresAt = null;
 
-      if (guildSubscription) {
-        currentTier = normalizeTier(guildSubscription.tier || 'free');
-        status = guildSubscription.status || 'active';
-        expiresAt = guildSubscription.expiresAt;
+      if (ownerSubscription) {
+        // Use the main subscription tier (source of truth from Stripe/payment system)
+        currentTier = normalizeTier(ownerSubscription.tier || 'free');
+        status = ownerSubscription.status || 'active';
+        expiresAt = ownerSubscription.expiresAt;
+
+        // If subscription is not active, treat as free tier
+        if (status !== 'active') {
+          currentTier = TIERS.FREE;
+        }
       }
 
       // Create embed

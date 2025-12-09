@@ -15,12 +15,30 @@ const Server = require('../database/models/Server');
 const Subscription = require('../database/models/Subscription');
 
 /**
- * Simplified Migration Script: MongoDB to Convex
+ * ============================================================================
+ * ONE-TIME MIGRATION SCRIPT: MongoDB to Convex
+ * ============================================================================
  *
- * This script migrates ALL guilds at once since Convex uses
- * the same table partitioning approach as MongoDB (guildId field)
+ * IMPORTANT: This script is for HISTORICAL MIGRATION PURPOSES ONLY.
+ *
+ * This script was used to migrate data from MongoDB to Convex during the
+ * database transition. It intentionally reads from MongoDB and writes to
+ * Convex.
+ *
+ * DO NOT use this script for ongoing operations. The bot and API now use
+ * Convex exclusively as the database backend.
+ *
+ * The MongoDB references in this file are intentional - they are needed
+ * to read the source data during migration.
+ *
+ * Migration Strategy: Guild ID Partitioning
+ *   - All guilds share the same Convex tables
+ *   - Data partitioned by guildId field (same as MongoDB)
+ *   - Single migration handles all guilds
  *
  * Usage: node scripts/migrateToConvex.js
+ *
+ * ============================================================================
  */
 
 const BATCH_SIZE = 50; // Process in batches to avoid timeouts

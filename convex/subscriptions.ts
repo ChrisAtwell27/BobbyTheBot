@@ -323,6 +323,163 @@ export const getGuildSubscription = query({
 });
 
 /**
+ * Get subscription by metadata (e.g., Clerk user ID)
+ */
+export const getSubscriptionByMetadata = query({
+  args: {
+    key: v.string(),
+    value: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Since Convex doesn't support querying by nested object fields directly,
+    // we need to fetch all subscriptions and filter
+    const subscriptions = await ctx.db
+      .query("subscriptions")
+      .collect();
+
+    return subscriptions.find(
+      (s) => s.metadata && (s.metadata as Record<string, string>)[args.key] === args.value
+    ) || null;
+  },
+});
+
+/**
+ * Get all subscriptions with pagination
+ */
+export const getAllSubscriptions = query({
+  args: {
+    tier: v.optional(v.union(v.literal("free"), v.literal("plus"), v.literal("ultimate"))),
+    status: v.optional(v.union(v.literal("active"), v.literal("expired"), v.literal("cancelled"), v.literal("pending"))),
+    botVerified: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    // Fetch all subscriptions - Convex handles this efficiently
+    const allSubscriptions = await ctx.db
+      .query("subscriptions")
+      .collect();
+
+    // Apply filters
+    let filtered = allSubscriptions;
+    if (args.tier) {
+      filtered = filtered.filter((s) => s.tier === args.tier);
+    }
+    if (args.status) {
+      filtered = filtered.filter((s) => s.status === args.status);
+    }
+    if (args.botVerified !== undefined) {
+      filtered = filtered.filter((s) => s.botVerified === args.botVerified);
+    }
+
+    // Sort by subscribedAt descending
+    filtered.sort((a, b) => (b.subscribedAt || 0) - (a.subscribedAt || 0));
+
+    // Apply pagination
+    const limit = args.limit || 50;
+    const total = filtered.length;
+    const paginated = filtered.slice(0, limit);
+
+    return {
+      subscriptions: paginated,
+      total,
+      hasMore: filtered.length > limit,
+    };
+  },
+});
+
+/**
+ * Get subscription statistics
+ */
+export const getSubscriptionStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const subscriptions = await ctx.db
+      .query("subscriptions")
+      .collect();
+
+    const total = subscriptions.length;
+    const verified = subscriptions.filter((s) => s.botVerified).length;
+
+    // Count by tier
+    const byTier: Record<string, number> = {};
+    for (const sub of subscriptions) {
+      byTier[sub.tier] = (byTier[sub.tier] || 0) + 1;
+    }
+
+    // Count by status
+    const byStatus: Record<string, number> = {};
+    for (const sub of subscriptions) {
+      byStatus[sub.status] = (byStatus[sub.status] || 0) + 1;
+    }
+
+    return {
+      total,
+      verified,
+      byTier,
+      byStatus,
+    };
+  },
+});
+
+/**
+ * Cancel subscription (set to cancelled and free tier)
+ */
+export const cancelSubscription = mutation({
+  args: { discordId: v.string() },
+  handler: async (ctx, args) => {
+    const subscription = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_discord_id", (q) => q.eq("discordId", args.discordId))
+      .first();
+
+    if (!subscription) {
+      return null;
+    }
+
+    const now = Date.now();
+
+    // Update main subscription
+    await ctx.db.patch(subscription._id, {
+      status: "cancelled",
+      tier: "free",
+      updatedAt: now,
+    });
+
+    // Update all verified guilds to free tier
+    const updatedGuilds = subscription.verifiedGuilds.map((g) => ({
+      ...g,
+      tier: "free" as const,
+      status: "cancelled" as const,
+    }));
+
+    await ctx.db.patch(subscription._id, {
+      verifiedGuilds: updatedGuilds,
+    });
+
+    // Update servers table for all verified guilds
+    for (const guild of subscription.verifiedGuilds) {
+      const server = await ctx.db
+        .query("servers")
+        .withIndex("by_guild", (q) => q.eq("guildId", guild.guildId))
+        .first();
+
+      if (server) {
+        await ctx.db.patch(server._id, {
+          tier: "free",
+          updatedAt: now,
+        });
+      }
+    }
+
+    return {
+      discordId: subscription.discordId,
+      status: "cancelled",
+      tier: "free",
+    };
+  },
+});
+
+/**
  * Update guild-specific subscription
  */
 export const updateGuildSubscription = mutation({

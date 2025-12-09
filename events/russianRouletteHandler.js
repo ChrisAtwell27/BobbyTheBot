@@ -381,7 +381,7 @@ module.exports = (client) => {
     // Russian Roulette command
     if (command === "!russianroulette" || command === "!rr") {
       // Check subscription tier (PLUS required for russian roulette)
-      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS, message.guild.ownerId);
       if (!subCheck.hasAccess) {
         const upgradeEmbed = createUpgradeEmbed(
           "Russian Roulette",

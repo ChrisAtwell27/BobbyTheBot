@@ -96,7 +96,7 @@ module.exports = (client) => {
     // Blackjack game
     if (args[0] === "!blackjack") {
       // Check subscription tier (PLUS required for blackjack)
-      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS);
+      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS, message.guild.ownerId);
       if (!subCheck.hasAccess) {
         const upgradeEmbed = createUpgradeEmbed(
           "Blackjack",
