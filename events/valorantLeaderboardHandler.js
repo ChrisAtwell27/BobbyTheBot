@@ -170,10 +170,10 @@ async function createLeaderboardCanvas(leaderboard, guild) {
   ctx.fillText("#", PADDING + 15, headerY + 23);
   ctx.fillText("PLAYER", PADDING + 60, headerY + 23);
   ctx.fillText("RANK", PADDING + 280, headerY + 23);
-  ctx.fillText("K/D/A", PADDING + 420, headerY + 23);
-  ctx.fillText("WIN%", PADDING + 560, headerY + 23);
-  ctx.fillText("ACS", PADDING + 680, headerY + 23);
-  ctx.fillText("SCORE", PADDING + 800, headerY + 23);
+  ctx.fillText("K/D/A", PADDING + 450, headerY + 23);
+  ctx.fillText("WIN%", PADDING + 580, headerY + 23);
+  ctx.fillText("ACS", PADDING + 700, headerY + 23);
+  ctx.fillText("SCORE", PADDING + 820, headerY + 23);
 
   // Draw rows
   const rowStartY = headerY + 50;
@@ -248,21 +248,35 @@ async function createLeaderboardCanvas(leaderboard, guild) {
         : player.discordName;
     ctx.fillText(discordDisplay, PADDING + 60, textY + 14);
 
-    // Comp rank with color
+    // Comp rank with icon
     const rankInfo = RANK_MAPPING[player.rankTier] || RANK_MAPPING[0];
+    const rankIconSize = 32;
+    const rankIconX = PADDING + 275;
+    const rankIconY = rowY + (ROW_HEIGHT - rankIconSize) / 2 - 2;
+
+    // Try to load and draw rank image
+    const rankImage = await loadRankImage(player.rankTier);
+    if (rankImage) {
+      ctx.drawImage(rankImage, rankIconX, rankIconY, rankIconSize, rankIconSize);
+    } else {
+      createFallbackRankIcon(ctx, rankIconX, rankIconY, rankIconSize, rankInfo);
+    }
+
+    // Rank name next to icon
     ctx.fillStyle = rankInfo.color;
-    ctx.font = "bold 14px Arial";
-    ctx.fillText(rankInfo.name, PADDING + 280, textY);
+    ctx.font = "bold 12px Arial";
+    ctx.textAlign = "left";
+    ctx.fillText(rankInfo.name, rankIconX + rankIconSize + 5, textY + 4);
 
     // KDA
     ctx.fillStyle = "#ffffff";
     ctx.font = "14px Arial";
     const kdaStr = formatKDA(player.stats);
-    ctx.fillText(kdaStr, PADDING + 420, textY - 5);
+    ctx.fillText(kdaStr, PADDING + 450, textY - 5);
     // KDA ratio below
     ctx.font = "11px Arial";
     ctx.fillStyle = player.stats.avgKDA >= 1.5 ? "#00ff88" : player.stats.avgKDA >= 1.0 ? "#ffff00" : "#ff8800";
-    ctx.fillText(`${player.stats.avgKDA.toFixed(2)} K/D`, PADDING + 420, textY + 10);
+    ctx.fillText(`${player.stats.avgKDA.toFixed(2)} K/D`, PADDING + 450, textY + 10);
 
     // Win rate with color coding
     const winColor =
@@ -277,7 +291,7 @@ async function createLeaderboardCanvas(leaderboard, guild) {
               : "#ff4444";
     ctx.fillStyle = winColor;
     ctx.font = "bold 16px Arial";
-    ctx.fillText(`${player.stats.winRate.toFixed(1)}%`, PADDING + 560, textY);
+    ctx.fillText(`${player.stats.winRate.toFixed(1)}%`, PADDING + 580, textY);
 
     // ACS with color coding
     const acsColor =
@@ -290,12 +304,12 @@ async function createLeaderboardCanvas(leaderboard, guild) {
             : "#ff4444";
     ctx.fillStyle = acsColor;
     ctx.font = "bold 16px Arial";
-    ctx.fillText(Math.round(player.stats.avgACS).toString(), PADDING + 680, textY);
+    ctx.fillText(Math.round(player.stats.avgACS).toString(), PADDING + 700, textY);
 
     // Performance score (highlighted)
     ctx.fillStyle = "#ff4654";
     ctx.font = "bold 20px Arial";
-    ctx.fillText(player.score.toFixed(1), PADDING + 800, textY);
+    ctx.fillText(player.score.toFixed(1), PADDING + 820, textY);
   }
 
   // Footer with branding
@@ -340,6 +354,14 @@ async function buildLeaderboard(guildId, client) {
   // Process each registered user
   for (const [userId, registration] of registeredUsers) {
     if (!registration) continue;
+
+    // Validate registration has required fields
+    if (!registration.name || !registration.tag || !registration.region) {
+      console.log(
+        `[Valorant Leaderboard] Skipping user ${userId} - incomplete registration data (missing name, tag, or region)`
+      );
+      continue;
+    }
 
     try {
       // Get match stats (last 30 competitive matches)
