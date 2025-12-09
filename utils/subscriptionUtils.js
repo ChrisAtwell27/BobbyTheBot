@@ -235,7 +235,7 @@ function createUpgradeEmbed(featureName, requiredTier, guildTier = TIERS.FREE) {
         .setTitle(`${tierEmojis[normalizedRequired]} Feature Unavailable`)
         .setDescription(
             `**${featureName}** requires the **${tierNames[normalizedRequired]}** tier.\n\n` +
-            `[Upgrade your subscription](https://bobbybot.io/upgrade) to unlock this feature!`
+            `[Upgrade your subscription](https://crackedgames.co/bobby-the-bot) to unlock this feature!`
         )
         .setTimestamp();
 

@@ -711,12 +711,8 @@ module.exports = (client) => {
       message.guild.ownerId
     );
     if (!subCheck.hasAccess) {
-      const upgradeEmbed = createUpgradeEmbed(
-        "Bobby AI Chat",
-        TIERS.PLUS,
-        subCheck.guildTier
-      );
-      return message.channel.send({ embeds: [upgradeEmbed] });
+      // Silently ignore - don't respond if they don't have access
+      return;
     }
 
     // Check if AI API key is configured for this server
