@@ -90,12 +90,12 @@ async function getSubscriptionByOwner(ownerId, forceRefresh = false) {
 }
 
 /**
- * Get subscription data for a guild/server (with caching)
- * This function requires the guild object or ownerId to look up the subscription
+ * Get subscription data for a specific guild (with caching)
+ * Returns the guild-specific subscription data from verifiedGuilds
  * @param {string} guildId - Discord guild (server) ID
  * @param {string} ownerId - Discord owner ID of the guild (required for Convex lookup)
  * @param {boolean} forceRefresh - Skip cache and force database query
- * @returns {Promise<Object|null>} - Subscription object or null if not found
+ * @returns {Promise<Object|null>} - Guild subscription object with tier/status or null
  */
 async function getSubscription(guildId, ownerId = null, forceRefresh = false) {
     // Check guild cache first
@@ -119,10 +119,10 @@ async function getSubscription(guildId, ownerId = null, forceRefresh = false) {
             discordId: ownerId
         });
 
-        // Verify this guild is in the subscription's verifiedGuilds
+        // Find this guild's specific subscription data
         if (subscription) {
-            const guildInSubscription = subscription.verifiedGuilds?.find(g => g.guildId === guildId);
-            if (!guildInSubscription) {
+            const guildSubscription = subscription.verifiedGuilds?.find(g => g.guildId === guildId);
+            if (!guildSubscription) {
                 // Guild not in this subscription
                 subscriptionCache.set(guildId, {
                     data: null,
@@ -130,15 +130,37 @@ async function getSubscription(guildId, ownerId = null, forceRefresh = false) {
                 });
                 return null;
             }
+
+            // Return guild-specific subscription data merged with parent info
+            const guildSubData = {
+                // Guild-specific tier and status (THIS IS THE KEY FIX)
+                tier: guildSubscription.tier || 'free',
+                status: guildSubscription.status || 'active',
+                expiresAt: guildSubscription.expiresAt,
+                subscribedAt: guildSubscription.subscribedAt,
+                trialEndsAt: guildSubscription.trialEndsAt,
+                // Keep reference to parent subscription for metadata
+                guildId: guildId,
+                ownerId: ownerId,
+                verifiedAt: guildSubscription.verifiedAt,
+                guildName: guildSubscription.guildName,
+            };
+
+            // Cache the guild-specific result
+            subscriptionCache.set(guildId, {
+                data: guildSubData,
+                timestamp: Date.now()
+            });
+
+            return guildSubData;
         }
 
-        // Cache the result (including null results to prevent repeated queries)
+        // No subscription found
         subscriptionCache.set(guildId, {
-            data: subscription,
+            data: null,
             timestamp: Date.now()
         });
-
-        return subscription;
+        return null;
     } catch (error) {
         console.error(`[Subscription] Error fetching subscription for guild ${guildId}:`, error);
         return null;
@@ -147,6 +169,7 @@ async function getSubscription(guildId, ownerId = null, forceRefresh = false) {
 
 /**
  * Check if a guild/server has access to a specific tier (or higher)
+ * Each guild has its OWN subscription tier - not shared with other guilds
  * @param {string} guildId - Discord guild (server) ID
  * @param {string} requiredTier - Required tier level (TIERS.FREE, TIERS.PLUS, or TIERS.ULTIMATE)
  * @param {string} ownerId - Discord owner ID of the guild (required for Convex lookup)
@@ -156,7 +179,7 @@ async function checkSubscription(guildId, requiredTier = TIERS.FREE, ownerId = n
     // Normalize the required tier
     const normalizedRequired = normalizeTier(requiredTier);
 
-    // Get guild's subscription
+    // Get guild's specific subscription (each guild has its own tier!)
     const subscription = await getSubscription(guildId, ownerId);
 
     // If no subscription found, default to free tier
@@ -169,7 +192,7 @@ async function checkSubscription(guildId, requiredTier = TIERS.FREE, ownerId = n
         };
     }
 
-    // Use the MAIN subscription tier as source of truth (not per-guild tier)
+    // Use this guild's specific tier (NOT the owner's main tier)
     const guildTier = normalizeTier(subscription.tier);
 
     // Check if subscription is active and valid
