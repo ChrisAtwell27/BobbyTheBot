@@ -46,14 +46,15 @@ const TEAM_LIFETIME = 4 * 60 * 60 * 1000; // 4 hours
 /**
  * Batch fetch rank info for multiple users with caching
  */
-async function batchGetUserRankInfo(userIds) {
+async function batchGetUserRankInfo(guildId, userIds) {
   const results = new Map();
   const now = Date.now();
   const idsToFetch = [];
 
   // Check cache first
   for (const userId of userIds) {
-    const cached = rankCache.get(userId);
+    const cacheKey = `${guildId}_${userId}`;
+    const cached = rankCache.get(cacheKey);
     if (cached && now - cached.timestamp < RANK_CACHE_TTL) {
       results.set(userId, cached.data);
     } else {
@@ -65,10 +66,10 @@ async function batchGetUserRankInfo(userIds) {
   if (idsToFetch.length > 0) {
     const fetchPromises = idsToFetch.map(async (userId) => {
       try {
-        const registration = await apiHandler.getUserRegistration(userId);
+        const registration = await apiHandler.getUserRegistration(guildId, userId);
         if (!registration) return { userId, data: null };
 
-        const rankData = await apiHandler.getUserRankData(userId);
+        const rankData = await apiHandler.getUserRankData(guildId, userId);
         if (!rankData) return { userId, data: null };
 
         const rankInfo =
@@ -87,7 +88,8 @@ async function batchGetUserRankInfo(userIds) {
     const fetchResults = await Promise.all(fetchPromises);
     for (const { userId, data } of fetchResults) {
       results.set(userId, data);
-      rankCache.set(userId, { data, timestamp: now });
+      const cacheKey = `${guildId}_${userId}`;
+      rankCache.set(cacheKey, { data, timestamp: now });
     }
   }
 
@@ -142,7 +144,7 @@ async function createTeamVisualization(team) {
 
   // Batch fetch all rank info upfront
   const userIds = allMembers.filter((m) => m).map((m) => m.id);
-  const rankInfoMap = await batchGetUserRankInfo(userIds);
+  const rankInfoMap = await batchGetUserRankInfo(team.guildId, userIds);
 
   // Batch load all avatars in parallel
   const avatarPromises = allMembers.map(async (member) => {
@@ -304,6 +306,7 @@ async function createTeamEmbed(team) {
 
   // Get leader rank from cache
   const rankInfoMap = await batchGetUserRankInfo(
+    team.guildId,
     [team.leader, ...team.members].map((m) => m.id)
   );
   const leaderRankInfo = rankInfoMap.get(team.leader.id);
@@ -539,6 +542,7 @@ module.exports = (client) => {
     const teamId = `raw_valorant_team_${message.id}`;
     const team = {
       id: teamId,
+      guildId: message.guild.id,
       leader: {
         id: message.author.id,
         username: message.author.username,
@@ -748,6 +752,7 @@ module.exports = (client) => {
             if (team.warningTimer) clearTimeout(team.warningTimer);
 
             const rankInfoMap = await batchGetUserRankInfo(
+              team.guildId,
               [team.leader, ...team.members].map((m) => m.id)
             );
 

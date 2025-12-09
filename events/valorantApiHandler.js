@@ -53,7 +53,6 @@ const {
   removeUserRegistration,
   getUserRankData,
   isUserRegistered,
-  getRegistrationCount,
   findOrMigrateUser,
   USERS_FILE,
 } = require("../valorantApi/registrationManager");
@@ -207,7 +206,7 @@ async function handleRegistrationSubmission(interaction) {
       registeredAt: new Date().toISOString(),
     };
 
-    await addUserRegistration(interaction.user.id, userData);
+    await addUserRegistration(interaction.guild.id, interaction.user.id, userData);
 
     const successEmbed = new EmbedBuilder()
       .setTitle("✅ Registration Successful!")
@@ -288,7 +287,7 @@ async function handleUpdateRegistration(message, args) {
 
   // If region not provided, try to get from existing registration
   if (!region) {
-    const existing = await getUserRegistration(message.author.id);
+    const existing = await getUserRegistration(message.guild.id, message.author.id);
     if (existing) {
       region = existing.region;
     } else {
@@ -341,7 +340,7 @@ async function handleUpdateRegistration(message, args) {
       updatedAt: new Date().toISOString(),
     };
 
-    await addUserRegistration(message.author.id, userData);
+    await addUserRegistration(message.guild.id, message.author.id, userData);
 
     const successEmbed = new EmbedBuilder()
       .setTitle("✅ Valorant Tag Updated!")
@@ -673,11 +672,11 @@ async function getMessageReactors(targetMessage) {
 }
 
 // Get comprehensive stats for players who have registered
-async function getPlayersWithStats(reactors, client) {
+async function getPlayersWithStats(guildId, reactors, client) {
   const players = [];
 
   for (const user of reactors) {
-    const registration = await getUserRegistration(user.id);
+    const registration = await getUserRegistration(guildId, user.id);
     if (!registration) {
       console.log(`User ${user.tag} is not registered`);
       continue;
@@ -685,7 +684,7 @@ async function getPlayersWithStats(reactors, client) {
 
     try {
       // Get rank data
-      const rankData = await getUserRankData(user.id);
+      const rankData = await getUserRankData(guildId, user.id);
       if (!rankData) {
         console.log(`No rank data for ${user.tag}`);
         continue;
@@ -837,7 +836,7 @@ async function handleCreateTeams(client, message, messageId, channelId = null) {
     await loadingMessage.edit({ embeds: [progressEmbed] });
 
     // Get comprehensive stats for each registered player
-    const players = await getPlayersWithStats(reactors, client);
+    const players = await getPlayersWithStats(message.guild.id, reactors, client);
 
     if (players.length < 2) {
       const unregisteredCount = reactors.length - players.length;
@@ -1034,7 +1033,6 @@ module.exports = {
         "Commands: !valstats, !valprofile, !valmatches, !createteams (admin), !valtest (admin), !valreset (admin), !vallist (admin), !valskills (admin)"
       );
       console.log(`Data file: ${USERS_FILE}`);
-      console.log(`Loaded ${await getRegistrationCount()} registered users`);
 
       client.on("messageCreate", async (message) => {
         if (message.author.bot) return;
@@ -1045,7 +1043,7 @@ module.exports = {
         // !valstats or !valprofile command
         if (command === "!valstats" || command === "!valprofile") {
           // Use migration utility to handle legacy username registrations
-          const registration = await findOrMigrateUser(message.author);
+          const registration = await findOrMigrateUser(message.guild.id, message.author);
 
           if (!registration) {
             await showRegistrationPrompt(message);
@@ -1062,7 +1060,7 @@ module.exports = {
 
         // !valmatches command
         if (command === "!valmatches") {
-          const registration = await findOrMigrateUser(message.author);
+          const registration = await findOrMigrateUser(message.guild.id, message.author);
           if (!registration) {
             await message.channel.send(
               "❌ You need to register first! Use `!valstats` to register your Valorant account."
@@ -1079,7 +1077,7 @@ module.exports = {
         ) {
           const mentionedUser = message.mentions.users.first();
           if (mentionedUser) {
-            const removed = await removeUserRegistration(mentionedUser.id);
+            const removed = await removeUserRegistration(message.guild.id, mentionedUser.id);
             if (removed) {
               await message.channel.send(
                 `✅ Reset Valorant registration for ${mentionedUser.tag}`
@@ -1152,7 +1150,7 @@ module.exports = {
           command === "!vallist" &&
           message.member.permissions.has("ADMINISTRATOR")
         ) {
-          const allUsers = await getAllRegisteredUsers();
+          const allUsers = await getAllRegisteredUsers(message.guild.id);
           if (allUsers.size === 0) {
             await message.channel.send("No registered Valorant users found.");
             return;
@@ -1204,7 +1202,7 @@ module.exports = {
           command === "!valskills" &&
           message.member.permissions.has("ADMINISTRATOR")
         ) {
-          const allUsers = await getAllRegisteredUsers();
+          const allUsers = await getAllRegisteredUsers(message.guild.id);
           if (allUsers.size === 0) {
             await message.channel.send("No registered Valorant users found.");
             return;
@@ -1218,7 +1216,7 @@ module.exports = {
           for (const [userId, userData] of allUsers) {
             try {
               const user = await client.users.fetch(userId);
-              const rankData = await getUserRankData(userId);
+              const rankData = await getUserRankData(message.guild.id, userId);
               if (!rankData) continue;
 
               const matchStats = await getPlayerMatchStats(userData);
@@ -1434,7 +1432,7 @@ module.exports = {
                 });
               }
 
-              const registration = await getUserRegistration(userId);
+              const registration = await getUserRegistration(interaction.guild.id, userId);
               if (!registration) {
                 return await safeInteractionResponse(interaction, "reply", {
                   content:
@@ -1463,7 +1461,7 @@ module.exports = {
                 });
               }
 
-              const registration = await getUserRegistration(userId);
+              const registration = await getUserRegistration(interaction.guild.id, userId);
               if (!registration) {
                 return await safeInteractionResponse(interaction, "reply", {
                   content:

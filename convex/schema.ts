@@ -281,9 +281,8 @@ export default defineSchema({
     discordAvatar: v.optional(v.string()),
     tier: v.union(
       v.literal("free"),
-      v.literal("basic"),
-      v.literal("premium"),
-      v.literal("enterprise")
+      v.literal("plus"),
+      v.literal("ultimate")
     ),
     status: v.union(
       v.literal("active"),
@@ -300,18 +299,19 @@ export default defineSchema({
       // Per-guild subscription data
       tier: v.optional(v.union(
         v.literal("free"),
-        v.literal("basic"),
-        v.literal("premium"),
-        v.literal("enterprise")
+        v.literal("plus"),
+        v.literal("ultimate")
       )),
       status: v.optional(v.union(
         v.literal("active"),
         v.literal("expired"),
         v.literal("cancelled"),
-        v.literal("pending")
+        v.literal("pending"),
+        v.literal("trial")
       )),
       expiresAt: v.optional(v.number()),
       subscribedAt: v.optional(v.number()),
+      trialEndsAt: v.optional(v.number()),
     })),
 
     lastVerificationCheck: v.optional(v.number()),

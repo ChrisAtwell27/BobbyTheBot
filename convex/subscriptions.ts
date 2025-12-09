@@ -37,7 +37,7 @@ export const getSubscriptionsByStatus = query({
  * Get all subscriptions by tier
  */
 export const getSubscriptionsByTier = query({
-  args: { tier: v.union(v.literal("free"), v.literal("basic"), v.literal("premium"), v.literal("enterprise")) },
+  args: { tier: v.union(v.literal("free"), v.literal("plus"), v.literal("ultimate")) },
   handler: async (ctx, args) => {
     const subscriptions = await ctx.db
       .query("subscriptions")
@@ -82,7 +82,7 @@ export const upsertSubscription = mutation({
     discordId: v.string(),
     discordUsername: v.optional(v.string()),
     discordAvatar: v.optional(v.string()),
-    tier: v.optional(v.union(v.literal("free"), v.literal("basic"), v.literal("premium"), v.literal("enterprise"))),
+    tier: v.optional(v.union(v.literal("free"), v.literal("plus"), v.literal("ultimate"))),
     status: v.optional(v.union(v.literal("active"), v.literal("expired"), v.literal("cancelled"), v.literal("pending"))),
     botVerified: v.optional(v.boolean()),
     verifiedGuilds: v.optional(v.array(v.any())),
@@ -329,7 +329,7 @@ export const updateGuildSubscription = mutation({
   args: {
     discordId: v.string(),
     guildId: v.string(),
-    tier: v.optional(v.union(v.literal("free"), v.literal("basic"), v.literal("premium"), v.literal("enterprise"))),
+    tier: v.optional(v.union(v.literal("free"), v.literal("plus"), v.literal("ultimate"))),
     status: v.optional(v.union(v.literal("active"), v.literal("expired"), v.literal("cancelled"), v.literal("pending"))),
     expiresAt: v.optional(v.number()),
   },

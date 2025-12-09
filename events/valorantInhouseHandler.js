@@ -39,15 +39,15 @@ const userActiveInhouses = new LimitedMap(500);
 const RESEND_INTERVAL = 10 * 60 * 1000;
 
 // Function to get user rank information
-async function getUserRankInfo(userId) {
+async function getUserRankInfo(guildId, userId) {
   try {
-    const registration = await apiHandler.getUserRegistration(userId);
+    const registration = await apiHandler.getUserRegistration(guildId, userId);
     if (!registration) {
       console.log(`No registration found for user ${userId}`);
       return null;
     }
 
-    const rankData = await apiHandler.getUserRankData(userId);
+    const rankData = await apiHandler.getUserRankData(guildId, userId);
     if (!rankData) {
       console.log(`No rank data found for user ${userId}`);
       return null;
@@ -75,11 +75,11 @@ function calculatePlayerMMR(rankInfo) {
 }
 
 // Team balancing algorithm - creates two balanced teams based on player ranks
-async function balanceTeams(players) {
+async function balanceTeams(guildId, players) {
   // Get rank info for all players
   const playersWithRanks = await Promise.all(
     players.map(async (player) => {
-      const rankInfo = await getUserRankInfo(player.id);
+      const rankInfo = await getUserRankInfo(guildId, player.id);
       return {
         ...player,
         rankInfo,
@@ -209,6 +209,7 @@ async function createInhouseVisualization(
       // Draw Team 1 member
       await drawPlayerSlot(
         ctx,
+        inhouse.guildId,
         balancedTeams.team1[i],
         40 + i * spacing,
         startY,
@@ -221,6 +222,7 @@ async function createInhouseVisualization(
       // Draw Team 2 member
       await drawPlayerSlot(
         ctx,
+        inhouse.guildId,
         balancedTeams.team2[i],
         40 + i * spacing,
         startY + slotHeight + 35,
@@ -267,6 +269,7 @@ async function createInhouseVisualization(
 
       await drawPlayerSlot(
         ctx,
+        inhouse.guildId,
         allMembers[i],
         x,
         y,
@@ -292,6 +295,7 @@ async function createInhouseVisualization(
 // Helper function to draw a single player slot
 async function drawPlayerSlot(
   ctx,
+  guildId,
   member,
   x,
   y,
@@ -369,7 +373,7 @@ async function drawPlayerSlot(
 
       // Get and display rank
       const userRankInfo =
-        member.rankInfo || (await getUserRankInfo(member.id));
+        member.rankInfo || (await getUserRankInfo(guildId, member.id));
       if (userRankInfo) {
         // Try to load rank image
         const rankImage = await apiHandler.loadRankImage(userRankInfo.tier);
@@ -514,7 +518,7 @@ async function createInhouseEmbed(
   });
 
   // Get in-house leader rank for display
-  const leaderRankInfo = await getUserRankInfo(inhouse.leader.id);
+  const leaderRankInfo = await getUserRankInfo(inhouse.guildId, inhouse.leader.id);
   const leaderRankText = leaderRankInfo
     ? `${leaderRankInfo.name}${leaderRankInfo.rr !== undefined ? ` (${leaderRankInfo.rr} RR)` : ""}`
     : "Not Registered - Use !valstats";
@@ -630,7 +634,7 @@ async function formatInhouseMembersList(inhouse) {
   const members = [];
 
   // Add leader with rank
-  const leaderRankInfo = await getUserRankInfo(inhouse.leader.id);
+  const leaderRankInfo = await getUserRankInfo(inhouse.guildId, inhouse.leader.id);
   const leaderRankText = leaderRankInfo
     ? `(${leaderRankInfo.name}${leaderRankInfo.rr !== undefined ? ` - ${leaderRankInfo.rr} RR` : ""})`
     : "(Not registered)";
@@ -639,7 +643,7 @@ async function formatInhouseMembersList(inhouse) {
   // Add other members with ranks
   for (let i = 0; i < inhouse.members.length; i++) {
     const member = inhouse.members[i];
-    const memberRankInfo = await getUserRankInfo(member.id);
+    const memberRankInfo = await getUserRankInfo(inhouse.guildId, member.id);
     const memberRankText = memberRankInfo
       ? `(${memberRankInfo.name}${memberRankInfo.rr !== undefined ? ` - ${memberRankInfo.rr} RR` : ""})`
       : "(Not registered)";
@@ -809,6 +813,7 @@ module.exports = (client) => {
         // Create new in-house with the message author as leader
         const inhouse = {
           id: inhouseId,
+          guildId: message.guild.id,
           leader: {
             id: message.author.id,
             username: message.author.username,
@@ -1111,7 +1116,7 @@ module.exports = (client) => {
 
           // Balance the teams
           const allPlayers = [inhouse.leader, ...inhouse.members];
-          const balancedTeams = await balanceTeams(allPlayers);
+          const balancedTeams = await balanceTeams(inhouse.guildId, allPlayers);
 
           // Update in-house state
           inhouse.teamsBalanced = true;
