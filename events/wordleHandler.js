@@ -449,14 +449,32 @@ async function calculateStats(guildId, timeFilter = null) {
     });
     const result = {};
 
+    // Debug: Log time filter info
+    if (timeFilter) {
+      console.log(`[WORDLE DEBUG] Time filter: start=${timeFilter.start.toISOString()}, end=${timeFilter.end.toISOString()}`);
+      console.log(`[WORDLE DEBUG] Start ms: ${timeFilter.start.getTime()}, End ms: ${timeFilter.end.getTime()}`);
+    }
+
     allUserWordles.forEach((userWordle) => {
       // Filter scores by time range if specified
       let filteredScores = userWordle.scores;
       if (timeFilter) {
+        // Debug: Log first few scores for this user
+        if (userWordle.scores.length > 0) {
+          console.log(`[WORDLE DEBUG] User ${userWordle.userId} has ${userWordle.scores.length} total scores`);
+          const sampleScores = userWordle.scores.slice(0, 3);
+          sampleScores.forEach((s, i) => {
+            const scoreDate = new Date(s.timestamp);
+            console.log(`[WORDLE DEBUG]   Score ${i}: timestamp=${s.timestamp}, date=${scoreDate.toISOString()}, inRange=${scoreDate >= timeFilter.start && scoreDate <= timeFilter.end}`);
+          });
+        }
+
         filteredScores = userWordle.scores.filter((s) => {
           const scoreDate = new Date(s.timestamp);
           return scoreDate >= timeFilter.start && scoreDate <= timeFilter.end;
         });
+
+        console.log(`[WORDLE DEBUG] User ${userWordle.userId}: ${filteredScores.length}/${userWordle.scores.length} scores in range`);
       }
 
       if (filteredScores.length > 0) {
