@@ -144,7 +144,24 @@ function getAgentSelectOptions() {
         }
     }
 
-    return options;
+    // Discord limits select menus to 25 options
+    return options.slice(0, 25);
+}
+
+// Get select menu options for a specific role
+function getAgentSelectOptionsByRole(role) {
+    const agents = getAgentsByRole(role);
+    return agents.map(agent => ({
+        label: agent.name,
+        value: agent.id,
+        description: `${role} ${ROLE_EMOJIS[role]}`,
+        emoji: agent.emoji,
+    }));
+}
+
+// Get all roles
+function getAllRoles() {
+    return ['Duelist', 'Initiator', 'Controller', 'Sentinel'];
 }
 
 // Constants
@@ -166,4 +183,6 @@ module.exports = {
     formatAgentList,
     formatAgentListCompact,
     getAgentSelectOptions,
+    getAgentSelectOptionsByRole,
+    getAllRoles,
 };

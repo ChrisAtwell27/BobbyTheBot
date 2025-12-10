@@ -70,7 +70,8 @@ const {
   getAgentRole,
   isValidAgent,
   formatAgentList,
-  getAgentSelectOptions,
+  getAgentSelectOptionsByRole,
+  getAllRoles,
   ROLE_EMOJIS,
 } = require("../valorantApi/agentUtils");
 const {
@@ -781,7 +782,7 @@ async function showMMRHistory(message, registration) {
   }
 }
 
-// Show agent selection page
+// Show agent selection page with role-based menus
 async function showAgentSelection(interaction, registration) {
   const currentAgents = registration.preferredAgents || [];
 
@@ -791,7 +792,8 @@ async function showAgentSelection(interaction, registration) {
     .setColor("#ff4654")
     .setDescription(
       `Select up to **${MAX_PREFERRED_AGENTS} agents** you prefer to play.\n` +
-      "These will be displayed when you join team lobbies."
+      "These will be displayed when you join team lobbies.\n\n" +
+      "Use the dropdowns below to select agents by role:"
     )
     .setTimestamp()
     .setFooter({ text: "Powered by HenrikDev API • Agent Selection" });
@@ -817,28 +819,26 @@ async function showAgentSelection(interaction, registration) {
     });
   }
 
-  // Add role legend
-  embed.addFields({
-    name: "📋 Agent Roles",
-    value: Object.entries(ROLE_EMOJIS).map(([role, emoji]) => `${emoji} ${role}`).join(" • "),
-    inline: false,
-  });
+  // Create role-based select menus (Discord allows max 5 action rows, max 25 options per menu)
+  const roles = getAllRoles();
+  const components = [];
 
-  // Create select menu with all agents
-  const selectOptions = getAgentSelectOptions();
+  for (const role of roles) {
+    const roleOptions = getAgentSelectOptionsByRole(role);
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(`valagents_role_${role.toLowerCase()}_${interaction.user.id}`)
+      .setPlaceholder(`${ROLE_EMOJIS[role]} Select ${role}s...`)
+      .setMinValues(0)
+      .setMaxValues(Math.min(roleOptions.length, MAX_PREFERRED_AGENTS))
+      .addOptions(roleOptions.map(opt => ({
+        ...opt,
+        default: currentAgents.includes(opt.value),
+      })));
 
-  const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId(`valagents_menu_${interaction.user.id}`)
-    .setPlaceholder("Select your preferred agents...")
-    .setMinValues(0)
-    .setMaxValues(MAX_PREFERRED_AGENTS)
-    .addOptions(selectOptions.map(opt => ({
-      ...opt,
-      default: currentAgents.includes(opt.value),
-    })));
+    components.push(new ActionRowBuilder().addComponents(selectMenu));
+  }
 
-  const selectRow = new ActionRowBuilder().addComponents(selectMenu);
-
+  // Add button row
   const backButton = new ButtonBuilder()
     .setCustomId(`valstats_refresh_${interaction.user.id}`)
     .setLabel("Back to Stats")
@@ -853,10 +853,11 @@ async function showAgentSelection(interaction, registration) {
     .setDisabled(currentAgents.length === 0);
 
   const buttonRow = new ActionRowBuilder().addComponents(backButton, clearButton);
+  components.push(buttonRow);
 
   await interaction.editReply({
     embeds: [embed],
-    components: [selectRow, buttonRow],
+    components,
   });
 }
 
@@ -2126,7 +2127,50 @@ module.exports = {
 
           // Handle select menu interactions
           if (interaction.isStringSelectMenu()) {
-            // Agent selection menu
+            // Role-based agent selection menu (valagents_role_<role>_<userId>)
+            if (interaction.customId.startsWith("valagents_role_")) {
+              const parts = interaction.customId.split("_");
+              const userId = parts[3];
+              if (interaction.user.id !== userId) {
+                return await safeInteractionResponse(interaction, "reply", {
+                  content: "❌ This is not your agents menu!",
+                  ephemeral: true,
+                });
+              }
+
+              const selectedRole = parts[2]; // duelist, initiator, controller, sentinel
+              const selectedAgentsFromRole = interaction.values;
+
+              // Get current registration to merge selections
+              const registration = await getUserRegistration(interaction.guild.id, userId);
+              if (!registration) {
+                return await safeInteractionResponse(interaction, "reply", {
+                  content: "❌ You are not registered!",
+                  ephemeral: true,
+                });
+              }
+
+              const currentAgents = registration.preferredAgents || [];
+
+              // Get agents from other roles (keep them)
+              const otherRoleAgents = currentAgents.filter(agentId => {
+                const agent = getAgentById(agentId);
+                return agent && agent.role.toLowerCase() !== selectedRole;
+              });
+
+              // Merge: other roles + new selection from this role
+              let newAgents = [...otherRoleAgents, ...selectedAgentsFromRole];
+
+              // Enforce max limit
+              if (newAgents.length > MAX_PREFERRED_AGENTS) {
+                // Keep the most recent selections (prioritize new role selection)
+                newAgents = newAgents.slice(-MAX_PREFERRED_AGENTS);
+              }
+
+              await handleAgentSelection(interaction, newAgents);
+            }
+
+            // Legacy single menu support (valagents_menu_<userId>)
             if (interaction.customId.startsWith("valagents_menu_")) {
               const userId = interaction.customId.split("_")[2];
               if (interaction.user.id !== userId) {

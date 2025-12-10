@@ -108,8 +108,22 @@ async function batchGetUserRankInfo(guildId, userIds) {
         const registration = await apiHandler.getUserRegistration(guildId, userId);
         if (!registration) return { userId, data: null };
 
+        // Always include preferred agents from registration
+        const preferredAgents = registration.preferredAgents || [];
+
         const rankData = await apiHandler.getUserRankData(guildId, userId);
-        if (!rankData) return { userId, data: null };
+        if (!rankData) {
+          // Return data with preferred agents even if rank fetch fails
+          return {
+            userId,
+            data: {
+              ...apiHandler.RANK_MAPPING[0], // Unranked default
+              tier: 0,
+              rr: 0,
+              preferredAgents,
+            },
+          };
+        }
 
         const rankInfo =
           apiHandler.RANK_MAPPING[rankData.tier] || apiHandler.RANK_MAPPING[0];
@@ -117,7 +131,7 @@ async function batchGetUserRankInfo(guildId, userIds) {
           ...rankInfo,
           tier: rankData.tier,
           rr: rankData.rr,
-          preferredAgents: registration.preferredAgents || [],
+          preferredAgents,
         };
         return { userId, data };
       } catch {
