@@ -1442,15 +1442,15 @@ module.exports = {
             try {
               const user = await client.users.fetch(userId);
               userList.push(
-                `• **${user.tag}**: ${userData.name}#${
-                  userData.tag
-                } (${userData.region.toUpperCase()})`
+                `• **${user.tag}**: ${userData.name || "Unknown"}#${
+                  userData.tag || "????"
+                } (${(userData.region || "unknown").toUpperCase()})`
               );
             } catch (error) {
               userList.push(
-                `• **Unknown User** (${userId}): ${userData.name}#${
-                  userData.tag
-                } (${userData.region.toUpperCase()})`
+                `• **Unknown User** (${userId}): ${userData.name || "Unknown"}#${
+                  userData.tag || "????"
+                } (${(userData.region || "unknown").toUpperCase()})`
               );
             }
           }
