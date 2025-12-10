@@ -41,6 +41,11 @@ module.exports = (client) => {
       const handler = commandHandlers.get(commandName);
 
       if (handler) {
+        // Log the command usage
+        const guildName = message.guild?.name || "DM";
+        const channelName = message.channel?.name || "unknown";
+        console.log(`[CMD] !${commandName} | User: ${message.author.tag} (${message.author.id}) | Guild: ${guildName} | Channel: #${channelName}`);
+
         try {
           await handler(message, args, commandName);
         } catch (error) {

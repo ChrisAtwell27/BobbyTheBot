@@ -54,9 +54,19 @@ module.exports = (client) => {
     }
   });
 
+  // Helper to get interaction context for logging
+  function getInteractionContext(interaction) {
+    const guildName = interaction.guild?.name || "DM";
+    const channelName = interaction.channel?.name || "unknown";
+    const userTag = interaction.user?.tag || "unknown";
+    const userId = interaction.user?.id || "unknown";
+    return { guildName, channelName, userTag, userId };
+  }
+
   // Button interaction handler
   async function handleButton(interaction) {
     const customId = interaction.customId;
+    const { guildName, channelName, userTag, userId } = getInteractionContext(interaction);
 
     // Try to find a handler by exact match first
     let handler = buttonHandlers.get(customId);
@@ -72,6 +82,7 @@ module.exports = (client) => {
     }
 
     if (handler) {
+      console.log(`[BTN] ${customId} | User: ${userTag} (${userId}) | Guild: ${guildName} | Channel: #${channelName}`);
       await handler(interaction);
     } else {
       console.log(`No handler registered for button: ${customId}`);
@@ -81,6 +92,8 @@ module.exports = (client) => {
   // Select menu interaction handler
   async function handleSelectMenu(interaction) {
     const customId = interaction.customId;
+    const { guildName, channelName, userTag, userId } = getInteractionContext(interaction);
+    const selectedValues = interaction.values?.join(", ") || "none";
 
     // Try exact match first
     let handler = selectMenuHandlers.get(customId);
@@ -96,6 +109,7 @@ module.exports = (client) => {
     }
 
     if (handler) {
+      console.log(`[SELECT] ${customId} -> [${selectedValues}] | User: ${userTag} (${userId}) | Guild: ${guildName} | Channel: #${channelName}`);
       await handler(interaction);
     } else {
       console.log(`No handler registered for select menu: ${customId}`);
@@ -105,9 +119,18 @@ module.exports = (client) => {
   // Slash command interaction handler
   async function handleSlashCommand(interaction) {
     const commandName = interaction.commandName;
+    const { guildName, channelName, userTag, userId } = getInteractionContext(interaction);
     const handler = slashCommandHandlers.get(commandName);
 
+    // Get subcommand if present
+    let fullCommand = `/${commandName}`;
+    try {
+      const subcommand = interaction.options.getSubcommand(false);
+      if (subcommand) fullCommand += ` ${subcommand}`;
+    } catch (_) {}
+
     if (handler) {
+      console.log(`[SLASH] ${fullCommand} | User: ${userTag} (${userId}) | Guild: ${guildName} | Channel: #${channelName}`);
       await handler(interaction);
     } else {
       console.log(`No handler registered for slash command: ${commandName}`);
@@ -123,6 +146,7 @@ module.exports = (client) => {
   // Modal interaction handler
   async function handleModal(interaction) {
     const customId = interaction.customId;
+    const { guildName, channelName, userTag, userId } = getInteractionContext(interaction);
 
     // Try exact match first
     let handler = modalHandlers.get(customId);
@@ -138,6 +162,7 @@ module.exports = (client) => {
     }
 
     if (handler) {
+      console.log(`[MODAL] ${customId} | User: ${userTag} (${userId}) | Guild: ${guildName} | Channel: #${channelName}`);
       await handler(interaction);
     } else {
       console.log(`No handler registered for modal: ${customId}`);

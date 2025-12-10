@@ -19,9 +19,37 @@ module.exports = (client) => {
           );
 
           if (!memberCountChannel) {
+            // Auto-create the member count channel if it doesn't exist
             console.log(
-              `No "Member Count: " voice channel found in ${guild.name}`
+              `No "Member Count: " voice channel found in ${guild.name}, creating one...`
             );
+            try {
+              const memberCount = guild.memberCount;
+              const newChannel = await guild.channels.create({
+                name: `Member Count: ${memberCount}`,
+                type: ChannelType.GuildVoice,
+                permissionOverwrites: [
+                  {
+                    id: guild.roles.everyone,
+                    deny: ["Connect", "Speak"],
+                  },
+                ],
+              });
+              console.log(
+                `Created member count channel in ${guild.name}: ${newChannel.name}`
+              );
+            } catch (createError) {
+              if (createError.code === 50013) {
+                console.error(
+                  `Missing permissions to create member count channel in ${guild.name}`
+                );
+              } else {
+                console.error(
+                  `Failed to create member count channel in ${guild.name}:`,
+                  createError.message
+                );
+              }
+            }
             continue;
           }
 
@@ -186,12 +214,48 @@ module.exports = (client) => {
     }
   });
 
-  // Handle bot joining a new guild
-  client.on("guildCreate", (guild) => {
+  // Handle bot joining a new guild - auto-create member count channel
+  client.on("guildCreate", async (guild) => {
     console.log(
       `Joined new guild: ${guild.name} (${guild.memberCount} members)`
     );
-    // The regular interval will handle updating the count
+
+    // Check if member count channel already exists
+    const existingChannel = guild.channels.cache.find(
+      (channel) =>
+        channel.type === ChannelType.GuildVoice &&
+        channel.name.startsWith("Member Count: ")
+    );
+
+    if (!existingChannel) {
+      try {
+        const memberCount = guild.memberCount;
+        const newChannel = await guild.channels.create({
+          name: `Member Count: ${memberCount}`,
+          type: ChannelType.GuildVoice,
+          permissionOverwrites: [
+            {
+              id: guild.roles.everyone,
+              deny: ["Connect", "Speak"],
+            },
+          ],
+        });
+        console.log(
+          `Auto-created member count channel for new guild ${guild.name}: ${newChannel.name}`
+        );
+      } catch (error) {
+        if (error.code === 50013) {
+          console.error(
+            `Missing permissions to create member count channel in new guild ${guild.name}`
+          );
+        } else {
+          console.error(
+            `Failed to create member count channel in new guild ${guild.name}:`,
+            error.message
+          );
+        }
+      }
+    }
   });
 
   // Handle bot leaving a guild
