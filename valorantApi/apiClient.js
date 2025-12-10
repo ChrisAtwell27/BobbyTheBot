@@ -205,6 +205,30 @@ async function getMMRHistory(region, name, tag) {
     return await makeAPIRequest(`/v2/mmr-history/${region}/pc/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`);
 }
 
+/**
+ * Fetches esports schedule data
+ * @param {string} [region] - Optional region filter (international, north_america, emea, brazil, japan, korea, etc.)
+ * @param {string} [league] - Optional league filter (vct_americas, champions, masters, etc.)
+ * @returns {Promise<Object>} - Esports schedule data
+ */
+async function getEsportsSchedule(region = null, league = null) {
+    let endpoint = '/v1/esports/schedule';
+    const params = [];
+
+    if (region) {
+        params.push(`region=${encodeURIComponent(region)}`);
+    }
+    if (league) {
+        params.push(`league=${encodeURIComponent(league)}`);
+    }
+
+    if (params.length > 0) {
+        endpoint += '?' + params.join('&');
+    }
+
+    return await makeAPIRequest(endpoint);
+}
+
 module.exports = {
     makeAPIRequest,
     loadImageFromURL,
@@ -214,6 +238,7 @@ module.exports = {
     getMMRHistory,
     getStoredMatches,
     getMatches,
+    getEsportsSchedule,
     API_KEY,
     BASE_URL
 };

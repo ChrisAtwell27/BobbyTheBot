@@ -13,7 +13,7 @@ const {
 // VALORANT STATS & API HANDLER (REFACTORED)
 // ===============================================
 // This handler manages Valorant account registration and stats display
-// Commands: !valstats, !valprofile, !valmatches, !createteams (admin), !valtest (admin), !valreset (admin), !vallist (admin), !valskills (admin)
+// Commands: !valstats, !valprofile, !valmatches, !esports, !createteams (admin), !valtest (admin), !valreset (admin), !vallist (admin), !valskills (admin)
 //
 // IMPORTANT: This is separate from the Valorant TEAM BUILDER
 // Team Builder uses: !valorant, @Valorant role, valorant_ button prefixes
@@ -40,6 +40,7 @@ const {
   getMMRHistory,
   getStoredMatches,
   getMatches,
+  getEsportsSchedule,
 } = require("../valorantApi/apiClient");
 const {
   RANK_MAPPING,
@@ -1267,7 +1268,7 @@ module.exports = {
       );
       console.log(`Registered regions: ${VALID_REGIONS.join(", ")}`);
       console.log(
-        "Commands: !valstats, !valprofile, !valmatches, !createteams (admin), !valtest (admin), !valreset (admin), !vallist (admin), !valskills (admin)"
+        "Commands: !valstats, !valprofile, !valmatches, !esports, !createteams (admin), !valtest (admin), !valreset (admin), !vallist (admin), !valskills (admin)"
       );
       console.log(`Data file: ${USERS_FILE}`);
 
@@ -1676,6 +1677,148 @@ module.exports = {
               inline: false,
             });
             await testMessage.edit({ embeds: [testEmbed] });
+          }
+        }
+
+        // !esports command - Show Valorant esports schedule
+        if (command === "!esports") {
+          const args = message.content.split(" ").slice(1);
+          const region = args[0] ? args[0].toLowerCase().replace(/ /g, "_") : null;
+          const league = args[1] ? args[1].toLowerCase() : null;
+
+          const loadingEmbed = new EmbedBuilder()
+            .setTitle("🏆 Loading Esports Schedule...")
+            .setColor("#ff4654")
+            .setDescription("Fetching upcoming Valorant esports matches...")
+            .setTimestamp();
+
+          const loadingMessage = await message.channel.send({ embeds: [loadingEmbed] });
+
+          try {
+            const esportsData = await getEsportsSchedule(region, league);
+
+            if (esportsData.status !== 200 && esportsData.status !== 1) {
+              throw new Error(esportsData.error || "Failed to fetch esports data");
+            }
+
+            const matches = esportsData.data || [];
+
+            if (matches.length === 0) {
+              const noDataEmbed = new EmbedBuilder()
+                .setTitle("🏆 Valorant Esports Schedule")
+                .setColor("#ffaa00")
+                .setDescription("No upcoming matches found for the specified filters.")
+                .addFields({
+                  name: "💡 Try Different Filters",
+                  value: "`!esports` - All matches\n`!esports international` - International matches\n`!esports emea` - EMEA region\n`!esports na vct_americas` - VCT Americas",
+                  inline: false,
+                })
+                .setTimestamp();
+
+              return await loadingMessage.edit({ embeds: [noDataEmbed] });
+            }
+
+            // Get upcoming matches (filter out completed, limit to 10)
+            const upcomingMatches = matches
+              .filter(m => m.state !== "completed")
+              .slice(0, 10);
+
+            const recentMatches = matches
+              .filter(m => m.state === "completed")
+              .slice(0, 5);
+
+            const embed = new EmbedBuilder()
+              .setTitle("🏆 Valorant Esports Schedule")
+              .setColor("#ff4654")
+              .setDescription(
+                region || league
+                  ? `Showing matches${region ? ` for **${region.toUpperCase()}**` : ""}${league ? ` in **${league}**` : ""}`
+                  : "Showing all upcoming Valorant esports matches"
+              )
+              .setTimestamp()
+              .setFooter({ text: "Powered by HenrikDev Valorant API" });
+
+            // Add upcoming matches
+            if (upcomingMatches.length > 0) {
+              const upcomingText = upcomingMatches.map(match => {
+                const date = new Date(match.date);
+                const dateStr = `<t:${Math.floor(date.getTime() / 1000)}:R>`;
+                const leagueName = match.league?.name || "Unknown League";
+                const teams = match.match?.teams || [];
+
+                let matchInfo = `**${leagueName}**\n`;
+                if (teams.length >= 2) {
+                  matchInfo += `${teams[0]?.name || "TBD"} vs ${teams[1]?.name || "TBD"}\n`;
+                } else if (teams.length === 1) {
+                  matchInfo += `${teams[0]?.name || "TBD"} vs TBD\n`;
+                }
+                matchInfo += `📅 ${dateStr}`;
+
+                return matchInfo;
+              }).join("\n\n");
+
+              embed.addFields({
+                name: "📅 Upcoming Matches",
+                value: upcomingText.substring(0, 1024) || "No upcoming matches",
+                inline: false,
+              });
+            }
+
+            // Add recent results
+            if (recentMatches.length > 0) {
+              const recentText = recentMatches.map(match => {
+                const leagueName = match.league?.name || "Unknown League";
+                const teams = match.match?.teams || [];
+
+                let matchInfo = `**${leagueName}**\n`;
+                if (teams.length >= 2) {
+                  const team1 = teams[0];
+                  const team2 = teams[1];
+                  const winner1 = team1?.has_won ? "🏆 " : "";
+                  const winner2 = team2?.has_won ? "🏆 " : "";
+                  matchInfo += `${winner1}${team1?.name || "TBD"} (${team1?.game_wins || 0}) vs (${team2?.game_wins || 0}) ${winner2}${team2?.name || "TBD"}`;
+                }
+
+                if (match.vod) {
+                  matchInfo += `\n[📺 VOD](${match.vod})`;
+                }
+
+                return matchInfo;
+              }).join("\n\n");
+
+              embed.addFields({
+                name: "✅ Recent Results",
+                value: recentText.substring(0, 1024) || "No recent results",
+                inline: false,
+              });
+            }
+
+            // Add usage help
+            embed.addFields({
+              name: "🔍 Filter Options",
+              value:
+                "**Regions:** `international`, `north_america`, `emea`, `brazil`, `japan`, `korea`, `oceania`\n" +
+                "**Leagues:** `vct_americas`, `vct_emea`, `vct_pacific`, `champions`, `masters`, `challengers_na`\n" +
+                "**Usage:** `!esports [region] [league]`",
+              inline: false,
+            });
+
+            await loadingMessage.edit({ embeds: [embed] });
+          } catch (error) {
+            console.error("Error fetching esports data:", error);
+
+            const errorEmbed = new EmbedBuilder()
+              .setTitle("❌ Error Fetching Esports Data")
+              .setColor("#ff0000")
+              .setDescription("There was an error fetching the esports schedule.")
+              .addFields({
+                name: "Error Details",
+                value: `\`\`\`${error.message}\`\`\``,
+                inline: false,
+              })
+              .setTimestamp();
+
+            await loadingMessage.edit({ embeds: [errorEmbed] });
           }
         }
       });
