@@ -181,11 +181,37 @@ async function getMatches(region, name, tag) {
     return await makeAPIRequest(`/v4/matches/${region}/pc/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`);
 }
 
+/**
+ * Fetches comprehensive MMR data for a player (v3 endpoint)
+ * Includes: current rank, peak rank, seasonal stats, leaderboard placement
+ * @param {string} region - Player region
+ * @param {string} name - Player name
+ * @param {string} tag - Player tag (without #)
+ * @returns {Promise<Object>} - Comprehensive MMR data
+ */
+async function getMMRDataV3(region, name, tag) {
+    return await makeAPIRequest(`/v3/mmr/${region}/pc/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`);
+}
+
+/**
+ * Fetches MMR history for a player (v2 endpoint)
+ * Includes: match-by-match RR changes, elo progression, tier changes
+ * @param {string} region - Player region
+ * @param {string} name - Player name
+ * @param {string} tag - Player tag (without #)
+ * @returns {Promise<Object>} - MMR history data
+ */
+async function getMMRHistory(region, name, tag) {
+    return await makeAPIRequest(`/v2/mmr-history/${region}/pc/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`);
+}
+
 module.exports = {
     makeAPIRequest,
     loadImageFromURL,
     getAccountData,
     getMMRData,
+    getMMRDataV3,
+    getMMRHistory,
     getStoredMatches,
     getMatches,
     API_KEY,

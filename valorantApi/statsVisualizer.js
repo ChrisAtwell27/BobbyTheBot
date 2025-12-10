@@ -10,29 +10,30 @@ const { RANK_MAPPING, loadRankImage, createFallbackRankIcon } = require('./rankU
 /**
  * Creates a comprehensive stats visualization for a player
  * @param {Object} accountData - Account data from API
- * @param {Object} mmrData - MMR/rank data from API
+ * @param {Object} mmrData - MMR/rank data from API (v2)
  * @param {Array} matchData - Match data from API
  * @param {string} userAvatar - User's Discord avatar URL
  * @param {Object} registration - User registration data
+ * @param {Object} mmrDataV3 - MMR data from v3 API (optional, for enhanced display)
  * @returns {Promise<Canvas>} - The created canvas
  */
-async function createStatsVisualization(accountData, mmrData, matchData, userAvatar, registration) {
-    const canvas = createCanvas(1000, 800);
+async function createStatsVisualization(accountData, mmrData, matchData, userAvatar, registration, mmrDataV3 = null) {
+    const canvas = createCanvas(1000, 900);
     const ctx = canvas.getContext('2d');
 
     // Enhanced background with pattern
-    const gradient = ctx.createLinearGradient(0, 0, 1000, 800);
+    const gradient = ctx.createLinearGradient(0, 0, 1000, 900);
     gradient.addColorStop(0, '#0a0e13');
     gradient.addColorStop(0.3, '#1e2328');
     gradient.addColorStop(0.7, '#2c3e50');
     gradient.addColorStop(1, '#0a0e13');
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 1000, 800);
+    ctx.fillRect(0, 0, 1000, 900);
 
     // Add subtle pattern overlay
     ctx.fillStyle = 'rgba(255, 70, 84, 0.03)';
     for (let i = 0; i < 1000; i += 50) {
-        for (let j = 0; j < 800; j += 50) {
+        for (let j = 0; j < 900; j += 50) {
             if ((i + j) % 100 === 0) {
                 ctx.fillRect(i, j, 25, 25);
             }
@@ -46,9 +47,9 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     accentGradient.addColorStop(1, '#ff4654');
     ctx.fillStyle = accentGradient;
     ctx.fillRect(0, 0, 1000, 8);
-    ctx.fillRect(0, 792, 1000, 8);
-    ctx.fillRect(0, 0, 8, 800);
-    ctx.fillRect(992, 0, 8, 800);
+    ctx.fillRect(0, 892, 1000, 8);
+    ctx.fillRect(0, 0, 8, 900);
+    ctx.fillRect(992, 0, 8, 900);
 
     // Enhanced header section
     ctx.fillStyle = '#ffffff';
@@ -125,68 +126,154 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     ctx.fillText(`Level ${accountData.account_level} • Region: ${accountData.region.toUpperCase()}`, 220, 160);
     ctx.fillText(`Last Updated: ${new Date(accountData.updated_at).toLocaleDateString()}`, 220, 180);
 
-    // Enhanced current rank section
-    if (mmrData && mmrData.current_data) {
-        const currentRank = mmrData.current_data;
-        const rankInfo = RANK_MAPPING[currentRank.currenttier] || RANK_MAPPING[0];
+    // Enhanced current rank section - use v3 data if available, fallback to v2
+    const hasV3Data = mmrDataV3 && mmrDataV3.current;
+    const hasV2Data = mmrData && mmrData.current_data;
 
+    if (hasV3Data || hasV2Data) {
         // Enhanced rank box with gradient
-        const rankBoxGradient = ctx.createLinearGradient(50, 220, 950, 350);
+        const rankBoxGradient = ctx.createLinearGradient(50, 220, 950, 370);
         rankBoxGradient.addColorStop(0, 'rgba(255, 70, 84, 0.15)');
         rankBoxGradient.addColorStop(1, 'rgba(255, 107, 122, 0.15)');
         ctx.fillStyle = rankBoxGradient;
-        ctx.fillRect(50, 220, 900, 130);
+        ctx.fillRect(50, 220, 900, 150);
         ctx.strokeStyle = '#ff4654';
         ctx.lineWidth = 3;
-        ctx.strokeRect(50, 220, 900, 130);
+        ctx.strokeRect(50, 220, 900, 150);
 
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 24px Arial';
         ctx.textAlign = 'left';
         ctx.fillText('CURRENT COMPETITIVE RANK', 80, 250);
 
+        // Get current rank info - prefer v3 data
+        let currentTier = 0;
+        let currentRR = 0;
+        let lastChange = 0;
+        let totalElo = 0;
+        let leaderboardRank = null;
+        let gamesNeeded = 0;
+
+        if (hasV3Data) {
+            currentTier = mmrDataV3.current.tier?.id || 0;
+            currentRR = mmrDataV3.current.rr || 0;
+            lastChange = mmrDataV3.current.last_change || 0;
+            totalElo = mmrDataV3.current.elo || 0;
+            leaderboardRank = mmrDataV3.current.leaderboard_placement?.rank || null;
+            gamesNeeded = mmrDataV3.current.games_needed_for_rating || 0;
+        } else if (hasV2Data) {
+            currentTier = mmrData.current_data.currenttier || 0;
+            currentRR = mmrData.current_data.ranking_in_tier || 0;
+            lastChange = mmrData.current_data.mmr_change_to_last_game || 0;
+        }
+
+        const rankInfo = RANK_MAPPING[currentTier] || RANK_MAPPING[0];
+
         // Load and display rank image
-        const rankImage = await loadRankImage(currentRank.currenttier);
+        const rankImage = await loadRankImage(currentTier);
         if (rankImage) {
-            ctx.drawImage(rankImage, 80, 260, 60, 60);
+            ctx.drawImage(rankImage, 80, 260, 70, 70);
         } else {
-            createFallbackRankIcon(ctx, 80, 260, 60, rankInfo);
+            createFallbackRankIcon(ctx, 80, 260, 70, rankInfo);
         }
 
         ctx.fillStyle = rankInfo.color;
         ctx.font = 'bold 32px Arial';
-        ctx.fillText(rankInfo.name, 160, 295);
+        ctx.fillText(rankInfo.name, 170, 295);
 
-        if (currentRank.ranking_in_tier !== undefined) {
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 18px Arial';
-            ctx.fillText(`${currentRank.ranking_in_tier} RR`, 160, 320);
+        // RR display
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 18px Arial';
+        ctx.fillText(`${currentRR} RR`, 170, 320);
+
+        // Total ELO display (from v3)
+        if (totalElo > 0) {
+            ctx.fillStyle = '#cccccc';
+            ctx.font = '14px Arial';
+            ctx.fillText(`ELO: ${totalElo}`, 170, 340);
         }
 
-        if (currentRank.mmr_change_to_last_game) {
-            const change = currentRank.mmr_change_to_last_game;
-            ctx.fillStyle = change > 0 ? '#00ff88' : '#ff4444';
+        // Games needed warning
+        if (gamesNeeded > 0) {
+            ctx.fillStyle = '#ffaa00';
+            ctx.font = '12px Arial';
+            ctx.fillText(`${gamesNeeded} games needed for rating`, 170, 358);
+        }
+
+        // Last game RR change
+        if (lastChange !== 0) {
+            ctx.fillStyle = lastChange > 0 ? '#00ff88' : '#ff4444';
             ctx.font = 'bold 16px Arial';
-            ctx.fillText(`Last Game: ${change > 0 ? '+' : ''}${change} RR`, 400, 295);
+            ctx.fillText(`Last Game: ${lastChange > 0 ? '+' : ''}${lastChange} RR`, 380, 280);
         }
 
-        // Enhanced peak rank display
-        if (mmrData.highest_rank) {
-            const peakRank = RANK_MAPPING[mmrData.highest_rank.tier] || RANK_MAPPING[0];
+        // Leaderboard rank for high ranks (from v3)
+        if (leaderboardRank) {
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 18px Arial';
+            ctx.fillText(`#${leaderboardRank} Leaderboard`, 380, 310);
+        }
+
+        // Peak rank display - prefer v3 data
+        let peakTier = 0;
+        let peakSeason = null;
+
+        if (hasV3Data && mmrDataV3.peak) {
+            peakTier = mmrDataV3.peak.tier?.id || 0;
+            peakSeason = mmrDataV3.peak.season?.short || null;
+        } else if (hasV2Data && mmrData.highest_rank) {
+            peakTier = mmrData.highest_rank.tier || 0;
+        }
+
+        if (peakTier > 0) {
+            const peakRank = RANK_MAPPING[peakTier] || RANK_MAPPING[0];
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 18px Arial';
-            ctx.fillText('Peak Rank:', 600, 280);
+            ctx.fillText('Peak Rank:', 700, 265);
 
-            const peakRankImage = await loadRankImage(mmrData.highest_rank.tier);
+            const peakRankImage = await loadRankImage(peakTier);
             if (peakRankImage) {
-                ctx.drawImage(peakRankImage, 600, 285, 40, 40);
+                ctx.drawImage(peakRankImage, 700, 275, 45, 45);
             } else {
-                createFallbackRankIcon(ctx, 600, 285, 40, peakRank);
+                createFallbackRankIcon(ctx, 700, 275, 45, peakRank);
             }
 
             ctx.fillStyle = peakRank.color;
             ctx.font = 'bold 20px Arial';
-            ctx.fillText(peakRank.name, 650, 310);
+            ctx.fillText(peakRank.name, 755, 302);
+
+            // Show peak season if available (from v3)
+            if (peakSeason) {
+                ctx.fillStyle = '#aaaaaa';
+                ctx.font = '12px Arial';
+                ctx.fillText(`Achieved: ${peakSeason}`, 755, 322);
+            }
+        }
+
+        // Seasonal stats summary (from v3)
+        if (hasV3Data && mmrDataV3.seasonal && mmrDataV3.seasonal.length > 0) {
+            const currentSeason = mmrDataV3.seasonal[0];
+            if (currentSeason.games > 0) {
+                const wins = currentSeason.wins || 0;
+                const games = currentSeason.games || 0;
+                const winRate = ((wins / games) * 100).toFixed(1);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 14px Arial';
+                ctx.fillText('This Act:', 580, 345);
+
+                ctx.fillStyle = '#e0e0e0';
+                ctx.font = '14px Arial';
+                ctx.fillText(`${wins}W / ${games - wins}L (${winRate}% WR)`, 650, 345);
+
+                // Act wins triangles
+                if (currentSeason.act_wins && currentSeason.act_wins.length > 0) {
+                    ctx.fillStyle = '#ffd700';
+                    ctx.font = '12px Arial';
+                    const topWins = currentSeason.act_wins.slice(0, 3).map(w => w.name).join(', ');
+                    ctx.fillText(`Act Wins: ${topWins}`, 580, 365);
+                }
+            }
         }
     }
 
@@ -199,20 +286,20 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
 
         if (competitiveMatches.length > 0) {
             // Section header with gradient background
-            const matchesHeaderGradient = ctx.createLinearGradient(50, 370, 950, 400);
+            const matchesHeaderGradient = ctx.createLinearGradient(50, 390, 950, 420);
             matchesHeaderGradient.addColorStop(0, 'rgba(255, 70, 84, 0.2)');
             matchesHeaderGradient.addColorStop(1, 'rgba(255, 107, 122, 0.2)');
             ctx.fillStyle = matchesHeaderGradient;
-            ctx.fillRect(50, 370, 900, 30);
+            ctx.fillRect(50, 390, 900, 30);
 
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 22px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText('RECENT COMPETITIVE MATCHES', 80, 390);
+            ctx.fillText('RECENT COMPETITIVE MATCHES', 80, 412);
 
             const recentMatches = competitiveMatches.slice(0, 6);
             recentMatches.forEach((match, index) => {
-                const y = 420 + index * 60;
+                const y = 445 + index * 60;
                 const player = match.players.find(p => p.name.toLowerCase() === accountData.name.toLowerCase());
 
                 if (!player) return;
@@ -274,11 +361,11 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 22px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText('NO RECENT COMPETITIVE MATCHES FOUND', 80, 420);
+            ctx.fillText('NO RECENT COMPETITIVE MATCHES FOUND', 80, 445);
 
             ctx.font = '16px Arial';
             ctx.fillStyle = '#cccccc';
-            ctx.fillText('Play some competitive matches to see your recent performance here!', 80, 450);
+            ctx.fillText('Play some competitive matches to see your recent performance here!', 80, 475);
         }
     }
 
@@ -286,7 +373,7 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     ctx.fillStyle = '#666666';
     ctx.font = '12px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('Powered by HenrikDev Valorant API • Enhanced Visual Stats v3.0 • KDA + Stored Matches Integration', 500, 780);
+    ctx.fillText('Powered by HenrikDev Valorant API • Enhanced Stats v4.0 • MMR + ELO + Seasonal Data', 500, 880);
 
     return canvas;
 }
