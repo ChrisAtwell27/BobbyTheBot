@@ -252,12 +252,6 @@ setInterval(() => {
     );
   }
 
-  // Log every 30 seconds regardless to track baseline
-  if (Date.now() % 30000 < 5000) {
-    console.log(
-      `[HEALTH] System CPU: ${systemCpuPercent.toFixed(2)}% | Load: ${load1m} | Memory: ${heapUsedMB}/${heapTotalMB}MB heap, ${rssMB}MB RSS | Uptime: ${(process.uptime() / 60).toFixed(1)}m`
-    );
-  }
 }, 5000); // Check every 5 seconds
 
 // Initialize centralized routers FIRST to reduce CPU usage
