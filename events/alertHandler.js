@@ -2,6 +2,28 @@ const { EmbedBuilder } = require("discord.js");
 
 const { CleanupMap } = require("../utils/memoryUtils");
 const { getSetting } = require("../utils/settingsManager");
+const { checkSubscription, TIERS } = require("../utils/subscriptionUtils");
+
+// Cache for subscription status per guild (refreshed every 5 minutes)
+const subscriptionCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Check if guild has Plus tier (cached to avoid spamming subscription checks)
+async function hasAlertAccess(guildId) {
+  const cached = subscriptionCache.get(guildId);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.hasAccess;
+  }
+
+  try {
+    const result = await checkSubscription(guildId, TIERS.PLUS);
+    subscriptionCache.set(guildId, { hasAccess: result.hasAccess, timestamp: Date.now() });
+    return result.hasAccess;
+  } catch (error) {
+    console.error('Error checking subscription for alerts:', error);
+    return false;
+  }
+}
 
 module.exports = (client, alertKeywords, legacyAlertChannelId) => {
   // Rate limiting: Track alerts to prevent spam with automatic cleanup
@@ -31,6 +53,9 @@ module.exports = (client, alertKeywords, legacyAlertChannelId) => {
 
     // Ignore empty messages
     if (!message.content || !message.content.trim()) return;
+
+    // Check subscription - Keyword Alerts require Plus tier
+    if (!await hasAlertAccess(message.guild.id)) return;
 
     // Check if alerts are enabled
     const features = await getSetting(message.guild.id, "features", {});

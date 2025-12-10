@@ -1,8 +1,11 @@
 const { getConvexClient } = require('../database/convexClient');
 const { api } = require('../convex/_generated/api');
+const { checkSubscription, TIERS } = require('../utils/subscriptionUtils');
 
 // Cache for logging channel IDs per guild (refreshed every 5 minutes)
 const loggingChannelCache = new Map();
+// Cache for subscription status per guild (refreshed every 5 minutes)
+const subscriptionCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 async function getLoggingChannelId(guildId) {
@@ -21,6 +24,23 @@ async function getLoggingChannelId(guildId) {
   } catch (error) {
     console.error('Error fetching logging channel:', error);
     return null;
+  }
+}
+
+// Check if guild has Plus tier (cached to avoid spamming subscription checks)
+async function hasLoggingAccess(guildId) {
+  const cached = subscriptionCache.get(guildId);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.hasAccess;
+  }
+
+  try {
+    const result = await checkSubscription(guildId, TIERS.PLUS);
+    subscriptionCache.set(guildId, { hasAccess: result.hasAccess, timestamp: Date.now() });
+    return result.hasAccess;
+  } catch (error) {
+    console.error('Error checking subscription for logging:', error);
+    return false;
   }
 }
 
@@ -44,6 +64,9 @@ module.exports = (client, fallbackLoggingChannelId) => {
 
         // Only log in guilds
         if (!message.guild) return;
+
+        // Check subscription - Audit Logs require Plus tier
+        if (!await hasLoggingAccess(message.guild.id)) return;
 
         // Get guild-specific logging channel
         const loggingChannelId = await getLoggingChannelId(message.guild.id) || fallbackLoggingChannelId;
@@ -87,6 +110,9 @@ module.exports = (client, fallbackLoggingChannelId) => {
         // Only log in guilds
         if (!oldMessage.guild) return;
 
+        // Check subscription - Audit Logs require Plus tier
+        if (!await hasLoggingAccess(oldMessage.guild.id)) return;
+
         // Only log if content actually changed
         if (oldMessage.content !== newMessage.content) {
           // Get guild-specific logging channel
@@ -106,6 +132,9 @@ module.exports = (client, fallbackLoggingChannelId) => {
 
     client.on('guildBanAdd', async ban => {
       try {
+        // Check subscription - Audit Logs require Plus tier
+        if (!await hasLoggingAccess(ban.guild.id)) return;
+
         // Get guild-specific logging channel
         const loggingChannelId = await getLoggingChannelId(ban.guild.id) || fallbackLoggingChannelId;
         if (!loggingChannelId) return;
@@ -122,6 +151,9 @@ module.exports = (client, fallbackLoggingChannelId) => {
 
     client.on('guildBanRemove', async ban => {
       try {
+        // Check subscription - Audit Logs require Plus tier
+        if (!await hasLoggingAccess(ban.guild.id)) return;
+
         // Get guild-specific logging channel
         const loggingChannelId = await getLoggingChannelId(ban.guild.id) || fallbackLoggingChannelId;
         if (!loggingChannelId) return;
