@@ -349,27 +349,46 @@ function getAgentStatsFromMatches(registration, matchData) {
 
     const agentStats = {};
 
-    // Filter for competitive matches
-    const competitiveMatches = matchData.filter(match =>
-        match.metadata && match.metadata.queue && match.metadata.queue.name &&
-        match.metadata.queue.name.toLowerCase() === 'competitive'
-    );
+    // Filter for competitive matches - handle both v3 and v4 formats
+    const competitiveMatches = matchData.filter(match => {
+        if (!match.metadata) return false;
+        // v3 format: metadata.mode
+        if (match.metadata.mode && match.metadata.mode.toLowerCase() === 'competitive') return true;
+        // v4 format: metadata.queue.name
+        if (match.metadata.queue?.name?.toLowerCase() === 'competitive') return true;
+        return false;
+    });
 
     for (const match of competitiveMatches) {
         if (!match.players) continue;
 
-        const player = match.players.find(p =>
+        // Handle both v3 (players.all_players) and v4 (players array) formats
+        const playersArray = match.players?.all_players || match.players || [];
+        const player = playersArray.find(p =>
             p.name && p.name.toLowerCase() === registration.name.toLowerCase()
         );
 
-        if (!player || !player.agent || !player.agent.name) continue;
+        // Get agent name - handle both v3 (character) and v4 (agent.name) formats
+        const agentNameRaw = player?.character || player?.agent?.name;
+        if (!player || !agentNameRaw) continue;
 
-        const agentName = player.agent.name.toLowerCase();
-        const won = player.team_id === (match.teams?.find(t => t.won) || {}).team_id;
+        const agentName = agentNameRaw.toLowerCase();
+
+        // Determine win - handle both v3 and v4 formats
+        let won = false;
+        if (match.teams?.red && match.teams?.blue) {
+            // v3 format: teams.red/blue.has_won
+            const playerTeam = player.team?.toLowerCase();
+            if (playerTeam === 'red') won = match.teams.red.has_won;
+            else if (playerTeam === 'blue') won = match.teams.blue.has_won;
+        } else if (Array.isArray(match.teams)) {
+            // v4 format: teams[].won
+            won = player.team_id === (match.teams.find(t => t.won) || {}).team_id;
+        }
 
         if (!agentStats[agentName]) {
             agentStats[agentName] = {
-                name: player.agent.name,
+                name: agentNameRaw, // Use the raw name (preserves capitalization)
                 games: 0,
                 wins: 0,
                 kills: 0,

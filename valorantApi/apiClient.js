@@ -171,14 +171,17 @@ async function getStoredMatches(region, name, tag) {
 }
 
 /**
- * Fetches match data for a player (v4 endpoint - legacy fallback)
+ * Fetches match data for a player (v3 endpoint - supports mode filter)
  * @param {string} region - Player region
  * @param {string} name - Player name
  * @param {string} tag - Player tag (without #)
+ * @param {string} mode - Game mode filter (competitive, unrated, etc.) - optional
+ * @param {number} size - Number of matches to fetch (default 10, max 10 per API)
  * @returns {Promise<Object>} - Match data
  */
-async function getMatches(region, name, tag) {
-    return await makeAPIRequest(`/v4/matches/${region}/pc/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`);
+async function getMatches(region, name, tag, mode = 'competitive', size = 10) {
+    const modeParam = mode ? `&mode=${mode}` : '';
+    return await makeAPIRequest(`/v3/matches/${region}/${encodeURIComponent(name)}/${encodeURIComponent(tag)}?size=${size}${modeParam}`);
 }
 
 /**

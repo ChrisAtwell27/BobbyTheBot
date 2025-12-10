@@ -368,12 +368,17 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     // Adjust match section Y position based on whether best agent is shown
     const matchSectionY = bestAgent && bestAgent.name ? 455 : 390;
 
-    // Enhanced recent matches section - Filter for competitive matches only
+    // Enhanced recent matches section - supports both v3 and v4 API formats
     if (matchData && matchData.length > 0) {
-        // Filter for competitive matches only
-        const competitiveMatches = matchData.filter(match =>
-            match.metadata && match.metadata.queue.name && match.metadata.queue.name.toLowerCase() === 'competitive'
-        );
+        // Filter for competitive matches - handle both v3 and v4 formats
+        const competitiveMatches = matchData.filter(match => {
+            if (!match.metadata) return false;
+            // v3 format: metadata.mode
+            if (match.metadata.mode && match.metadata.mode.toLowerCase() === 'competitive') return true;
+            // v4 format: metadata.queue.name
+            if (match.metadata.queue?.name?.toLowerCase() === 'competitive') return true;
+            return false;
+        });
 
         if (competitiveMatches.length > 0) {
             // Section header with gradient background
@@ -391,11 +396,24 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
             const recentMatches = competitiveMatches.slice(0, 8); // Show up to 8 recent matches
             recentMatches.forEach((match, index) => {
                 const y = matchSectionY + 55 + index * 60;
-                const player = match.players.find(p => p.name.toLowerCase() === accountData.name.toLowerCase());
+
+                // Handle both v3 (players.all_players) and v4 (players array) formats
+                const playersArray = match.players?.all_players || match.players || [];
+                const player = playersArray.find(p => p.name?.toLowerCase() === accountData.name.toLowerCase());
 
                 if (!player) return;
 
-                const won = player.team_id === (match.teams.find(t => t.won) || {}).team_id;
+                // Determine win - handle both v3 and v4 formats
+                let won = false;
+                if (match.teams?.red && match.teams?.blue) {
+                    // v3 format: teams.red/blue.has_won
+                    const playerTeam = player.team?.toLowerCase();
+                    if (playerTeam === 'red') won = match.teams.red.has_won;
+                    else if (playerTeam === 'blue') won = match.teams.blue.has_won;
+                } else if (Array.isArray(match.teams)) {
+                    // v4 format: teams[].won
+                    won = player.team_id === (match.teams.find(t => t.won) || {}).team_id;
+                }
 
                 // Enhanced match result background with gradient
                 const matchGradient = ctx.createLinearGradient(50, y - 25, 950, y + 35);
@@ -418,13 +436,15 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
                 ctx.font = 'bold 16px Arial';
                 ctx.fillText(won ? 'WIN' : 'LOSS', 80, y);
 
-                // Map name
+                // Map name - handle both v3 (string) and v4 (object with .name) formats
                 ctx.fillStyle = '#ffffff';
                 ctx.font = 'bold 14px Arial';
-                ctx.fillText(match.metadata.map.name, 160, y);
+                const mapName = typeof match.metadata.map === 'string' ? match.metadata.map : match.metadata.map?.name || 'Unknown';
+                ctx.fillText(mapName, 160, y);
 
-                // Agent name
-                ctx.fillText(player.agent.name, 320, y);
+                // Agent name - handle both v3 (character) and v4 (agent.name) formats
+                const agentName = player.character || player.agent?.name || 'Unknown';
+                ctx.fillText(agentName, 320, y);
 
                 // Enhanced KDA display
                 const kda = `${player.stats.kills}/${player.stats.deaths}/${player.stats.assists}`;
@@ -436,8 +456,10 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
                 ctx.fillStyle = acs >= 250 ? '#00ff88' : acs >= 200 ? '#ffff00' : acs >= 150 ? '#ff8800' : '#ff4444';
                 ctx.fillText(`${acs} ACS`, 600, y);
 
-                // Date
-                const matchDate = new Date(match.metadata.started_at);
+                // Date - handle both v3 (game_start unix) and v4 (started_at ISO) formats
+                const matchDate = match.metadata.game_start
+                    ? new Date(match.metadata.game_start * 1000)
+                    : new Date(match.metadata.started_at);
                 ctx.fillStyle = '#cccccc';
                 ctx.fillText(matchDate.toLocaleDateString(), 720, y);
 
