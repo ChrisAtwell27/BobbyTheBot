@@ -3,24 +3,44 @@
 // ===============================================
 // Consistent user-facing messages with emojis and next-step guidance
 
+const {
+  getCurrencyName,
+  getCurrencyEmoji,
+  formatCurrency,
+  DEFAULTS,
+} = require("./currencyHelper");
+
 /**
  * Generate insufficient funds error message with helpful next steps
  * @param {string} username - User's display name
  * @param {number} currentBalance - User's current balance
  * @param {number} required - Amount required
- * @returns {string} - Formatted error message
+ * @param {string} guildId - Guild ID for custom currency (optional)
+ * @returns {Promise<string>} - Formatted error message
  */
-function insufficientFundsMessage(username, currentBalance, required) {
-    const shortage = required - currentBalance;
-    return `❌ **Insufficient Funds**\n\n` +
-           `Sorry ${username}, you don't have enough Honey.\n\n` +
-           `**Your Balance:** 🍯${currentBalance.toLocaleString()}\n` +
-           `**Required:** 🍯${required.toLocaleString()}\n` +
-           `**Short By:** 🍯${shortage.toLocaleString()}\n\n` +
-           `💡 **Earn More:**\n` +
-           `• \`!beg\` - Daily free honey\n` +
-           `• \`!work\` - Work for honey\n` +
-           `• \`!gamble\` - Try your luck with smaller bets`;
+async function insufficientFundsMessage(
+  username,
+  currentBalance,
+  required,
+  guildId = null
+) {
+  const shortage = required - currentBalance;
+  const currencyName = await getCurrencyName(guildId);
+  const balanceStr = await formatCurrency(guildId, currentBalance);
+  const requiredStr = await formatCurrency(guildId, required);
+  const shortageStr = await formatCurrency(guildId, shortage);
+
+  return (
+    `❌ **Insufficient Funds**\n\n` +
+    `Sorry ${username}, you don't have enough ${currencyName}.\n\n` +
+    `**Your Balance:** ${balanceStr}\n` +
+    `**Required:** ${requiredStr}\n` +
+    `**Short By:** ${shortageStr}\n\n` +
+    `💡 **Earn More:**\n` +
+    `• \`!beg\` - Daily free ${currencyName.toLowerCase()}\n` +
+    `• \`!work\` - Work for ${currencyName.toLowerCase()}\n` +
+    `• \`!gamble\` - Try your luck with smaller bets`
+  );
 }
 
 /**
@@ -31,16 +51,16 @@ function insufficientFundsMessage(username, currentBalance, required) {
  * @returns {string} - Formatted error message
  */
 function invalidUsageMessage(command, syntax, example = null) {
-    let message = `❌ **Invalid Command Usage**\n\n` +
-                  `**Correct Syntax:** \`${syntax}\``;
+  let message =
+    `❌ **Invalid Command Usage**\n\n` + `**Correct Syntax:** \`${syntax}\``;
 
-    if (example) {
-        message += `\n**Example:** \`${example}\``;
-    }
+  if (example) {
+    message += `\n**Example:** \`${example}\``;
+  }
 
-    message += `\n\n💡 **Tip:** Type \`!help ${command}\` for more info`;
+  message += `\n\n💡 **Tip:** Type \`!help ${command}\` for more info`;
 
-    return message;
+  return message;
 }
 
 /**
@@ -49,7 +69,7 @@ function invalidUsageMessage(command, syntax, example = null) {
  * @returns {string} - Formatted error message
  */
 function cannotPerformActionMessage(reason) {
-    return `❌ **Action Not Allowed**\n\n${reason}`;
+  return `❌ **Action Not Allowed**\n\n${reason}`;
 }
 
 /**
@@ -57,12 +77,23 @@ function cannotPerformActionMessage(reason) {
  * @param {string} username - Winner's username
  * @param {number} winAmount - Amount won
  * @param {number} newBalance - New balance after win
- * @returns {string} - Formatted success message
+ * @param {string} guildId - Guild ID for custom currency (optional)
+ * @returns {Promise<string>} - Formatted success message
  */
-function gamblingWinMessage(username, winAmount, newBalance) {
-    return `🎉 **Congratulations ${username}!**\n\n` +
-           `**You Won:** 🍯${winAmount.toLocaleString()}\n` +
-           `**New Balance:** 🍯${newBalance.toLocaleString()}`;
+async function gamblingWinMessage(
+  username,
+  winAmount,
+  newBalance,
+  guildId = null
+) {
+  const wonStr = await formatCurrency(guildId, winAmount);
+  const balanceStr = await formatCurrency(guildId, newBalance);
+
+  return (
+    `🎉 **Congratulations ${username}!**\n\n` +
+    `**You Won:** ${wonStr}\n` +
+    `**New Balance:** ${balanceStr}`
+  );
 }
 
 /**
@@ -70,18 +101,28 @@ function gamblingWinMessage(username, winAmount, newBalance) {
  * @param {string} username - Loser's username
  * @param {number} lostAmount - Amount lost
  * @param {number} newBalance - New balance after loss
- * @returns {string} - Formatted loss message
+ * @param {string} guildId - Guild ID for custom currency (optional)
+ * @returns {Promise<string>} - Formatted loss message
  */
-function gamblingLossMessage(username, lostAmount, newBalance) {
-    let message = `😔 **Better Luck Next Time, ${username}**\n\n` +
-                  `**You Lost:** 🍯${lostAmount.toLocaleString()}\n` +
-                  `**Remaining Balance:** 🍯${newBalance.toLocaleString()}`;
+async function gamblingLossMessage(
+  username,
+  lostAmount,
+  newBalance,
+  guildId = null
+) {
+  const lostStr = await formatCurrency(guildId, lostAmount);
+  const balanceStr = await formatCurrency(guildId, newBalance);
 
-    if (newBalance < 100) {
-        message += `\n\n💡 **Low Balance?** Try \`!beg\` or \`!work\` to earn more`;
-    }
+  let message =
+    `😔 **Better Luck Next Time, ${username}**\n\n` +
+    `**You Lost:** ${lostStr}\n` +
+    `**Remaining Balance:** ${balanceStr}`;
 
-    return message;
+  if (newBalance < 100) {
+    message += `\n\n💡 **Low Balance?** Try \`!beg\` or \`!work\` to earn more`;
+  }
+
+  return message;
 }
 
 /**
@@ -91,18 +132,20 @@ function gamblingLossMessage(username, lostAmount, newBalance) {
  * @returns {string} - Formatted error message
  */
 function cooldownMessage(command, remainingSeconds) {
-    const minutes = Math.floor(remainingSeconds / 60);
-    const seconds = remainingSeconds % 60;
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = remainingSeconds % 60;
 
-    let timeString;
-    if (minutes > 0) {
-        timeString = `${minutes}m ${seconds}s`;
-    } else {
-        timeString = `${seconds}s`;
-    }
+  let timeString;
+  if (minutes > 0) {
+    timeString = `${minutes}m ${seconds}s`;
+  } else {
+    timeString = `${seconds}s`;
+  }
 
-    return `⏱️ **Cooldown Active**\n\n` +
-           `You must wait **${timeString}** before using \`${command}\` again.`;
+  return (
+    `⏱️ **Cooldown Active**\n\n` +
+    `You must wait **${timeString}** before using \`${command}\` again.`
+  );
 }
 
 /**
@@ -111,11 +154,13 @@ function cooldownMessage(command, remainingSeconds) {
  * @returns {string} - Formatted error message
  */
 function genericErrorMessage(action) {
-    return `❌ **Something Went Wrong**\n\n` +
-           `An error occurred while ${action}.\n\n` +
-           `💡 **What to do:**\n` +
-           `• Try again in a few moments\n` +
-           `• If this persists, contact a server admin`;
+  return (
+    `❌ **Something Went Wrong**\n\n` +
+    `An error occurred while ${action}.\n\n` +
+    `💡 **What to do:**\n` +
+    `• Try again in a few moments\n` +
+    `• If this persists, contact a server admin`
+  );
 }
 
 /**
@@ -124,7 +169,7 @@ function genericErrorMessage(action) {
  * @returns {string} - Formatted processing message
  */
 function processingMessage(action) {
-    return `⏳ **Processing...**\n\nPlease wait while ${action}`;
+  return `⏳ **Processing...**\n\nPlease wait while ${action}`;
 }
 
 /**
@@ -133,7 +178,7 @@ function processingMessage(action) {
  * @returns {string} - Formatted error message
  */
 function notFoundMessage(item) {
-    return `❌ **Not Found**\n\n${item} could not be found.`;
+  return `❌ **Not Found**\n\n${item} could not be found.`;
 }
 
 /**
@@ -141,10 +186,12 @@ function notFoundMessage(item) {
  * @param {string} requiredPermission - What permission is needed
  * @returns {string} - Formatted error message
  */
-function permissionDeniedMessage(requiredPermission = 'Administrator') {
-    return `🔒 **Permission Denied**\n\n` +
-           `You don't have permission to use this command.\n\n` +
-           `**Required:** ${requiredPermission}`;
+function permissionDeniedMessage(requiredPermission = "Administrator") {
+  return (
+    `🔒 **Permission Denied**\n\n` +
+    `You don't have permission to use this command.\n\n` +
+    `**Required:** ${requiredPermission}`
+  );
 }
 
 /**
@@ -153,19 +200,19 @@ function permissionDeniedMessage(requiredPermission = 'Administrator') {
  * @returns {string} - Formatted timeout message
  */
 function timeoutMessage(username) {
-    return `⏱️ **Timeout**\n\n${username} took too long to respond. The action has been cancelled.`;
+  return `⏱️ **Timeout**\n\n${username} took too long to respond. The action has been cancelled.`;
 }
 
 module.exports = {
-    insufficientFundsMessage,
-    invalidUsageMessage,
-    cannotPerformActionMessage,
-    gamblingWinMessage,
-    gamblingLossMessage,
-    cooldownMessage,
-    genericErrorMessage,
-    processingMessage,
-    notFoundMessage,
-    permissionDeniedMessage,
-    timeoutMessage
+  insufficientFundsMessage,
+  invalidUsageMessage,
+  cannotPerformActionMessage,
+  gamblingWinMessage,
+  gamblingLossMessage,
+  cooldownMessage,
+  genericErrorMessage,
+  processingMessage,
+  notFoundMessage,
+  permissionDeniedMessage,
+  timeoutMessage,
 };

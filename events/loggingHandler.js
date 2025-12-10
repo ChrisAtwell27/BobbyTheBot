@@ -1,11 +1,14 @@
 const { getConvexClient } = require('../database/convexClient');
 const { api } = require('../convex/_generated/api');
 const { checkSubscription, TIERS } = require('../utils/subscriptionUtils');
+const { getSetting } = require('../utils/settingsManager');
 
 // Cache for logging channel IDs per guild (refreshed every 5 minutes)
 const loggingChannelCache = new Map();
 // Cache for subscription status per guild (refreshed every 5 minutes)
 const subscriptionCache = new Map();
+// Cache for feature toggle status per guild
+const featureToggleCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 async function getLoggingChannelId(guildId) {
@@ -27,8 +30,30 @@ async function getLoggingChannelId(guildId) {
   }
 }
 
+// Check if audit logs feature is enabled for guild (cached)
+async function isAuditLogsEnabled(guildId) {
+  const cached = featureToggleCache.get(guildId);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.enabled;
+  }
+
+  try {
+    const features = await getSetting(guildId, 'features', {});
+    // Default to true if not specified (legacy behavior for existing guilds)
+    const enabled = features.audit_logs !== false;
+    featureToggleCache.set(guildId, { enabled, timestamp: Date.now() });
+    return enabled;
+  } catch (error) {
+    console.error('Error checking audit_logs feature toggle:', error);
+    return true; // Default to enabled on error
+  }
+}
+
 // Check if guild has Plus tier (cached to avoid spamming subscription checks)
 async function hasLoggingAccess(guildId) {
+  // First check if feature is toggled on
+  if (!await isAuditLogsEnabled(guildId)) return false;
+
   const cached = subscriptionCache.get(guildId);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.hasAccess;

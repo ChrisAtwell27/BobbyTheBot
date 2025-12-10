@@ -24,6 +24,7 @@ const {
 } = require("../database/helpers/serverHelpers");
 const { getConvexClient } = require("../database/convexClient");
 const { api } = require("../convex/_generated/api");
+const { formatCurrency, getCurrencyName, getCurrencyEmoji } = require("../utils/currencyHelper");
 
 // Function to load image from URL
 async function loadImageFromURL(url) {
@@ -111,14 +112,14 @@ module.exports = (client) => {
       });
 
       const embed = new EmbedBuilder()
-        .setTitle("🍯 Honey Bank - Account Statement")
+        .setTitle(`${await getCurrencyEmoji(guildId)} ${await getCurrencyName(guildId)} Bank - Account Statement`)
         .setColor("#FFD700")
         .setDescription(`**🐝 Account Holder:** ${username}`)
         .setImage("attachment://balance-card.png")
         .addFields(
           {
-            name: "🍯 Current Balance",
-            value: `**🍯${balance.toLocaleString()}**`,
+            name: `${await getCurrencyEmoji(guildId)} Current Balance`,
+            value: `**${await formatCurrency(guildId, balance)}**`,
             inline: true,
           },
           {
@@ -129,7 +130,7 @@ module.exports = (client) => {
           },
           { name: "📊 Hive Rank", value: `#${rank}`, inline: true }
         )
-        .setFooter({ text: "Honey Bank - Sweet savings guaranteed! 🍯" })
+        .setFooter({ text: `${await getCurrencyName(guildId)} Bank - Sweet savings guaranteed! ${await getCurrencyEmoji(guildId)}` })
         .setTimestamp();
 
       return message.channel.send({ embeds: [embed], files: [attachment] });
@@ -156,19 +157,19 @@ module.exports = (client) => {
       const houseBalance = await getHouseBalance(guildId);
 
       const embed = new EmbedBuilder()
-        .setTitle("🍯 Honey Leaderboard - Top Beekeepers")
+        .setTitle(`${await getCurrencyEmoji(guildId)} ${await getCurrencyName(guildId)} Leaderboard - Top Beekeepers`)
         .setColor("#FFD700")
-        .setDescription("**🐝 Top 10 Honey Collectors**")
+        .setDescription(`**🐝 Top 10 ${await getCurrencyName(guildId)} Collectors**`)
         .setImage("attachment://leaderboard.png")
         .addFields(
           {
-            name: "🍯 Total Honey Supply",
-            value: `🍯${totalEconomy.toLocaleString()}`,
+            name: `${await getCurrencyEmoji(guildId)} Total ${await getCurrencyName(guildId)} Supply`,
+            value: `${await formatCurrency(guildId, totalEconomy)}`,
             inline: true,
           },
           {
             name: "🏦 Hive Reserve",
-            value: `🍯${houseBalance.toLocaleString()}`,
+            value: `${await formatCurrency(guildId, houseBalance)}`,
             inline: true,
           },
           {
@@ -177,7 +178,7 @@ module.exports = (client) => {
             inline: true,
           }
         )
-        .setFooter({ text: "Sweet rankings updated in real-time! 🍯" })
+        .setFooter({ text: `Sweet rankings updated in real-time! ${await getCurrencyEmoji(guildId)}` })
         .setTimestamp();
 
       return message.channel.send({ embeds: [embed], files: [attachment] });
@@ -221,19 +222,19 @@ module.exports = (client) => {
       });
 
       const embed = new EmbedBuilder()
-        .setTitle("💰 Honey Award - Transaction Complete")
+        .setTitle(`💰 ${await getCurrencyName(guildId)} Award - Transaction Complete`)
         .setColor("#00ff00")
-        .setDescription(`**${mentionedUser.username}** has been awarded Honey!`)
+        .setDescription(`**${mentionedUser.username}** has been awarded ${await getCurrencyName(guildId)}!`)
         .setImage("attachment://transaction-receipt.png")
         .addFields(
           {
             name: "🎁 Amount Awarded",
-            value: `**+🍯${amount.toLocaleString()}**`,
+            value: `**+${await formatCurrency(guildId, amount)}**`,
             inline: true,
           },
           {
             name: "💳 New Balance",
-            value: `**🍯${newBalance.toLocaleString()}**`,
+            value: `**${await formatCurrency(guildId, newBalance)}**`,
             inline: true,
           },
           {
@@ -242,7 +243,7 @@ module.exports = (client) => {
             inline: true,
           }
         )
-        .setFooter({ text: "Transaction processed by Honey Bank" })
+        .setFooter({ text: `Transaction processed by ${await getCurrencyName(guildId)} Bank` })
         .setTimestamp();
 
       return message.channel.send({ embeds: [embed], files: [attachment] });
@@ -278,19 +279,19 @@ module.exports = (client) => {
         );
 
         const embed = new EmbedBuilder()
-          .setTitle("💸 Honey Spending - Transaction Complete")
+          .setTitle(`💸 ${await getCurrencyName(guildId)} Spending - Transaction Complete`)
           .setColor("#ff6b6b")
           .setDescription(`**${message.author.username}** made a purchase!`)
           .setImage("attachment://spending-receipt.png")
           .addFields(
             {
               name: "💸 Amount Spent",
-              value: `**-🍯${amount.toLocaleString()}**`,
+              value: `**-${await formatCurrency(guildId, amount)}**`,
               inline: true,
             },
             {
               name: "💳 Remaining Balance",
-              value: `**🍯${newBalance.toLocaleString()}**`,
+              value: `**${await formatCurrency(guildId, newBalance)}**`,
               inline: true,
             },
             {
@@ -321,21 +322,21 @@ module.exports = (client) => {
           .addFields(
             {
               name: "💳 Your Balance",
-              value: `🍯${balance.toLocaleString()}`,
+              value: `${await formatCurrency(guildId, balance)}`,
               inline: true,
             },
             {
               name: "💸 Attempted Purchase",
-              value: `🍯${amount.toLocaleString()}`,
+              value: `${await formatCurrency(guildId, amount)}`,
               inline: true,
             },
             {
               name: "💰 Amount Needed",
-              value: `🍯${(amount - balance).toLocaleString()}`,
+              value: `${await formatCurrency(guildId, amount - balance)}`,
               inline: true,
             }
           )
-          .setFooter({ text: "Consider earning more Honey through games!" })
+          .setFooter({ text: `Consider earning more ${await getCurrencyName(guildId)} through games!` })
           .setTimestamp();
 
         return message.channel.send({ embeds: [embed], files: [attachment] });
@@ -380,12 +381,12 @@ module.exports = (client) => {
         const embed = new EmbedBuilder()
           .setTitle("🎉 Server-Wide Award - Economic Stimulus!")
           .setColor("#00ff00")
-          .setDescription("**Universal Basic Honey Distribution**")
+          .setDescription(`**Universal Basic ${await getCurrencyName(guildId)} Distribution**`)
           .setImage("attachment://mass-award.png")
           .addFields(
             {
               name: "💰 Amount Per User",
-              value: `**+🍯${amount.toLocaleString()}**`,
+              value: `**+${await formatCurrency(guildId, amount)}**`,
               inline: true,
             },
             {
@@ -395,7 +396,7 @@ module.exports = (client) => {
             },
             {
               name: "💳 Total Distributed",
-              value: `**🍯${(amount * membersAwarded).toLocaleString()}**`,
+              value: `**${await formatCurrency(guildId, amount * membersAwarded)}**`,
               inline: true,
             }
           )
@@ -457,26 +458,26 @@ module.exports = (client) => {
         const embed = new EmbedBuilder()
           .setTitle("❌ Payment Failed - Insufficient Funds")
           .setColor("#ff0000")
-          .setDescription("**You don't have enough Honey for this transfer**")
+          .setDescription(`**You don't have enough ${await getCurrencyName(guildId)} for this transfer**`)
           .setImage("attachment://insufficient-funds.png")
           .addFields(
             {
               name: "💳 Your Balance",
-              value: `🍯${senderBalance.toLocaleString()}`,
+              value: `${await formatCurrency(guildId, senderBalance)}`,
               inline: true,
             },
             {
               name: "💸 Attempted Transfer",
-              value: `🍯${amount.toLocaleString()}`,
+              value: `${await formatCurrency(guildId, amount)}`,
               inline: true,
             },
             {
               name: "💰 Amount Needed",
-              value: `🍯${(amount - senderBalance).toLocaleString()}`,
+              value: `${await formatCurrency(guildId, amount - senderBalance)}`,
               inline: true,
             }
           )
-          .setFooter({ text: "Earn more Honey through games and activities!" })
+          .setFooter({ text: `Earn more ${await getCurrencyName(guildId)} through games and activities!` })
           .setTimestamp();
 
         return message.channel.send({ embeds: [embed], files: [attachment] });
@@ -516,21 +517,21 @@ module.exports = (client) => {
         .addFields(
           {
             name: "💰 Amount Transferred",
-            value: `**🍯${amount.toLocaleString()}**`,
+            value: `**${await formatCurrency(guildId, amount)}**`,
             inline: true,
           },
           {
             name: "💳 Sender Balance",
-            value: `🍯${senderNewBalance.toLocaleString()}`,
+            value: `${await formatCurrency(guildId, senderNewBalance)}`,
             inline: true,
           },
           {
             name: "💳 Recipient Balance",
-            value: `🍯${recipientNewBalance.toLocaleString()}`,
+            value: `${await formatCurrency(guildId, recipientNewBalance)}`,
             inline: true,
           }
         )
-        .setFooter({ text: "Transaction processed by Honey Bank" })
+        .setFooter({ text: `Transaction processed by ${await getCurrencyName(guildId)} Bank` })
         .setTimestamp();
 
       return message.channel.send({ embeds: [embed], files: [attachment] });
@@ -551,14 +552,14 @@ module.exports = (client) => {
       // Create donate button
       const donateButton = new ButtonBuilder()
         .setCustomId(`donate_${userId}_${message.id}`)
-        .setLabel("🍯 Donate Honey (1-10)")
+        .setLabel("💰 Donate (1-10)")
         .setStyle(ButtonStyle.Success)
         .setEmoji("🐝");
 
       const row = new ActionRowBuilder().addComponents(donateButton);
 
       const embed = new EmbedBuilder()
-        .setTitle("🐝 Please Share Some Honey!")
+        .setTitle(`🐝 Please Share Some ${await getCurrencyName(guildId)}!`)
         .setColor("#FFB900")
         .setDescription(
           `**${message.author.username}** is asking for your kindness!`
@@ -566,14 +567,14 @@ module.exports = (client) => {
         .setImage("attachment://tip-jar.png")
         .addFields(
           {
-            name: "🍯 Current Honey Jar",
-            value: `🍯${balance.toLocaleString()}`,
+            name: `${await getCurrencyEmoji(guildId)} Current ${await getCurrencyName(guildId)} Jar`,
+            value: `${await formatCurrency(guildId, balance)}`,
             inline: true,
           },
-          { name: "🎲 Donation Range", value: "1-10 Honey", inline: true },
+          { name: "🎲 Donation Range", value: `1-10 ${await getCurrencyName(guildId)}`, inline: true },
           { name: "🕐 Status", value: "🐝 Accepting donations", inline: true }
         )
-        .setFooter({ text: "Click the button to share some sweet honey! 🍯" })
+        .setFooter({ text: `Click the button to share some sweet ${await getCurrencyName(guildId).then(n => n.toLowerCase())}! ${await getCurrencyEmoji(guildId)}` })
         .setTimestamp();
 
       return message.channel.send({
@@ -585,6 +586,7 @@ module.exports = (client) => {
 
     // Economy stats command
     if (args[0] === "!economy") {
+      const guildId = message.guild.id;
       const stats = await getEconomyStats(message.guild);
       const economyChart = await createEconomyChart(stats);
       const attachment = new AttachmentBuilder(economyChart.toBuffer(), {
@@ -599,22 +601,22 @@ module.exports = (client) => {
         .addFields(
           {
             name: "💰 Total Economy",
-            value: `🍯${stats.totalEconomy.toLocaleString()}`,
+            value: `${await formatCurrency(guildId, stats.totalEconomy)}`,
             inline: true,
           },
           {
             name: "🏛️ House Balance",
-            value: `🍯${stats.houseBalance.toLocaleString()}`,
+            value: `${await formatCurrency(guildId, stats.houseBalance)}`,
             inline: true,
           },
           {
             name: "👑 Richest User",
-            value: `🍯${stats.richestBalance.toLocaleString()}`,
+            value: `${await formatCurrency(guildId, stats.richestBalance)}`,
             inline: true,
           },
           {
             name: "📈 Average Balance",
-            value: `🍯${stats.averageBalance.toLocaleString()}`,
+            value: `${await formatCurrency(guildId, stats.averageBalance)}`,
             inline: true,
           },
           {
@@ -657,7 +659,7 @@ module.exports = (client) => {
         .setTitle("⚠️ WARNING: DESTRUCTIVE ACTION")
         .setColor("#ff0000")
         .setDescription(
-          "**You are about to reset ALL user balances to 5000 honey!**\n\nThis action is **IRREVERSIBLE** and will affect all users in the database."
+          `**You are about to reset ALL user balances to 5000 ${await getCurrencyName(guildId)}!**\n\nThis action is **IRREVERSIBLE** and will affect all users in the database.`
         )
         .addFields(
           {
@@ -665,7 +667,7 @@ module.exports = (client) => {
             value: `${userCount} users`,
             inline: true,
           },
-          { name: "💰 New Balance", value: "🍯5,000", inline: true },
+          { name: "💰 New Balance", value: `${await formatCurrency(guildId, 5000)}`, inline: true },
           {
             name: "👤 Requested By",
             value: message.author.username,
@@ -738,10 +740,10 @@ module.exports = (client) => {
             );
 
             const successEmbed = new EmbedBuilder()
-              .setTitle("✅ Economy Reset - Honey Wiped")
+              .setTitle(`✅ Economy Reset - ${await getCurrencyName(guildId)} Wiped`)
               .setColor("#00ff00")
               .setDescription(
-                "**All user balances have been reset to 5000 honey!**"
+                `**All user balances have been reset to 5000 ${await getCurrencyName(guildId)}!**`
               )
               .addFields(
                 {
@@ -749,14 +751,14 @@ module.exports = (client) => {
                   value: `${result.modifiedCount}`,
                   inline: true,
                 },
-                { name: "💰 New Balance", value: "**🍯5,000**", inline: true },
+                { name: "💰 New Balance", value: `**${await formatCurrency(guildId, 5000)}**`, inline: true },
                 {
                   name: "👤 Reset By",
                   value: `${message.author.username}`,
                   inline: true,
                 }
               )
-              .setFooter({ text: "The great honey redistribution of 2025" })
+              .setFooter({ text: `The great ${await getCurrencyName(guildId).then(n => n.toLowerCase())} redistribution of 2025` })
               .setTimestamp();
 
             await interaction.editReply({
@@ -842,7 +844,7 @@ module.exports = (client) => {
       const donorBalance = await getBalance(guildId, donorId);
       if (donorBalance < 1) {
         return interaction.reply({
-          content: "❌ You need at least 1 Honey to donate!",
+          content: `❌ You need at least 1 ${await getCurrencyName(guildId)} to donate!`,
           ephemeral: true,
         });
       }
@@ -891,12 +893,12 @@ module.exports = (client) => {
         .addFields(
           {
             name: "💰 Amount Donated",
-            value: `**🍯${actualDonation.toLocaleString()}**`,
+            value: `**${await formatCurrency(guildId, actualDonation)}**`,
             inline: true,
           },
           {
             name: "💳 Your Balance",
-            value: `🍯${donorNewBalance.toLocaleString()}`,
+            value: `${await formatCurrency(guildId, donorNewBalance)}`,
             inline: true,
           },
           {
@@ -935,14 +937,14 @@ module.exports = (client) => {
           .addFields(
             {
               name: "💳 Current Balance",
-              value: `🍯${beggarNewBalance.toLocaleString()}`,
+              value: `${await formatCurrency(guildId, beggarNewBalance)}`,
               inline: true,
             },
-            { name: "🎲 Donation Range", value: "1-10 Honey", inline: true },
+            { name: "🎲 Donation Range", value: `1-10 ${await getCurrencyName(guildId)}`, inline: true },
             { name: "🕐 Status", value: "Accepting donations", inline: true }
           )
           .setFooter({
-            text: `Latest: ${donor.username} donated 🍯${actualDonation}!`,
+            text: `Latest: ${donor.username} donated ${await formatCurrency(guildId, actualDonation)}!`,
           })
           .setTimestamp();
 
@@ -976,12 +978,12 @@ module.exports = (client) => {
         .addFields(
           {
             name: "🎁 Welcome Bonus",
-            value: "You've received **🍯500 Honey** to get started!",
+            value: `You've received **${await formatCurrency(guildId, 500)}** to get started!`,
             inline: false,
           },
           {
             name: "💰 Check Your Balance",
-            value: "Use `!balance` to see your Honey",
+            value: `Use \`!balance\` to see your ${await getCurrencyName(guildId)}`,
             inline: true,
           },
           {

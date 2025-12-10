@@ -172,6 +172,16 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Settings command handler - !settings, !config, !setup
     registerCommandHandler(client, commandRouter, interactionRouter, './settingsCommandHandler');
 
+    // Gladiator Arena handler - !gladiator, !arena, !arenastats, !arenahelp
+    const gladiatorHandler = require('./gladiatorHandler');
+    const gladiatorWrapper = createHandlerWrapper(client, () => gladiatorHandler);
+    if (gladiatorWrapper.messageHandler) {
+        commandRouter.registerMessageProcessor(gladiatorWrapper.messageHandler);
+    }
+    if (gladiatorWrapper.interactionHandler) {
+        interactionRouter.registerButton('gladiator_', gladiatorWrapper.interactionHandler);
+    }
+
     // Mafia handler - !createmafia, !join, !vote, etc.
     const mafiaHandler = require('./mafiaHandler');
     const mafiaWrapper = createHandlerWrapper(client, () => mafiaHandler);

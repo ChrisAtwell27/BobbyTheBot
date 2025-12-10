@@ -10,9 +10,9 @@ const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const {
-  getBobbyBucks,
-  updateBobbyBucks,
-} = require("../database/helpers/economyHelpers");
+  getBalance,
+  updateBalance,
+} = require("../database/helpers/convexEconomyHelpers");
 const {
   getHouseBalance,
   updateHouse,
@@ -28,6 +28,7 @@ const {
   createUpgradeEmbed,
   TIERS,
 } = require("../utils/subscriptionUtils");
+const { formatCurrency, getCurrencyName, getCurrencyEmoji } = require("../utils/currencyHelper");
 
 // Game constants
 const GAME_DURATION = 300000; // 5 minutes in milliseconds
@@ -100,19 +101,21 @@ module.exports = (client) => {
       ) {
         return message.channel.send(
           invalidUsageMessage("koth", `!koth [amount]`, `!koth ${MIN_BET}`) +
-            `\n**Minimum Bet:** 🍯${MIN_BET}`
+            `\n**Minimum Bet:** ${await formatCurrency(message.guild.id, MIN_BET)}`
         );
       }
 
       const challengeAmount = parseInt(args[1], 10);
-      const balance = await getBobbyBucks(userId);
+      const guildId = message.guild.id;
+      const balance = await getBalance(guildId, userId);
 
       if (balance < challengeAmount) {
         return message.channel.send(
-          insufficientFundsMessage(
+          await insufficientFundsMessage(
             message.author.username,
             balance,
-            challengeAmount
+            challengeAmount,
+            guildId
           )
         );
       }
@@ -141,8 +144,9 @@ module.exports = (client) => {
 
   // Start a new King of the Hill game
   async function startNewKothGame(message, userId, amount, channelId) {
+    const guildId = message.guild.id;
     // Deduct the initial bet
-    await updateBobbyBucks(userId, -amount);
+    await updateBalance(guildId, userId, -amount);
 
     const gameData = {
       kingId: userId,
@@ -152,6 +156,7 @@ module.exports = (client) => {
       startTime: Date.now(),
       endTime: Date.now() + GAME_DURATION,
       channelId: channelId,
+      guildId: message.guild.id,
       lastActivity: Date.now(),
       timer: null, // Store timer reference to prevent memory leaks
     };
@@ -177,7 +182,7 @@ module.exports = (client) => {
         },
         {
           name: "💰 Current Pot",
-          value: `🍯{amount.toLocaleString()}`,
+          value: `${await formatCurrency(message.guild.id, amount)}`,
           inline: true,
         },
         {
@@ -210,6 +215,7 @@ module.exports = (client) => {
   // Handle challenge to existing king
   async function handleChallenge(message, userId, challengeAmount, channelId) {
     const gameData = activeKothGames.get(channelId);
+    const guildId = message.guild.id;
 
     if (userId === gameData.kingId) {
       return message.channel.send(
@@ -226,7 +232,7 @@ module.exports = (client) => {
     }
 
     // Deduct challenger's bet
-    await updateBobbyBucks(userId, -challengeAmount);
+    await updateBalance(guildId, userId, -challengeAmount);
 
     // Calculate chance to overthrow (50% at equal amounts, capped at 95% max, 5% min)
     const ratio = challengeAmount / gameData.kingAmount;
@@ -274,7 +280,7 @@ module.exports = (client) => {
           { name: "👑 New King", value: message.author.username, inline: true },
           {
             name: "💰 Current Pot",
-            value: `🍯{gameData.pot.toLocaleString()}`,
+            value: `${await formatCurrency(message.guild.id, gameData.pot)}`,
             inline: true,
           },
           {
@@ -284,7 +290,7 @@ module.exports = (client) => {
           },
           {
             name: "💪 Kings Power",
-            value: `🍯{challengeAmount.toLocaleString()}`,
+            value: `${await formatCurrency(message.guild.id, challengeAmount)}`,
             inline: true,
           }
         )
@@ -331,7 +337,7 @@ module.exports = (client) => {
           { name: "👑 King Remains", value: gameData.kingName, inline: true },
           {
             name: "💰 Pot Increased",
-            value: `🍯{gameData.pot.toLocaleString()} (+🍯{challengeAmount.toLocaleString()})`,
+            value: `${await formatCurrency(message.guild.id, gameData.pot)} (+${await formatCurrency(message.guild.id, challengeAmount)})`,
             inline: true,
           },
           {
@@ -341,7 +347,7 @@ module.exports = (client) => {
           },
           {
             name: "💪 Kings Power",
-            value: `🍯{gameData.kingAmount.toLocaleString()}`,
+            value: `${await formatCurrency(message.guild.id, gameData.kingAmount)}`,
             inline: true,
           }
         )
@@ -378,12 +384,12 @@ module.exports = (client) => {
         { name: "👑 Current King", value: gameData.kingName, inline: true },
         {
           name: "💰 Current Pot",
-          value: `🍯{gameData.pot.toLocaleString()}`,
+          value: `${await formatCurrency(message.guild.id, gameData.pot)}`,
           inline: true,
         },
         {
           name: "💪 King's Power",
-          value: `🍯{gameData.kingAmount.toLocaleString()}`,
+          value: `${await formatCurrency(message.guild.id, gameData.kingAmount)}`,
           inline: true,
         },
         {
@@ -423,8 +429,8 @@ module.exports = (client) => {
     const houseCut = Math.floor(gameData.pot * HOUSE_CUT);
     const winnings = gameData.pot - houseCut;
 
-    // Pay the king
-    await updateBobbyBucks(gameData.kingId, winnings);
+    // Pay the king (use guildId stored in gameData)
+    await updateBalance(gameData.guildId, gameData.kingId, winnings);
     await updateHouse(houseCut);
 
     // Remove from active games
@@ -453,17 +459,17 @@ module.exports = (client) => {
             { name: "🏆 Victor", value: gameData.kingName, inline: true },
             {
               name: "💰 Total Winnings",
-              value: `🍯{winnings.toLocaleString()}`,
+              value: `${await formatCurrency(gameData.guildId, winnings)}`,
               inline: true,
             },
             {
               name: "🏛️ House Cut",
-              value: `🍯{houseCut.toLocaleString()} (${HOUSE_CUT * 100}%)`,
+              value: `${await formatCurrency(gameData.guildId, houseCut)} (${HOUSE_CUT * 100}%)`,
               inline: true,
             },
             {
               name: "📊 Final Pot",
-              value: `🍯{gameData.pot.toLocaleString()}`,
+              value: `${await formatCurrency(gameData.guildId, gameData.pot)}`,
               inline: true,
             },
             {

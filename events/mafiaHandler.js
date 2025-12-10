@@ -7,7 +7,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require("discord.js");
-const { updateBobbyBucks } = require("../database/helpers/economyHelpers");
+// Economy imports removed - mafia game doesn't use currency currently
 // const User = require('../database/models/User'); // REMOVED: Unused
 // TARGET_GUILD_ID removed
 const { getSetting } = require("../utils/settingsManager");

@@ -26,6 +26,7 @@ const {
   createUpgradeEmbed,
   TIERS,
 } = require("../utils/subscriptionUtils");
+const { formatCurrency, getCurrencyName } = require("../utils/currencyHelper");
 
 const blackjackStreaksFilePath = path.join(
   __dirname,
@@ -448,7 +449,7 @@ module.exports = (client) => {
       .setTitle("🎰 Casino Blackjack")
       .setColor("#0f5132")
       .setDescription(
-        `**${message.author.username}** is playing Blackjack!\n**Bet:** 🍯${betAmount}${streakInfo}${deckInfo}`
+        `**${message.author.username}** is playing Blackjack!\n**Bet:** ${await formatCurrency(guildId, betAmount)}${streakInfo}${deckInfo}`
       )
       .setImage("attachment://blackjack-table.png")
       .addFields(
@@ -464,7 +465,7 @@ module.exports = (client) => {
         },
         {
           name: "💰 Game Info",
-          value: `**Your Balance:** 🍯${await getBalance(guildId, userId)}\n**House Edge:** ${await getHouseBalance()}`,
+          value: `**Your Balance:** ${await formatCurrency(guildId, await getBalance(guildId, userId))}\n**House Edge:** ${await getHouseBalance()}`,
           inline: true,
         }
       )
@@ -506,7 +507,7 @@ module.exports = (client) => {
             },
             {
               name: "💰 Payout",
-              value: `**Returned:** 🍯${betAmount}`,
+              value: `**Returned:** ${await formatCurrency(guildId, betAmount)}`,
               inline: true,
             }
           )
@@ -542,7 +543,7 @@ module.exports = (client) => {
         });
 
         let bonusText =
-          streakBonus > 0 ? `\n🔥 **Streak Bonus: +🍯${streakBonus}**` : "";
+          streakBonus > 0 ? `\n🔥 **Streak Bonus: +${await formatCurrency(guildId, streakBonus)}**` : "";
 
         gameEmbed = new EmbedBuilder()
           .setTitle("🎰 Blackjack - Natural 21!")
@@ -557,7 +558,7 @@ module.exports = (client) => {
             },
             {
               name: "💰 Payout",
-              value: `**Won:** 🍯${totalWinnings}\n**New Balance:** 🍯${await getBalance(guildId, userId)}\n**Streak:** ${currentStreak + 1} wins`,
+              value: `**Won:** ${await formatCurrency(guildId, totalWinnings)}\n**New Balance:** ${await formatCurrency(guildId, await getBalance(guildId, userId))}\n**Streak:** ${currentStreak + 1} wins`,
               inline: true,
             }
           )
@@ -665,7 +666,7 @@ module.exports = (client) => {
                 },
                 {
                   name: "💰 Loss",
-                  value: `**Lost:** 🍯${betAmount}\n**New Balance:** 🍯${await getBalance(guildId, userId)}\n**Streak:** Reset`,
+                  value: `**Lost:** ${await formatCurrency(guildId, betAmount)}\n**New Balance:** ${await formatCurrency(guildId, await getBalance(guildId, userId))}\n**Streak:** Reset`,
                   inline: true,
                 }
               )
@@ -702,7 +703,7 @@ module.exports = (client) => {
               .setTitle("🎰 Casino Blackjack")
               .setColor("#0f5132")
               .setDescription(
-                `**${message.author.username}** is playing Blackjack!\n**Bet:** 🍯${betAmount}${streakInfo}${deckInfo}`
+                `**${message.author.username}** is playing Blackjack!\n**Bet:** ${await formatCurrency(guildId, betAmount)}${streakInfo}${deckInfo}`
               )
               .setImage("attachment://blackjack-table.png")
               .addFields(
@@ -718,7 +719,7 @@ module.exports = (client) => {
                 },
                 {
                   name: "💰 Game Info",
-                  value: `**Your Balance:** 🍯${await getBalance(guildId, userId)}\n**House Edge:** ${await getHouseBalance()}`,
+                  value: `**Your Balance:** ${await formatCurrency(guildId, await getBalance(guildId, userId))}\n**House Edge:** ${await getHouseBalance()}`,
                   inline: true,
                 }
               )
@@ -779,7 +780,7 @@ module.exports = (client) => {
                   },
                   {
                     name: "💰 Loss",
-                    value: `**Lost:** 🍯${actualBet}\n**New Balance:** 🍯${await getBalance(guildId, userId)}\n**Streak:** Reset`,
+                    value: `**Lost:** ${await formatCurrency(guildId, actualBet)}\n**New Balance:** ${await formatCurrency(guildId, await getBalance(guildId, userId))}\n**Streak:** Reset`,
                     inline: true,
                   }
                 )
@@ -821,14 +822,14 @@ module.exports = (client) => {
             newStreak = currentStreak + 1;
             resultMessage =
               streakBonus > 0
-                ? `🎉 You won 🍯${totalWinnings}! (🍯${streakBonus} streak bonus)`
-                : `🎉 You won 🍯${totalWinnings}!`;
+                ? `🎉 You won ${await formatCurrency(guildId, totalWinnings)}! (${await formatCurrency(guildId, streakBonus)} streak bonus)`
+                : `🎉 You won ${await formatCurrency(guildId, totalWinnings)}!`;
             resultColor = "#00ff00";
             gameState = "win";
           } else if (playerScore === dealerScore) {
             // Tie - return the bet (no streak change)
             await updateBalance(guildId, userId, actualBet);
-            resultMessage = `🤝 It's a tie! You get your 🍯${actualBet} back.`;
+            resultMessage = `🤝 It's a tie! You get your ${await formatCurrency(guildId, actualBet)} back.`;
             resultColor = "#ffaa00";
             gameState = "tie";
           } else {
@@ -836,7 +837,7 @@ module.exports = (client) => {
             await updateHouse(actualBet);
             updateStreak(userId, false); // Reset streak
             newStreak = 0;
-            resultMessage = `😢 You lost 🍯${actualBet}. Better luck next time!`;
+            resultMessage = `😢 You lost ${await formatCurrency(guildId, actualBet)}. Better luck next time!`;
             resultColor = "#ff0000";
             gameState = "lose";
           }
@@ -871,7 +872,7 @@ module.exports = (client) => {
               },
               {
                 name: "💰 Your Stats",
-                value: `**New Balance:** 🍯${await getBalance(guildId, userId)}\n**Win Streak:** ${newStreak}\n**House Balance:** 🍯${await getHouseBalance()}`,
+                value: `**New Balance:** ${await formatCurrency(guildId, await getBalance(guildId, userId))}\n**Win Streak:** ${newStreak}\n**House Balance:** ${await formatCurrency(guildId, await getHouseBalance())}`,
                 inline: true,
               }
             )
@@ -924,7 +925,7 @@ module.exports = (client) => {
               },
               {
                 name: "💰 Refund",
-                value: `**Returned:** 🍯${refund}\n**New Balance:** 🍯${await getBalance(guildId, userId)}`,
+                value: `**Returned:** ${await formatCurrency(guildId, refund)}\n**New Balance:** ${await formatCurrency(guildId, await getBalance(guildId, userId))}`,
                 inline: true,
               }
             )
@@ -968,7 +969,7 @@ module.exports = (client) => {
             .setTitle("🎰 Blackjack - Split Hands!")
             .setColor("#0f5132")
             .setDescription(
-              `✂️ **${message.author.username}** split their hand!\n**Total Bet:** 🍯${betAmount * 2}`
+              `✂️ **${message.author.username}** split their hand!\n**Total Bet:** ${await formatCurrency(guildId, betAmount * 2)}`
             )
             .setImage("attachment://blackjack-split.png")
             .addFields(
@@ -1270,7 +1271,7 @@ module.exports = (client) => {
 
     if (playerScore > 21) {
       await updateHouse(betAmount);
-      resultMessage = `💥 Hand ${handNumber} Bust! Lost 🍯${betAmount}`;
+      resultMessage = `💥 Hand ${handNumber} Bust! Lost ${await formatCurrency(guildId, betAmount)}`;
       gameState = "bust";
     } else if (dealerScore > 21 || playerScore > dealerScore) {
       const baseWinnings = betAmount * 2;
@@ -1278,15 +1279,15 @@ module.exports = (client) => {
       payout = baseWinnings + streakBonus;
       await updateBalance(guildId, userId, payout);
       won = true;
-      resultMessage = `🎉 Hand ${handNumber} Wins! Won 🍯${payout}`;
+      resultMessage = `🎉 Hand ${handNumber} Wins! Won ${await formatCurrency(guildId, payout)}`;
       gameState = "win";
     } else if (playerScore === dealerScore) {
       await updateBalance(guildId, userId, betAmount);
-      resultMessage = `🤝 Hand ${handNumber} Push! Returned 🍯${betAmount}`;
+      resultMessage = `🤝 Hand ${handNumber} Push! Returned ${await formatCurrency(guildId, betAmount)}`;
       gameState = "tie";
     } else {
       await updateHouse(betAmount);
-      resultMessage = `😢 Hand ${handNumber} Loses! Lost 🍯${betAmount}`;
+      resultMessage = `😢 Hand ${handNumber} Loses! Lost ${await formatCurrency(guildId, betAmount)}`;
       gameState = "lose";
     }
 
@@ -1337,7 +1338,7 @@ module.exports = (client) => {
         },
         {
           name: "💰 Balance",
-          value: `🍯${await getBalance(guildId, userId)}`,
+          value: await formatCurrency(guildId, await getBalance(guildId, userId)),
           inline: true,
         }
       )

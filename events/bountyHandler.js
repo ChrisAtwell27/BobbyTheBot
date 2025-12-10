@@ -17,6 +17,7 @@ const {
   permissionDeniedMessage,
 } = require("../utils/errorMessages");
 const { hasAdminPermission } = require("../utils/adminPermissions");
+const { formatCurrency, getCurrencyName, getCurrencyEmoji } = require("../utils/currencyHelper");
 const {
   checkSubscription,
   createUpgradeEmbed,
@@ -35,7 +36,7 @@ function generateBountyId() {
 }
 
 // Format bounty embed
-function formatBountyEmbed(bounty, detailed = false) {
+async function formatBountyEmbed(bounty, detailed = false, guildId = null) {
   const statusEmojis = {
     active: "🟢",
     claimed: "🟡",
@@ -71,7 +72,7 @@ function formatBountyEmbed(bounty, detailed = false) {
     .addFields(
       {
         name: "💰 Reward",
-        value: `🍯${bounty.reward.toLocaleString()}`,
+        value: `${await formatCurrency(guildId, bounty.reward)}`,
         inline: true,
       },
       { name: "👤 Creator", value: bounty.creatorName, inline: true },
@@ -132,7 +133,7 @@ async function postBounty(message, args) {
     // Validate amount
     if (isNaN(amount) || amount < MIN_BOUNTY || amount > MAX_BOUNTY) {
       return message.reply(
-        `❌ **Invalid Amount**\n\nBounty must be between 🍯${MIN_BOUNTY} and 🍯${MAX_BOUNTY}.`
+        `❌ **Invalid Amount**\n\nBounty must be between ${await formatCurrency(message.guild.id, MIN_BOUNTY)} and ${await formatCurrency(message.guild.id, MAX_BOUNTY)}.`
       );
     }
 
@@ -187,9 +188,10 @@ async function postBounty(message, args) {
       createdAt: Date.now(),
     };
 
-    const embed = formatBountyEmbed(bounty);
+    const guildId = message.guild.id;
+    const embed = await formatBountyEmbed(bounty, false, guildId);
     embed.setDescription(
-      `**${description}**\n\n✅ Bounty posted! First person to complete this and provide proof wins **🍯${amount.toLocaleString()}**!`
+      `**${description}**\n\n✅ Bounty posted! First person to complete this and provide proof wins **${await formatCurrency(guildId, amount)}**!`
     );
 
     const buttons = new ActionRowBuilder().addComponents(
@@ -294,9 +296,10 @@ async function postAdminBounty(message, args) {
       createdAt: Date.now(),
     };
 
-    const embed = formatBountyEmbed(bounty);
+    const guildId = message.guild.id;
+    const embed = await formatBountyEmbed(bounty, false, guildId);
     embed.setDescription(
-      `**${description}**\n\n🚨 **ADMIN BOUNTY** 🚨\n✅ Bounty posted! First person to complete this and provide proof wins **🍯${amount.toLocaleString()}**!`
+      `**${description}**\n\n🚨 **ADMIN BOUNTY** 🚨\n✅ Bounty posted! First person to complete this and provide proof wins **${await formatCurrency(guildId, amount)}**!`
     );
     embed.setColor("#ff0000"); // Red for admin bounties
 
@@ -352,7 +355,7 @@ async function listBounties(message) {
     const embed = new EmbedBuilder()
       .setTitle("🎯 Active Bounties")
       .setColor("#00ff00")
-      .setDescription("Complete any of these challenges to earn honey!")
+      .setDescription(`Complete any of these challenges to earn ${await getCurrencyName(message.guild.id)}!`)
       .setFooter({ text: `Showing ${recentBounties.length} active bounties` })
       .setTimestamp();
 
@@ -363,7 +366,7 @@ async function listBounties(message) {
       const shortId = bounty.bountyId.split("_")[1].substr(0, 6);
 
       embed.addFields({
-        name: `#${shortId} - 🍯${bounty.reward.toLocaleString()}`,
+        name: `#${shortId} - ${await formatCurrency(message.guild.id, bounty.reward)}`,
         value: `${bounty.description.substring(0, 100)}${bounty.description.length > 100 ? "..." : ""}\n⏰ ${hoursLeft}h left • 👤 ${bounty.creatorName}`,
         inline: false,
       });
@@ -463,7 +466,7 @@ async function cancelBounty(message, bountyIdPart) {
     });
 
     message.reply(
-      `✅ **Bounty Cancelled**\n\n🍯${bounty.reward.toLocaleString()} has been refunded to your account.`
+      `✅ **Bounty Cancelled**\n\n${await formatCurrency(message.guild.id, bounty.reward)} has been refunded to your account.`
     );
 
     console.log(
@@ -504,7 +507,7 @@ async function cleanupExpiredBounties(client) {
         const channel = await client.channels.fetch(bounty.channelId);
         if (channel) {
           await channel.send(
-            `⏱️ **Bounty Expired** - Bounty "${bounty.description.substring(0, 50)}..." has expired. 🍯${bounty.reward.toLocaleString()} refunded to <@${bounty.creatorId}>.`
+            `⏱️ **Bounty Expired** - Bounty "${bounty.description.substring(0, 50)}..." has expired. ${await formatCurrency(bounty.guildId, bounty.reward)} refunded to <@${bounty.creatorId}>.`
           );
         }
       } catch (channelError) {
@@ -681,7 +684,7 @@ module.exports = (client) => {
           .setTitle("🎯 Claim Bounty")
           .setColor("#ffa500")
           .setDescription(
-            `**Bounty:** ${bounty.description}\n**Reward:** 🍯${bounty.reward.toLocaleString()}\n\nTo claim this bounty, reply to this message with a link to your proof (screenshot, clip, etc.).\n\n⏰ You have 2 minutes to provide proof.`
+            `**Bounty:** ${bounty.description}\n**Reward:** ${await formatCurrency(interaction.guild.id, bounty.reward)}\n\nTo claim this bounty, reply to this message with a link to your proof (screenshot, clip, etc.).\n\n⏰ You have 2 minutes to provide proof.`
           )
           .setFooter({ text: "Send proof link in next message" });
 
@@ -719,7 +722,7 @@ module.exports = (client) => {
               .setTitle("🎉 Bounty Claimed!")
               .setColor("#00ff00")
               .setDescription(
-                `**${bounty.description}**\n\n🎯 **Claimed by:** ${interaction.user.username}\n💰 **Reward:** 🍯${bounty.reward.toLocaleString()}\n🔗 **Proof:** ${proofUrl}`
+                `**${bounty.description}**\n\n🎯 **Claimed by:** ${interaction.user.username}\n💰 **Reward:** ${await formatCurrency(interaction.guild.id, bounty.reward)}\n🔗 **Proof:** ${proofUrl}`
               )
               .setFooter({ text: `Created by ${bounty.creatorName}` })
               .setTimestamp();
@@ -744,7 +747,7 @@ module.exports = (client) => {
                 };
                 // In formatBountyEmbed, it expects a bounty object. We simulate it.
                 await originalMsg.edit({
-                  embeds: [formatBountyEmbed(updatedBountyObj, true)],
+                  embeds: [await formatBountyEmbed(updatedBountyObj, true, interaction.guild.id)],
                   components: [], // Remove buttons
                 });
               }
@@ -837,7 +840,7 @@ module.exports = (client) => {
         });
 
         await interaction.reply({
-          content: `✅ Bounty cancelled. 🍯${bounty.reward.toLocaleString()} refunded.`,
+          content: `✅ Bounty cancelled. ${await formatCurrency(interaction.guild.id, bounty.reward)} refunded.`,
           ephemeral: true,
         });
 
@@ -848,7 +851,7 @@ module.exports = (client) => {
               bounty.messageId
             );
             const updatedBountyObj = { ...bounty, status: "cancelled" };
-            const updatedEmbed = formatBountyEmbed(updatedBountyObj, true);
+            const updatedEmbed = await formatBountyEmbed(updatedBountyObj, true, interaction.guild.id);
             await originalMsg.edit({ embeds: [updatedEmbed], components: [] });
           }
         } catch (updateError) {

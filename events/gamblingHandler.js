@@ -35,6 +35,8 @@ const {
   invalidUsageMessage,
   processingMessage,
 } = require("../utils/errorMessages");
+const { getSetting } = require("../utils/settingsManager");
+const { formatCurrency, getCurrencyName } = require("../utils/currencyHelper");
 
 // Auto-cleanup cooldowns after 5 minutes (way longer than needed)
 const cooldowns = new CleanupMap(5 * 60 * 1000, 1 * 60 * 1000);
@@ -47,6 +49,50 @@ const activeGames = new LimitedMap(100);
 
 const COOLDOWN_SECONDS = 3; // Cooldown in seconds
 const CHALLENGE_TIMEOUT = 5 * 60 * 1000; // 5 minute timeout for challenges
+
+// Feature toggle cache (5 minute TTL)
+const featureToggleCache = new Map();
+const FEATURE_CACHE_TTL = 5 * 60 * 1000;
+
+// Check if free gambling (flip, roulette, dice) is enabled for guild
+async function isFreeGamblingEnabled(guildId) {
+  const cacheKey = `free_${guildId}`;
+  const cached = featureToggleCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < FEATURE_CACHE_TTL) {
+    return cached.enabled;
+  }
+
+  try {
+    const features = await getSetting(guildId, 'features', {});
+    // Default to true if not specified (legacy behavior)
+    const enabled = features.gambling_free !== false;
+    featureToggleCache.set(cacheKey, { enabled, timestamp: Date.now() });
+    return enabled;
+  } catch (error) {
+    console.error('[GAMBLING] Error checking gambling_free toggle:', error);
+    return true;
+  }
+}
+
+// Check if plus gambling (blackjack, rps, highercard, etc.) is enabled for guild
+async function isPlusGamblingEnabled(guildId) {
+  const cacheKey = `plus_${guildId}`;
+  const cached = featureToggleCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < FEATURE_CACHE_TTL) {
+    return cached.enabled;
+  }
+
+  try {
+    const features = await getSetting(guildId, 'features', {});
+    // Default to true if not specified (legacy behavior)
+    const enabled = features.gambling_plus !== false;
+    featureToggleCache.set(cacheKey, { enabled, timestamp: Date.now() });
+    return enabled;
+  } catch (error) {
+    console.error('[GAMBLING] Error checking gambling_plus toggle:', error);
+    return true;
+  }
+}
 
 // Load active challenges from database on startup
 async function loadActiveChallenges() {
@@ -102,7 +148,7 @@ async function createChallenge(message, args, type, options) {
 
   if (balance < betAmount) {
     return message.channel.send(
-      insufficientFundsMessage(message.author.username, balance, betAmount)
+      await insufficientFundsMessage(message.author.username, balance, betAmount, guildId)
     );
   }
 
@@ -153,7 +199,7 @@ async function createChallenge(message, args, type, options) {
     .addFields(
       {
         name: "💰 Pot",
-        value: `🍯${betAmount * 2} (minus 5% house cut)`,
+        value: `${await formatCurrency(guildId, betAmount * 2)} (minus 5% house cut)`,
         inline: true,
       },
       { name: "✅ To Accept", value: `Click the button below!`, inline: true },
@@ -298,8 +344,11 @@ async function handleChallengeAccept(interaction) {
 
   const balance = await getBalance(guildId, userId);
   if (balance < challenge.amount) {
+    const currencyName = await getCurrencyName(guildId);
+    const neededStr = await formatCurrency(guildId, challenge.amount);
+    const balanceStr = await formatCurrency(guildId, balance);
     return interaction.reply({
-      content: `⚠️ You don't have enough Honey. You need 🍯${challenge.amount}. Your balance: 🍯${balance}`,
+      content: `⚠️ You don't have enough ${currencyName}. You need ${neededStr}. Your balance: ${balanceStr}`,
       ephemeral: true,
     });
   }
@@ -560,7 +609,7 @@ module.exports = (client) => {
         .addFields(
           {
             name: "💰 Your Stats",
-            value: `**Balance:** 🍯${balance.toLocaleString()}\n**House:** 🍯${houseBalance.toLocaleString()}`,
+            value: `**Balance:** ${await formatCurrency(guildId, balance)}\n**House:** ${await formatCurrency(guildId, houseBalance)}`,
             inline: true,
           },
           {
@@ -577,16 +626,44 @@ module.exports = (client) => {
       return message.channel.send({ embeds: [gameList] });
     }
 
-    // House games (FREE TIER)
-    if (command === "!flip") {
-      playFlipGame(message, args);
-    } else if (command === "!roulette") {
-      playRouletteGame(message, args);
-    } else if (command === "!dice") {
-      playDiceGame(message, args);
+    // House games (FREE TIER) - Check feature toggle
+    if (command === "!flip" || command === "!roulette" || command === "!dice") {
+      // Check if free gambling is enabled for this guild
+      if (!await isFreeGamblingEnabled(message.guild.id)) {
+        return message.channel.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x95A5A6)
+              .setTitle("🎰 Feature Disabled")
+              .setDescription("Free casino games (flip, roulette, dice) are disabled on this server.")
+              .setFooter({ text: "Server admins can enable this in the dashboard." })
+          ]
+        });
+      }
+
+      if (command === "!flip") {
+        playFlipGame(message, args);
+      } else if (command === "!roulette") {
+        playRouletteGame(message, args);
+      } else if (command === "!dice") {
+        playDiceGame(message, args);
+      }
     }
-    // PvP games (PLUS TIER REQUIRED)
-    else if (command === "!rps") {
+    // PvP games (PLUS TIER REQUIRED) - Check feature toggle first
+    else if (command === "!rps" || command === "!highercard" || command === "!quickdraw" || command === "!numberduel") {
+      // Check if plus gambling is enabled for this guild
+      if (!await isPlusGamblingEnabled(message.guild.id)) {
+        return message.channel.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x95A5A6)
+              .setTitle("🎰 Feature Disabled")
+              .setDescription("Premium casino games are disabled on this server.")
+              .setFooter({ text: "Server admins can enable this in the dashboard." })
+          ]
+        });
+      }
+
       // Check subscription tier for PvP games (guild-based)
       const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS, message.guild.ownerId);
       if (!subCheck.hasAccess) {
@@ -597,99 +674,73 @@ module.exports = (client) => {
         );
         return message.channel.send({ embeds: [upgradeEmbed] });
       }
-      createChallenge(message, args, "rps", {
-        title: "⚔️ Rock Paper Scissors Challenge!",
-        color: "#ff6b6b",
-        description: "**{user}** challenges someone to Rock Paper Scissors!",
-        buttonLabel: "Accept Challenge!",
-        buttonEmoji: "⚔️",
-        extraFields: [
-          {
-            name: "🎮 Game Play",
-            value: "Once accepted, both players use buttons in this channel!",
-            inline: false,
-          },
-        ],
-        footer: "Rock 🪨 | Paper 📄 | Scissors ✂️",
-      });
-    } else if (command === "!highercard") {
-      // Check subscription tier for PvP games (guild-based)
-      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS, message.guild.ownerId);
-      if (!subCheck.hasAccess) {
-        const upgradeEmbed = createUpgradeEmbed(
-          "PvP Casino Games",
-          TIERS.PLUS,
-          subCheck.guildTier
-        );
-        return message.channel.send({ embeds: [upgradeEmbed] });
+
+      // Handle each game type
+      if (command === "!rps") {
+        createChallenge(message, args, "rps", {
+          title: "⚔️ Rock Paper Scissors Challenge!",
+          color: "#ff6b6b",
+          description: "**{user}** challenges someone to Rock Paper Scissors!",
+          buttonLabel: "Accept Challenge!",
+          buttonEmoji: "⚔️",
+          extraFields: [
+            {
+              name: "🎮 Game Play",
+              value: "Once accepted, both players use buttons in this channel!",
+              inline: false,
+            },
+          ],
+          footer: "Rock 🪨 | Paper 📄 | Scissors ✂️",
+        });
+      } else if (command === "!highercard") {
+        createChallenge(message, args, "highercard", {
+          title: "🃏 Higher Card Challenge!",
+          color: "#4ecdc4",
+          description: "**{user}** challenges someone to Higher Card!",
+          buttonLabel: "Accept Challenge!",
+          buttonEmoji: "🃏",
+          extraFields: [
+            {
+              name: "📋 Rules",
+              value: "Both draw a card - highest wins!",
+              inline: true,
+            },
+          ],
+          footer: "Ace=1, Jack=11, Queen=12, King=13",
+        });
+      } else if (command === "!quickdraw") {
+        createChallenge(message, args, "quickdraw", {
+          title: "⚡ Quick Draw Challenge!",
+          color: "#f39c12",
+          description: "**{user}** challenges someone to Quick Draw!",
+          buttonLabel: "Accept Challenge!",
+          buttonEmoji: "⚡",
+          extraFields: [
+            {
+              name: "📋 Rules",
+              value: "First to type the random word when prompted wins!",
+              inline: true,
+            },
+          ],
+          footer: "⚡ Speed and reflexes matter! Word will be random!",
+        });
+      } else if (command === "!numberduel") {
+        createChallenge(message, args, "numberduel", {
+          title: "🎯 Number Duel Challenge!",
+          color: "#9b59b6",
+          description: "**{user}** challenges someone to Number Duel!",
+          buttonLabel: "Accept Challenge!",
+          buttonEmoji: "🎯",
+          extraFields: [
+            {
+              name: "📋 Rules",
+              value: "Guess 1-100, closest to target wins!",
+              inline: true,
+            },
+          ],
+          footer: "🎯 Precision beats luck!",
+        });
       }
-      createChallenge(message, args, "highercard", {
-        title: "🃏 Higher Card Challenge!",
-        color: "#4ecdc4",
-        description: "**{user}** challenges someone to Higher Card!",
-        buttonLabel: "Accept Challenge!",
-        buttonEmoji: "🃏",
-        extraFields: [
-          {
-            name: "📋 Rules",
-            value: "Both draw a card - highest wins!",
-            inline: true,
-          },
-        ],
-        footer: "Ace=1, Jack=11, Queen=12, King=13",
-      });
-    } else if (command === "!quickdraw") {
-      // Check subscription tier for PvP games (guild-based)
-      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS, message.guild.ownerId);
-      if (!subCheck.hasAccess) {
-        const upgradeEmbed = createUpgradeEmbed(
-          "PvP Casino Games",
-          TIERS.PLUS,
-          subCheck.guildTier
-        );
-        return message.channel.send({ embeds: [upgradeEmbed] });
-      }
-      createChallenge(message, args, "quickdraw", {
-        title: "⚡ Quick Draw Challenge!",
-        color: "#f39c12",
-        description: "**{user}** challenges someone to Quick Draw!",
-        buttonLabel: "Accept Challenge!",
-        buttonEmoji: "⚡",
-        extraFields: [
-          {
-            name: "📋 Rules",
-            value: "First to type the random word when prompted wins!",
-            inline: true,
-          },
-        ],
-        footer: "⚡ Speed and reflexes matter! Word will be random!",
-      });
-    } else if (command === "!numberduel") {
-      // Check subscription tier for PvP games (guild-based)
-      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS, message.guild.ownerId);
-      if (!subCheck.hasAccess) {
-        const upgradeEmbed = createUpgradeEmbed(
-          "PvP Casino Games",
-          TIERS.PLUS,
-          subCheck.guildTier
-        );
-        return message.channel.send({ embeds: [upgradeEmbed] });
-      }
-      createChallenge(message, args, "numberduel", {
-        title: "🎯 Number Duel Challenge!",
-        color: "#9b59b6",
-        description: "**{user}** challenges someone to Number Duel!",
-        buttonLabel: "Accept Challenge!",
-        buttonEmoji: "🎯",
-        extraFields: [
-          {
-            name: "📋 Rules",
-            value: "Guess 1-100, closest to target wins!",
-            inline: true,
-          },
-        ],
-        footer: "🎯 Precision beats luck!",
-      });
     } else if (command === "!challenges") {
       listChallenges(message);
     }
@@ -750,7 +801,7 @@ async function startRPSGame(interaction, gameId, game) {
     .setColor("#ff6b6b")
     .setDescription(`**${game.player1Name}** vs **${game.player2Name}**`)
     .addFields(
-      { name: "💰 Total Pot", value: `🍯${game.amount * 2}`, inline: true },
+      { name: "💰 Total Pot", value: await formatCurrency(game.guildId, game.amount * 2), inline: true },
       {
         name: "🎯 How to Play",
         value: `Both players click your move below!`,
@@ -892,7 +943,7 @@ async function startHigherCardGame(interaction, gameId, game) {
       },
       {
         name: "💰 Winnings",
-        value: `🍯${winnings} (after 5% house cut)`,
+        value: `${await formatCurrency(game.guildId, winnings)} (after 5% house cut)`,
         inline: false,
       }
     )
@@ -968,7 +1019,7 @@ async function startQuickDrawGame(interaction, gameId, game) {
     .setColor("#f39c12")
     .setDescription(`**${game.player1Name}** vs **${game.player2Name}**`)
     .addFields(
-      { name: "💰 Total Pot", value: `🍯${game.amount * 2}`, inline: true },
+      { name: "💰 Total Pot", value: await formatCurrency(game.guildId, game.amount * 2), inline: true },
       { name: "🎯 Get Ready!", value: "Wait for the signal...", inline: false },
       {
         name: "ðŸ“ Instructions",
@@ -1033,7 +1084,7 @@ async function startQuickDrawGame(interaction, gameId, game) {
         .addFields(
           { name: "ðŸ† Winner", value: winnerName, inline: true },
           { name: "🎯 Target Word", value: randomWord, inline: true },
-          { name: "💰 Winnings", value: `🍯${winnings}`, inline: true },
+          { name: "💰 Winnings", value: await formatCurrency(game.guildId, winnings), inline: true },
           {
             name: "⚡ Victory Message",
             value: `"${msg.content}" - Lightning fast!`,
@@ -1058,7 +1109,7 @@ async function startQuickDrawGame(interaction, gameId, game) {
           .setDescription("Nobody typed the word in time!")
           .addFields(
             { name: "🎯 Target Word Was", value: randomWord, inline: true },
-            { name: "💰 Result", value: "Both players refunded", inline: true }
+            { name: "💰 Result", value: "Both players refunded!", inline: true }
           )
           .setTimestamp();
 
@@ -1078,7 +1129,7 @@ async function startNumberDuelGame(interaction, gameId, game) {
     .setColor("#9b59b6")
     .setDescription(`**${game.player1Name}** vs **${game.player2Name}**`)
     .addFields(
-      { name: "💰 Total Pot", value: `🍯${game.amount * 2}`, inline: true },
+      { name: "💰 Total Pot", value: await formatCurrency(game.guildId, game.amount * 2), inline: true },
       {
         name: "🎯 How to Play",
         value: `**DM the bot your guess:** \`!play ${gameId} [1-100]\``,
@@ -1111,7 +1162,7 @@ async function startNumberDuelGame(interaction, gameId, game) {
       .setDescription(`Send your guess: \`!play ${gameId} [number]\``)
       .addFields(
         { name: "🎯 Range", value: "1 to 100", inline: true },
-        { name: "💰 Pot", value: `🍯${game.amount * 2}`, inline: true }
+        { name: "💰 Pot", value: await formatCurrency(game.guildId, game.amount * 2), inline: true }
       )
       .setFooter({ text: "Closest to the secret number wins!" });
 
@@ -1210,7 +1261,7 @@ async function resolveRPSGame(client, gameId, game) {
         },
         {
           name: "💰 Winnings",
-          value: `🍯${winnings} (after 5% house cut)`,
+          value: `${await formatCurrency(game.guildId, winnings)} (after 5% house cut)`,
           inline: false,
         }
       );
@@ -1283,7 +1334,7 @@ async function resolveNumberDuelGame(client, gameId, game) {
         },
         {
           name: "💰 Winnings",
-          value: `🍯${winnings} (after 5% house cut)`,
+          value: `${await formatCurrency(game.guildId, winnings)} (after 5% house cut)`,
           inline: false,
         }
       );
@@ -1320,9 +1371,10 @@ async function listChallenges(message) {
       numberduel: "🎯 Number Duel",
     };
 
+    const betStr = await formatCurrency(guildId, challenge.amount);
     embed.addFields({
       name: gameNames[challenge.type],
-      value: `**By:** ${challenge.creatorName}\n**Bet:** 🍯${challenge.amount}\n**Status:** Click button to accept`,
+      value: `**By:** ${challenge.creatorName}\n**Bet:** ${betStr}\n**Status:** Click button to accept`,
       inline: true,
     });
   }
@@ -1673,8 +1725,10 @@ async function playFlipGame(message, args) {
   const balance = await getBalance(guildId, userId);
 
   if (balance < betAmount) {
+    const currencyName = await getCurrencyName(guildId);
+    const balanceStr = await formatCurrency(guildId, balance);
     return message.channel.send(
-      `Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`
+      `Sorry, ${message.author.username}, you don't have enough ${currencyName}. Your balance is ${balanceStr}.`
     );
   }
 
@@ -1705,12 +1759,12 @@ async function playFlipGame(message, args) {
       { name: "🎯 Result", value: `**${result.toUpperCase()}**`, inline: true },
       {
         name: "💰 Outcome",
-        value: netGain > 0 ? `Won 🍯${netGain}` : `Lost 🍯${Math.abs(netGain)}`,
+        value: netGain > 0 ? `Won ${await formatCurrency(guildId, netGain)}` : `Lost ${await formatCurrency(guildId, Math.abs(netGain))}`,
         inline: true,
       },
       {
         name: "ðŸ¦ New Balance",
-        value: `🍯${await getBalance(guildId, userId)}`,
+        value: await formatCurrency(guildId, await getBalance(guildId, userId)),
         inline: true,
       }
     )
@@ -1746,8 +1800,10 @@ async function playRouletteGame(message, args) {
   const balance = await getBalance(guildId, userId);
 
   if (balance < betAmount) {
+    const currencyName = await getCurrencyName(guildId);
+    const balanceStr = await formatCurrency(guildId, balance);
     return message.channel.send(
-      `Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`
+      `Sorry, ${message.author.username}, you don't have enough ${currencyName}. Your balance is ${balanceStr}.`
     );
   }
 
@@ -1809,19 +1865,19 @@ async function playRouletteGame(message, args) {
       },
       {
         name: "💰 Outcome",
-        value: netGain > 0 ? `Won 🍯${netGain}` : `Lost 🍯${Math.abs(netGain)}`,
+        value: netGain > 0 ? `Won ${await formatCurrency(guildId, netGain)}` : `Lost ${await formatCurrency(guildId, Math.abs(netGain))}`,
         inline: true,
       }
     )
     .addFields(
       {
         name: "ðŸ¦ New Balance",
-        value: `🍯${await getBalance(guildId, userId)}`,
+        value: await formatCurrency(guildId, await getBalance(guildId, userId)),
         inline: true,
       },
       {
         name: "🏛️ House Edge",
-        value: `🍯${await getHouseBalance()}`,
+        value: await formatCurrency(guildId, await getHouseBalance()),
         inline: true,
       },
       {
@@ -1861,8 +1917,10 @@ async function playDiceGame(message, args) {
   const balance = await getBalance(guildId, userId);
 
   if (balance < betAmount) {
+    const currencyName = await getCurrencyName(guildId);
+    const balanceStr = await formatCurrency(guildId, balance);
     return message.channel.send(
-      `Sorry, ${message.author.username}, you don't have enough Honey. Your balance is 🍯${balance}.`
+      `Sorry, ${message.author.username}, you don't have enough ${currencyName}. Your balance is ${balanceStr}.`
     );
   }
 
@@ -1903,12 +1961,12 @@ async function playDiceGame(message, args) {
     .addFields(
       {
         name: "💰 Outcome",
-        value: netGain > 0 ? `Won 🍯${netGain}` : `Lost 🍯${Math.abs(netGain)}`,
+        value: netGain > 0 ? `Won ${await formatCurrency(guildId, netGain)}` : `Lost ${await formatCurrency(guildId, Math.abs(netGain))}`,
         inline: true,
       },
       {
         name: "ðŸ¦ New Balance",
-        value: `🍯${await getBalance(guildId, userId)}`,
+        value: await formatCurrency(guildId, await getBalance(guildId, userId)),
         inline: true,
       },
       { name: "📊 Odds", value: "1 in 6 (16.7%)", inline: true }

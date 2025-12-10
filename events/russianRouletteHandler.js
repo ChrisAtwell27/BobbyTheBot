@@ -10,10 +10,10 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const {
-  getBobbyBucks,
-  updateBobbyBucks,
-  setBobbyBucks,
-} = require("../database/helpers/economyHelpers");
+  getBalance,
+  updateBalance,
+  setBalance,
+} = require("../database/helpers/convexEconomyHelpers");
 // TARGET_GUILD_ID removed for multi-guild support
 const { CleanupMap } = require("../utils/memoryUtils");
 const {
@@ -21,6 +21,7 @@ const {
   createUpgradeEmbed,
   TIERS,
 } = require("../utils/subscriptionUtils");
+const { formatCurrency, getCurrencyName, getCurrencyEmoji } = require("../utils/currencyHelper");
 
 // Store active Russian Roulette lobbies (auto-cleanup after 5 minutes)
 const activeLobbies = new CleanupMap(5 * 60 * 1000, 1 * 60 * 1000);
@@ -392,7 +393,8 @@ module.exports = (client) => {
       }
 
       const userId = message.author.id;
-      const userBalance = await getBobbyBucks(userId);
+      const guildId = message.guild.id;
+      const userBalance = await getBalance(guildId, userId);
 
       // Check if user has any money
       if (userBalance <= 0) {
@@ -433,6 +435,7 @@ module.exports = (client) => {
       const lobby = {
         id: lobbyId,
         channelId: message.channel.id,
+        guildId: message.guild.id,
         messageId: null,
         players: [
           {
@@ -530,7 +533,8 @@ module.exports = (client) => {
     }
 
     const userId = interaction.user.id;
-    const userBalance = await getBobbyBucks(userId);
+    const guildId = interaction.guild.id;
+    const userBalance = await getBalance(guildId, userId);
 
     if (action === "rrjoin") {
       // Check if user already in lobby
@@ -668,7 +672,7 @@ module.exports = (client) => {
         },
         {
           name: "💰 Total at Stake",
-          value: `🍯{lobby.players.reduce((total, player) => total + player.balance, 0).toLocaleString()}`,
+          value: `${await formatCurrency(lobby.guildId, lobby.players.reduce((total, player) => total + player.balance, 0))}`,
           inline: true,
         }
       )
@@ -730,10 +734,11 @@ module.exports = (client) => {
     const winningsPerSurvivor = Math.floor(victimLoss / survivors.length);
 
     // Update balances
-    await setBobbyBucks(victim.id, 0); // Victim loses everything
+    const guildId = lobby.guildId;
+    await setBalance(guildId, victim.id, 0); // Victim loses everything
 
     for (const survivor of survivors) {
-      await updateBobbyBucks(survivor.id, winningsPerSurvivor);
+      await updateBalance(guildId, survivor.id, winningsPerSurvivor);
     }
 
     // Create dramatic result visualization
@@ -763,13 +768,13 @@ module.exports = (client) => {
           },
           {
             name: "💸 Lost",
-            value: `🍯{victimLoss.toLocaleString()}`,
+            value: `${await formatCurrency(lobby.guildId, victimLoss)}`,
             inline: true,
           },
           { name: "🏆 Survivors", value: `${survivors.length}`, inline: true },
           {
             name: "💰 Each Survivor Won",
-            value: `🍯{winningsPerSurvivor.toLocaleString()}`,
+            value: `${await formatCurrency(lobby.guildId, winningsPerSurvivor)}`,
             inline: true,
           },
           {
@@ -808,12 +813,12 @@ module.exports = (client) => {
           },
           {
             name: "💸 Lost",
-            value: `🍯{victimLoss.toLocaleString()}`,
+            value: `${await formatCurrency(lobby.guildId, victimLoss)}`,
             inline: true,
           },
           {
             name: "💰 Survivor Winnings",
-            value: `🍯{winningsPerSurvivor.toLocaleString()} each`,
+            value: `${await formatCurrency(lobby.guildId, winningsPerSurvivor)} each`,
             inline: true,
           },
           {
@@ -840,12 +845,12 @@ module.exports = (client) => {
           .addFields(
             {
               name: "💰 Winnings",
-              value: `🍯{winningsPerSurvivor.toLocaleString()}`,
+              value: `${await formatCurrency(lobby.guildId, winningsPerSurvivor)}`,
               inline: true,
             },
             {
               name: "💳 New Balance",
-              value: `🍯${(await getBobbyBucks(survivor.id)).toLocaleString()}`,
+              value: `${await formatCurrency(lobby.guildId, await getBalance(lobby.guildId, survivor.id))}`,
               inline: true,
             }
           )
@@ -869,10 +874,10 @@ module.exports = (client) => {
         .addFields(
           {
             name: "💸 Lost",
-            value: `🍯{victimLoss.toLocaleString()}`,
+            value: `${await formatCurrency(lobby.guildId, victimLoss)}`,
             inline: true,
           },
-          { name: "💳 Current Balance", value: "B0", inline: true }
+          { name: "💳 Current Balance", value: `${await formatCurrency(lobby.guildId, 0)}`, inline: true }
         )
         .setFooter({ text: "Better luck next time... if there is one." })
         .setTimestamp();
@@ -918,7 +923,7 @@ module.exports = (client) => {
         },
         {
           name: "💰 Total at Stake",
-          value: `🍯{totalPot.toLocaleString()}`,
+          value: `${await formatCurrency(lobby.guildId, totalPot)}`,
           inline: true,
         },
         {
@@ -930,12 +935,10 @@ module.exports = (client) => {
           name: "🎭 Players in Lobby",
           value:
             lobby.players.length > 0
-              ? lobby.players
-                  .map(
-                    (player, index) =>
-                      `${index + 1}. **${player.displayName || player.username}** (🍯{player.balance.toLocaleString()})`
-                  )
-                  .join("\n")
+              ? (await Promise.all(lobby.players.map(
+                  async (player, index) =>
+                    `${index + 1}. **${player.displayName || player.username}** (${await formatCurrency(lobby.guildId, player.balance)})`
+                ))).join("\n")
               : "None",
           inline: false,
         }

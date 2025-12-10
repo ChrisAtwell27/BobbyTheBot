@@ -18,23 +18,42 @@ const DEFAULT_TIER = "free";
 // Value: Minimum required tier key
 const SETTING_REQUIREMENTS = {
   // =====================================================================
-  // FEATURE TOGGLES (free tier)
+  // FREE TIER FEATURE TOGGLES
   // =====================================================================
   "features.trivia": "free",
-  "features.alerts": "free",
-  "features.gambling": "free",
   "features.wordle": "free",
-  "features.mafia": "free",
-  "features.moderation": "free",
+  "features.moderation": "free", // Basic spam/rate limiting - free
   "features.clips": "free",
   "features.bump_reminder": "free",
 
-  // Plus Tier features
+  // =====================================================================
+  // FREE GAMBLING (House Games)
+  // =====================================================================
+  "features.gambling_free": "free", // Free house games: flip, roulette, dice
+
+  // =====================================================================
+  // PLUS TIER FEATURE TOGGLES
+  // =====================================================================
+  "features.alerts": "plus", // Keyword alert system
+  "features.audit_logs": "plus", // Audit logs (message edits/deletes, bans)
+  "features.gambling_plus": "plus", // Plus games: blackjack, rps, highercard, quickdraw, numberduel, russianroulette
+  "features.mafia": "plus", // Bee Mafia game
   "features.birthdays": "plus",
   "features.bounties": "plus",
   "features.team_builder": "plus",
-  "features.valorant": "ultimate", // Valorant API stats/matches - ULTIMATE tier
+  "features.ask": "plus", // Bobby AI Chat
+
+  // =====================================================================
+  // ULTIMATE TIER FEATURE TOGGLES
+  // =====================================================================
+  "features.valorant": "ultimate", // Valorant API stats/matches
   "features.custom_branding": "ultimate",
+
+  // =====================================================================
+  // ULTIMATE TIER CUSTOMIZATION
+  // =====================================================================
+  "currency.name": "ultimate", // Custom currency name (max 20 chars, letters only)
+  "currency.emoji": "ultimate", // Custom currency emoji (single emoji)
 
   // =====================================================================
   // CHANNEL SETTINGS (free tier - all servers can configure channels)

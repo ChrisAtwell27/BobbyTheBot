@@ -7,6 +7,7 @@ const {
 const { createCanvas, loadImage } = require("canvas");
 const https = require("https");
 // TARGET_GUILD_ID removed for multi-guild support
+const { getCurrencyName, getCurrencyEmoji } = require("../utils/currencyHelper");
 
 // Function to load image from URL with timeout and error handling
 async function loadImageFromURL(url, timeout = 5000) {

@@ -580,6 +580,89 @@ export const markBirthdayWished = mutation({
 });
 
 /**
+ * Update user gladiator stats
+ */
+export const updateGladiatorStats = mutation({
+  args: {
+    guildId: v.string(),
+    userId: v.string(),
+    gladiatorStats: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_guild_and_user", (q) =>
+        q.eq("guildId", args.guildId).eq("userId", args.userId)
+      )
+      .first();
+
+    const now = Date.now();
+
+    if (user) {
+      await ctx.db.patch(user._id, {
+        gladiatorStats: args.gladiatorStats,
+        updatedAt: now,
+      });
+      return user._id;
+    } else {
+      const newUser = await ctx.db.insert("users", {
+        guildId: args.guildId,
+        userId: args.userId,
+        balance: 0,
+        gladiatorStats: args.gladiatorStats,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return newUser;
+    }
+  },
+});
+
+/**
+ * Get user gladiator stats
+ */
+export const getGladiatorStats = query({
+  args: { guildId: v.string(), userId: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_guild_and_user", (q) =>
+        q.eq("guildId", args.guildId).eq("userId", args.userId)
+      )
+      .first();
+    return user?.gladiatorStats ?? null;
+  },
+});
+
+/**
+ * Get top gladiators by wins
+ */
+export const getTopGladiators = query({
+  args: { guildId: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 10;
+    const users = await ctx.db
+      .query("users")
+      .withIndex("by_guild_and_user", (q) => q.eq("guildId", args.guildId))
+      .collect();
+
+    const usersWithStats = users
+      .filter((u) => u.gladiatorStats && u.gladiatorStats.wins > 0)
+      .sort((a, b) => {
+        const aWins = a.gladiatorStats?.wins ?? 0;
+        const bWins = b.gladiatorStats?.wins ?? 0;
+        if (bWins !== aWins) return bWins - aWins;
+        const aWinRate = aWins / (a.gladiatorStats?.totalMatches ?? 1);
+        const bWinRate = bWins / (b.gladiatorStats?.totalMatches ?? 1);
+        return bWinRate - aWinRate;
+      })
+      .slice(0, limit);
+
+    return usersWithStats;
+  },
+});
+
+/**
  * Reset all user balances to a specific amount (DANGEROUS)
  */
 export const resetAllBalances = mutation({

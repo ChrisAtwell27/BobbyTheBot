@@ -85,6 +85,13 @@ const GAMBLING_COMMANDS = {
                 payout: 'Winner takes all pots',
                 emoji: '🔫',
                 aliases: ['!rr']
+            },
+            gladiator: {
+                syntax: '!gladiator @user [amount] [class]',
+                description: 'Epic turn-based arena combat with 6 classes',
+                payout: 'Winner takes all (minus 5% house)',
+                emoji: '⚔️',
+                aliases: ['!arena']
             }
         }
     }
