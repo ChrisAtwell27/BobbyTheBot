@@ -919,6 +919,40 @@ module.exports = (client) => {
       await message.channel.send({ embeds: [embed] });
     }
 
+    // Handle !wordlededupe command - remove duplicate scores
+    if (message.content.toLowerCase() === "!wordlededupe") {
+      // Check if user has admin permissions
+      if (!message.member.permissions.has("Administrator")) {
+        return await message.channel.send(
+          "You need Administrator permissions to run this command."
+        );
+      }
+
+      await message.channel.send(
+        "Removing duplicate Wordle scores... This may take a moment."
+      );
+
+      try {
+        const client = getConvexClient();
+        if (!client) {
+          return await message.channel.send("Convex client not initialized.");
+        }
+
+        const result = await client.mutation(api.wordle.deduplicateScores, {
+          guildId: message.guild.id,
+        });
+
+        await message.channel.send(
+          `✅ Deduplication complete!\n• Users processed: **${result.usersProcessed}**\n• Duplicate scores removed: **${result.totalRemoved}**`
+        );
+      } catch (error) {
+        console.error("Error during deduplication:", error);
+        await message.channel.send(
+          "An error occurred during deduplication. Check the logs."
+        );
+      }
+    }
+
     // Handle !wordlebackfill command
     if (message.content.toLowerCase() === "!wordlebackfill") {
       await message.channel.send(

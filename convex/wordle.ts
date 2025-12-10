@@ -106,13 +106,27 @@ export const addScore = mutation({
       .first();
 
     const now = Date.now();
+    const scoreTimestamp = args.timestamp || now;
     const newScore = {
       score: args.score,
-      timestamp: args.timestamp || now,
+      timestamp: scoreTimestamp,
       honeyAwarded: args.honeyAwarded,
     };
 
     if (existing) {
+      // Check for duplicate: same day (within 24 hours) with same score
+      // This prevents duplicate entries from backfills or reprocessing
+      const oneDayMs = 24 * 60 * 60 * 1000;
+      const isDuplicate = existing.scores.some((s) => {
+        const timeDiff = Math.abs(s.timestamp - scoreTimestamp);
+        return timeDiff < oneDayMs && s.score === args.score;
+      });
+
+      if (isDuplicate) {
+        // Return existing ID without adding duplicate
+        return existing._id;
+      }
+
       const updatedScores = [...existing.scores, newScore];
       const updatedTotalGames = existing.totalGames + 1;
       const updatedTotalHoney = existing.totalHoney + args.honeyAwarded;
@@ -155,6 +169,51 @@ export const clearAllScores = mutation({
     }
 
     return scores.length;
+  },
+});
+
+/**
+ * Remove duplicate scores from a user's wordle record
+ * Keeps only one score per day (based on timestamp within 24 hours and same score)
+ */
+export const deduplicateScores = mutation({
+  args: { guildId: v.string() },
+  handler: async (ctx, args) => {
+    const allScores = await ctx.db
+      .query("wordleScores")
+      .withIndex("by_guild_and_user", (q) => q.eq("guildId", args.guildId))
+      .collect();
+
+    let totalRemoved = 0;
+    const oneDayMs = 24 * 60 * 60 * 1000;
+
+    for (const userScore of allScores) {
+      const uniqueScores: typeof userScore.scores = [];
+
+      for (const score of userScore.scores) {
+        // Check if this score is a duplicate of any already-added score
+        const isDuplicate = uniqueScores.some((s) => {
+          const timeDiff = Math.abs(s.timestamp - score.timestamp);
+          return timeDiff < oneDayMs && s.score === score.score;
+        });
+
+        if (!isDuplicate) {
+          uniqueScores.push(score);
+        }
+      }
+
+      const removedCount = userScore.scores.length - uniqueScores.length;
+      if (removedCount > 0) {
+        totalRemoved += removedCount;
+        await ctx.db.patch(userScore._id, {
+          scores: uniqueScores,
+          totalGames: uniqueScores.length,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
+    return { totalRemoved, usersProcessed: allScores.length };
   },
 });
 

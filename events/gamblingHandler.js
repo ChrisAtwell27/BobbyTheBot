@@ -118,6 +118,7 @@ async function createChallenge(message, args, type, options) {
     creatorName: message.author.username,
     amount: betAmount,
     channelId: message.channel.id,
+    guildId: guildId,
     timestamp: Date.now(),
   };
 
@@ -1295,7 +1296,10 @@ async function resolveNumberDuelGame(client, gameId, game) {
 
 // List current challenges
 async function listChallenges(message) {
-  const currentChallenges = Array.from(challenges.entries());
+  const guildId = message.guild.id;
+  const currentChallenges = Array.from(challenges.entries()).filter(
+    ([id, challenge]) => challenge.guildId === guildId
+  );
 
   if (currentChallenges.length === 0) {
     return message.channel.send(
