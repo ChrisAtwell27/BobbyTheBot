@@ -618,8 +618,8 @@ async function showMMRHistory(message, registration) {
 
       // Seasonal stats
       if (v3Data.seasonal && v3Data.seasonal.length > 0) {
-        // Get the last 3 seasons
-        const recentSeasons = v3Data.seasonal.slice(0, 3);
+        // Get the last 3 seasons (reverse since API returns oldest first)
+        const recentSeasons = [...v3Data.seasonal].reverse().slice(0, 3);
         const seasonalText = recentSeasons.map(season => {
           const seasonName = season.season?.short || "Unknown";
           const wins = season.wins || 0;

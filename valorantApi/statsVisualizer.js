@@ -250,9 +250,9 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
             }
         }
 
-        // Seasonal stats summary (from v3)
+        // Seasonal stats summary (from v3) - get most recent season (API returns oldest first)
         if (hasV3Data && mmrDataV3.seasonal && mmrDataV3.seasonal.length > 0) {
-            const currentSeason = mmrDataV3.seasonal[0];
+            const currentSeason = mmrDataV3.seasonal[mmrDataV3.seasonal.length - 1];
             if (currentSeason.games > 0) {
                 const wins = currentSeason.wins || 0;
                 const games = currentSeason.games || 0;
