@@ -6,6 +6,7 @@
 const { createCanvas } = require('canvas');
 const { loadImageFromURL } = require('./apiClient');
 const { RANK_MAPPING, loadRankImage, createFallbackRankIcon } = require('./rankUtils');
+const { getAgentById, ROLE_EMOJIS } = require('./agentUtils');
 
 /**
  * Creates a comprehensive stats visualization for a player
@@ -15,9 +16,10 @@ const { RANK_MAPPING, loadRankImage, createFallbackRankIcon } = require('./rankU
  * @param {string} userAvatar - User's Discord avatar URL
  * @param {Object} registration - User registration data
  * @param {Object} mmrDataV3 - MMR data from v3 API (optional, for enhanced display)
+ * @param {Object} bestAgent - Best agent stats (optional)
  * @returns {Promise<Canvas>} - The created canvas
  */
-async function createStatsVisualization(accountData, mmrData, matchData, userAvatar, registration, mmrDataV3 = null) {
+async function createStatsVisualization(accountData, mmrData, matchData, userAvatar, registration, mmrDataV3 = null, bestAgent = null) {
     const canvas = createCanvas(1000, 900);
     const ctx = canvas.getContext('2d');
 
@@ -277,6 +279,95 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
         }
     }
 
+    // Best Agent section - display user's most successful agent
+    if (bestAgent && bestAgent.name) {
+        const agentBoxY = 380;
+
+        // Agent box background
+        const agentBoxGradient = ctx.createLinearGradient(50, agentBoxY, 950, agentBoxY + 60);
+        agentBoxGradient.addColorStop(0, 'rgba(88, 101, 242, 0.15)');
+        agentBoxGradient.addColorStop(1, 'rgba(114, 137, 218, 0.15)');
+        ctx.fillStyle = agentBoxGradient;
+        ctx.fillRect(50, agentBoxY, 900, 60);
+        ctx.strokeStyle = '#5865f2';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(50, agentBoxY, 900, 60);
+
+        // Get agent info from our data
+        const agentInfo = getAgentById(bestAgent.name.toLowerCase());
+        const agentRole = agentInfo ? agentInfo.role : 'Agent';
+        const roleEmoji = ROLE_EMOJIS[agentRole] || '🎮';
+
+        // Best Agent label
+        ctx.fillStyle = '#5865f2';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('BEST AGENT', 80, agentBoxY + 20);
+
+        // Agent name with role
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 22px Arial';
+        ctx.fillText(`${bestAgent.name}`, 80, agentBoxY + 45);
+
+        // Role indicator
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font = '14px Arial';
+        ctx.fillText(`${roleEmoji} ${agentRole}`, 200, agentBoxY + 45);
+
+        // Stats display
+        const statsStartX = 350;
+
+        // Games played
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText('Games', statsStartX, agentBoxY + 20);
+        ctx.font = 'bold 20px Arial';
+        ctx.fillText(`${bestAgent.games}`, statsStartX, agentBoxY + 45);
+
+        // Win rate
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText('Win Rate', statsStartX + 100, agentBoxY + 20);
+        const winRateColor = bestAgent.winRate >= 55 ? '#00ff88' : bestAgent.winRate >= 45 ? '#ffff00' : '#ff4444';
+        ctx.fillStyle = winRateColor;
+        ctx.font = 'bold 20px Arial';
+        ctx.fillText(`${bestAgent.winRate.toFixed(1)}%`, statsStartX + 100, agentBoxY + 45);
+
+        // KDA
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText('KDA', statsStartX + 210, agentBoxY + 20);
+        const kdaColor = bestAgent.kda >= 1.5 ? '#00ff88' : bestAgent.kda >= 1.0 ? '#ffff00' : '#ff4444';
+        ctx.fillStyle = kdaColor;
+        ctx.font = 'bold 20px Arial';
+        ctx.fillText(`${bestAgent.kda.toFixed(2)}`, statsStartX + 210, agentBoxY + 45);
+
+        // Avg ACS
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText('Avg ACS', statsStartX + 310, agentBoxY + 20);
+        const acsColor = bestAgent.avgACS >= 250 ? '#00ff88' : bestAgent.avgACS >= 200 ? '#ffff00' : '#ff8800';
+        ctx.fillStyle = acsColor;
+        ctx.font = 'bold 20px Arial';
+        ctx.fillText(`${Math.round(bestAgent.avgACS)}`, statsStartX + 310, agentBoxY + 45);
+
+        // HS%
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText('HS%', statsStartX + 420, agentBoxY + 20);
+        const hsColor = bestAgent.hsPercent >= 25 ? '#00ff88' : bestAgent.hsPercent >= 18 ? '#ffff00' : '#ff8800';
+        ctx.fillStyle = hsColor;
+        ctx.font = 'bold 20px Arial';
+        ctx.fillText(`${bestAgent.hsPercent.toFixed(1)}%`, statsStartX + 420, agentBoxY + 45);
+
+        // K/D/A totals
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font = '12px Arial';
+        ctx.fillText(`${bestAgent.kills}/${bestAgent.deaths}/${bestAgent.assists}`, statsStartX + 520, agentBoxY + 45);
+    }
+
+    // Adjust match section Y position based on whether best agent is shown
+    const matchSectionY = bestAgent && bestAgent.name ? 455 : 390;
+
     // Enhanced recent matches section - Filter for competitive matches only
     if (matchData && matchData.length > 0) {
         // Filter for competitive matches only
@@ -286,20 +377,20 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
 
         if (competitiveMatches.length > 0) {
             // Section header with gradient background
-            const matchesHeaderGradient = ctx.createLinearGradient(50, 390, 950, 420);
+            const matchesHeaderGradient = ctx.createLinearGradient(50, matchSectionY, 950, matchSectionY + 30);
             matchesHeaderGradient.addColorStop(0, 'rgba(255, 70, 84, 0.2)');
             matchesHeaderGradient.addColorStop(1, 'rgba(255, 107, 122, 0.2)');
             ctx.fillStyle = matchesHeaderGradient;
-            ctx.fillRect(50, 390, 900, 30);
+            ctx.fillRect(50, matchSectionY, 900, 30);
 
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 22px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText('RECENT COMPETITIVE MATCHES', 80, 412);
+            ctx.fillText('RECENT COMPETITIVE MATCHES', 80, matchSectionY + 22);
 
-            const recentMatches = competitiveMatches.slice(0, 6);
+            const recentMatches = competitiveMatches.slice(0, 5); // Reduced to 5 to fit with best agent
             recentMatches.forEach((match, index) => {
-                const y = 445 + index * 60;
+                const y = matchSectionY + 55 + index * 60;
                 const player = match.players.find(p => p.name.toLowerCase() === accountData.name.toLowerCase());
 
                 if (!player) return;
@@ -361,11 +452,11 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 22px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText('NO RECENT COMPETITIVE MATCHES FOUND', 80, 445);
+            ctx.fillText('NO RECENT COMPETITIVE MATCHES FOUND', 80, matchSectionY + 55);
 
             ctx.font = '16px Arial';
             ctx.fillStyle = '#cccccc';
-            ctx.fillText('Play some competitive matches to see your recent performance here!', 80, 475);
+            ctx.fillText('Play some competitive matches to see your recent performance here!', 80, matchSectionY + 85);
         }
     }
 

@@ -336,12 +336,127 @@ function calculateAverageACS(totalScore, totalMatches) {
     return totalMatches > 0 ? totalScore / totalMatches : 0;
 }
 
+/**
+ * Gets agent statistics from match data (v4 endpoint)
+ * @param {Object} registration - User registration data
+ * @param {Array} matchData - Match data array from v4 API
+ * @returns {Object} - Agent statistics with best agent info
+ */
+function getAgentStatsFromMatches(registration, matchData) {
+    if (!matchData || !Array.isArray(matchData) || matchData.length === 0) {
+        return { bestAgent: null, agentStats: {} };
+    }
+
+    const agentStats = {};
+
+    // Filter for competitive matches
+    const competitiveMatches = matchData.filter(match =>
+        match.metadata && match.metadata.queue && match.metadata.queue.name &&
+        match.metadata.queue.name.toLowerCase() === 'competitive'
+    );
+
+    for (const match of competitiveMatches) {
+        if (!match.players) continue;
+
+        const player = match.players.find(p =>
+            p.name && p.name.toLowerCase() === registration.name.toLowerCase()
+        );
+
+        if (!player || !player.agent || !player.agent.name) continue;
+
+        const agentName = player.agent.name.toLowerCase();
+        const won = player.team_id === (match.teams?.find(t => t.won) || {}).team_id;
+
+        if (!agentStats[agentName]) {
+            agentStats[agentName] = {
+                name: player.agent.name,
+                games: 0,
+                wins: 0,
+                kills: 0,
+                deaths: 0,
+                assists: 0,
+                totalScore: 0,
+                headshots: 0,
+                bodyshots: 0,
+                legshots: 0
+            };
+        }
+
+        const stats = agentStats[agentName];
+        stats.games++;
+        if (won) stats.wins++;
+        stats.kills += player.stats?.kills || 0;
+        stats.deaths += player.stats?.deaths || 0;
+        stats.assists += player.stats?.assists || 0;
+        stats.totalScore += player.stats?.score || 0;
+        stats.headshots += player.stats?.headshots || 0;
+        stats.bodyshots += player.stats?.bodyshots || 0;
+        stats.legshots += player.stats?.legshots || 0;
+    }
+
+    // Calculate derived stats and find best agent
+    let bestAgent = null;
+    let bestScore = -1;
+
+    for (const [agentId, stats] of Object.entries(agentStats)) {
+        // Calculate KDA
+        stats.kda = stats.deaths > 0
+            ? (stats.kills + stats.assists) / stats.deaths
+            : stats.kills + stats.assists;
+
+        // Calculate win rate
+        stats.winRate = stats.games > 0 ? (stats.wins / stats.games) * 100 : 0;
+
+        // Calculate average ACS
+        stats.avgACS = stats.games > 0 ? stats.totalScore / stats.games : 0;
+
+        // Calculate headshot percentage
+        const totalShots = stats.headshots + stats.bodyshots + stats.legshots;
+        stats.hsPercent = totalShots > 0 ? (stats.headshots / totalShots) * 100 : 0;
+
+        // Score agents by: games played (weight 0.3) + win rate (weight 0.4) + KDA (weight 0.3)
+        // Minimum 3 games to be considered "best"
+        if (stats.games >= 3) {
+            const gamesScore = Math.min(stats.games / 20, 1) * 30; // Max 30 points for games
+            const winRateScore = stats.winRate * 0.4; // Max 40 points for win rate
+            const kdaScore = Math.min(stats.kda, 3) * 10; // Max 30 points for KDA
+
+            const totalScore = gamesScore + winRateScore + kdaScore;
+
+            if (totalScore > bestScore) {
+                bestScore = totalScore;
+                bestAgent = {
+                    id: agentId,
+                    ...stats
+                };
+            }
+        }
+    }
+
+    // If no agent has 3+ games, just pick the most played
+    if (!bestAgent) {
+        let mostGames = 0;
+        for (const [agentId, stats] of Object.entries(agentStats)) {
+            if (stats.games > mostGames) {
+                mostGames = stats.games;
+                bestAgent = {
+                    id: agentId,
+                    ...stats
+                };
+            }
+        }
+    }
+
+    return { bestAgent, agentStats };
+}
+
 module.exports = {
     getPlayerMatchStats,
     getPlayerMatchStatsLegacy,
     calculateKDA,
     calculateWinRate,
     calculateAverageACS,
+    getAgentStatsFromMatches,
     clearCachedStats,
     clearAllCachedStats,
     COMPETITIVE_MODES
