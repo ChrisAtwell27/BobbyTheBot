@@ -36,7 +36,7 @@ const { formatCurrency, getCurrencyName } = require("../utils/currencyHelper");
 const DEFAULT_CHALLENGE_TIMEOUT = 5 * 60 * 1000; // 5 minutes default
 const MIN_CHALLENGE_TIMEOUT = 1 * 60 * 1000; // 1 minute minimum
 const MAX_CHALLENGE_TIMEOUT = 60 * 60 * 1000; // 60 minutes maximum
-const TURN_TIMEOUT = 60 * 1000; // 60 seconds per turn
+const TURN_TIMEOUT = 30 * 60 * 1000; // 30 minutes per turn
 const HOUSE_CUT = 0.05; // 5% house cut
 
 // Memory management
@@ -658,29 +658,31 @@ function buildMatchEmbed(match, turnMessage = null, isGameOver = false) {
     }
   }
 
+  // Determine whose turn and highlight them
+  const currentPlayer = match.currentTurn === p1.id ? p1 : p2;
+  const turnIndicator = isGameOver ? "" : `\n\n🎯 **<@${currentPlayer.id}> IT'S YOUR TURN!** 🎯`;
+
+  // Build compact stat lines
+  const p1Turn = match.currentTurn === p1.id && !isGameOver ? "▶️ " : "";
+  const p2Turn = match.currentTurn === p2.id && !isGameOver ? "▶️ " : "";
+
+  const p1Stats = `${p1Turn}${p1.classData.emoji} **${p1.name}** (${p1.classData.name})\n` +
+    `❤️ ${p1.hp}/${p1.maxHp}${p1.shield > 0 ? ` +${p1.shield}🛡️` : ""} | ⚡${p1.energy}/${MAX_ENERGY}\n` +
+    `⚔️${p1.attack} 🛡️${p1.defense} 💨${p1.speed}${p1StatusIcons}`;
+
+  const p2Stats = `${p2Turn}${p2.classData.emoji} **${p2.name}** (${p2.classData.name})\n` +
+    `❤️ ${p2.hp}/${p2.maxHp}${p2.shield > 0 ? ` +${p2.shield}🛡️` : ""} | ⚡${p2.energy}/${MAX_ENERGY}\n` +
+    `⚔️${p2.attack} 🛡️${p2.defense} 💨${p2.speed}${p2StatusIcons}`;
+
   const embed = new EmbedBuilder()
     .setTitle("⚔️ GLADIATOR ARENA ⚔️")
     .setColor(isGameOver ? 0xFFD700 : (match.turn >= FATIGUE_START_TURN ? 0xFF6600 : 0xFF4444))
-    .setDescription(turnMessage || `**Turn ${match.turn}/${MAX_TURNS}** - ${match.currentTurn === p1.id ? p1.name : p2.name}'s turn!${fatigueWarning}`)
+    .setDescription((turnMessage || `**Turn ${match.turn}/${MAX_TURNS}**`) + turnIndicator + fatigueWarning)
     .addFields(
       {
-        name: `${p1.classData.emoji} ${p1.name} (${p1.classData.name})`,
-        value: `${p1HpBar} ${p1.hp}/${p1.maxHp} HP${p1.shield > 0 ? ` (+${p1.shield} 🛡️)` : ""}\n` +
-               `${p1EnergyBar} ${p1.energy}/${MAX_ENERGY}\n` +
-               `⚔️ ${p1.attack} | 🛡️ ${p1.defense} | 💨 ${p1.speed}${p1StatusIcons}`,
-        inline: true,
-      },
-      {
-        name: "⚡",
-        value: "VS",
-        inline: true,
-      },
-      {
-        name: `${p2.classData.emoji} ${p2.name} (${p2.classData.name})`,
-        value: `${p2HpBar} ${p2.hp}/${p2.maxHp} HP${p2.shield > 0 ? ` (+${p2.shield} 🛡️)` : ""}\n` +
-               `${p2EnergyBar} ${p2.energy}/${MAX_ENERGY}\n` +
-               `⚔️ ${p2.attack} | 🛡️ ${p2.defense} | 💨 ${p2.speed}${p2StatusIcons}`,
-        inline: true,
+        name: "🏟️ Combatants",
+        value: `${p1Stats}\n\n⚡ **VS** ⚡\n\n${p2Stats}`,
+        inline: false,
       }
     )
     .setFooter({ text: `Prize Pool: ${match.prizePool} (5% house cut applied)` })
@@ -1680,26 +1682,69 @@ async function endMatchByHp(interaction, match) {
 
     const refundStr = await formatCurrency(match.guildId, refundAmount);
 
+    // Build draw display for both players
+    const p1Display =
+      `${match.player1.classData.emoji} **${match.player1.name}**\n` +
+      `Class: ${match.player1.classData.name}\n` +
+      `HP: ${match.player1.hp}/${match.player1.maxHp} (${Math.floor(p1HpPercent * 100)}%)`;
+
+    const p2Display =
+      `${match.player2.classData.emoji} **${match.player2.name}**\n` +
+      `Class: ${match.player2.classData.name}\n` +
+      `HP: ${match.player2.hp}/${match.player2.maxHp} (${Math.floor(p2HpPercent * 100)}%)`;
+
     const drawEmbed = new EmbedBuilder()
-      .setTitle("⚔️ GLADIATOR ARENA - DRAW! ⚔️")
-      .setColor(0x808080)
+      .setTitle("🤝 GAME OVER - DRAW 🤝")
+      .setColor(0x808080) // Gray for draw
       .setDescription(
-        `⏰ **Time's up!** Maximum turns reached.\n\n` +
+        `**═══════════════════════════════**\n` +
+        `⏰ Maximum ${MAX_TURNS} turns reached!\n` +
         `Both gladiators fought to a standstill!\n` +
-        `**${match.player1.name}:** ${Math.floor(p1HpPercent * 100)}% HP\n` +
-        `**${match.player2.name}:** ${Math.floor(p2HpPercent * 100)}% HP\n\n` +
-        `💰 Each player receives ${refundStr}`
+        `**═══════════════════════════════**`
       )
-      .setFooter({ text: `Match lasted ${MAX_TURNS} turns` })
+      .addFields(
+        {
+          name: "⚔️ Fighter 1",
+          value: p1Display,
+          inline: true,
+        },
+        {
+          name: "⚔️ Fighter 2",
+          value: p2Display,
+          inline: true,
+        },
+        {
+          name: "\u200B",
+          value: "\u200B",
+          inline: false,
+        },
+        {
+          name: "💰 Refund",
+          value: `**${refundStr}** each`,
+          inline: true,
+        },
+        {
+          name: "⏱️ Match Duration",
+          value: `**${MAX_TURNS}** turns (max)`,
+          inline: true,
+        }
+      )
+      .setFooter({ text: `GG! Use !gladiator @user <amount> to rematch!` })
       .setTimestamp();
 
     const disabledRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("match_draw")
-        .setLabel("Draw!")
+        .setLabel("DRAW!")
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(true)
-        .setEmoji("🤝")
+        .setEmoji("🤝"),
+      new ButtonBuilder()
+        .setCustomId("match_draw_gg")
+        .setLabel("GG")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true)
+        .setEmoji("🎮")
     );
 
     await interaction.update({ embeds: [drawEmbed], components: [disabledRow] });
@@ -1711,30 +1756,83 @@ async function endMatchByHp(interaction, match) {
 
     const prizeStr = await formatCurrency(match.guildId, prizePool);
 
+    // Calculate HP percentages
+    const winnerHpPercent = Math.floor((winner.hp / winner.maxHp) * 100);
+    const loserHpPercent = Math.floor((loser.hp / loser.maxHp) * 100);
+
+    // Build winner showcase
+    const winnerShowcase =
+      `╔══════════════════════════════╗\n` +
+      `║     🏆 **WINNER** 🏆        ║\n` +
+      `╠══════════════════════════════╣\n` +
+      `║  ${winner.classData.emoji} **${winner.name}**\n` +
+      `║  Class: ${winner.classData.name}\n` +
+      `║  HP Remaining: ${winner.hp}/${winner.maxHp} (${winnerHpPercent}%)\n` +
+      `╚══════════════════════════════╝`;
+
+    // Build loser display
+    const loserDisplay =
+      `┌──────────────────────────────┐\n` +
+      `│     💀 Defeated 💀          │\n` +
+      `├──────────────────────────────┤\n` +
+      `│  ${loser.classData.emoji} ${loser.name}\n` +
+      `│  Class: ${loser.classData.name}\n` +
+      `│  Final HP: ${loser.hp}/${loser.maxHp} (${loserHpPercent}%)\n` +
+      `└──────────────────────────────┘`;
+
     const victoryEmbed = new EmbedBuilder()
-      .setTitle("⚔️ GLADIATOR ARENA - TIME'S UP! ⚔️")
-      .setColor(0xFFD700)
+      .setTitle("⏰ GAME OVER - TIME'S UP ⏰")
+      .setColor(0xFFD700) // Gold for victory
       .setDescription(
-        `⏰ **Maximum turns reached!**\n\n` +
-        `**${winner.name}** wins with ${Math.floor((winner.hp / winner.maxHp) * 100)}% HP remaining!\n` +
-        `**${loser.name}** had ${Math.floor((loser.hp / loser.maxHp) * 100)}% HP`
+        `**═══════════════════════════════**\n` +
+        `Maximum ${MAX_TURNS} turns reached!\n` +
+        `**${winner.name}** wins by HP advantage!\n` +
+        `**═══════════════════════════════**`
       )
       .addFields(
-        { name: "🏆 Winner", value: `${winner.classData.emoji} ${winner.name}`, inline: true },
-        { name: "💀 Loser", value: `${loser.classData.emoji} ${loser.name}`, inline: true },
-        { name: "💰 Prize", value: prizeStr, inline: true },
+        {
+          name: "\u200B",
+          value: winnerShowcase,
+          inline: false,
+        },
+        {
+          name: "\u200B",
+          value: loserDisplay,
+          inline: false,
+        },
+        {
+          name: "💰 Prize Awarded",
+          value: `**${prizeStr}** → <@${winner.id}>`,
+          inline: true,
+        },
+        {
+          name: "⏱️ Match Duration",
+          value: `**${MAX_TURNS}** turns (max)`,
+          inline: true,
+        },
+        {
+          name: "🏟️ Arena Fee",
+          value: `5% house cut`,
+          inline: true,
+        }
       )
       .setThumbnail(winner.avatarURL)
-      .setFooter({ text: `Match lasted ${MAX_TURNS} turns` })
+      .setFooter({ text: `GG! Use !gladiator @user <amount> to play again!` })
       .setTimestamp();
 
     const disabledRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("match_ended")
-        .setLabel("Match Ended")
+        .setCustomId("match_ended_winner")
+        .setLabel(`${winner.name} WINS!`)
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(true)
+        .setEmoji("🏆"),
+      new ButtonBuilder()
+        .setCustomId("match_ended_gg")
+        .setLabel("GG")
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(true)
-        .setEmoji("🏁")
+        .setEmoji("🎮")
     );
 
     await interaction.update({ embeds: [victoryEmbed], components: [disabledRow] });
@@ -1785,34 +1883,102 @@ async function endMatch(interaction, match, winner, loser, forfeited) {
   // Update stats
   await updateStats(match.guildId, winner.id, loser.id, winner.class, loser.class, prizePool);
 
-  // Build victory embed
+  // Build victory embed with clear GAME OVER screen
   const prizeStr = await formatCurrency(match.guildId, prizePool);
 
+  // Calculate HP percentages for display
+  const winnerHpPercent = Math.floor((winner.hp / winner.maxHp) * 100);
+  const loserHpPercent = Math.floor((loser.hp / loser.maxHp) * 100);
+
+  // Build dramatic title based on how the match ended
+  let titleEmoji = "🏆";
+  let endReason = "";
+  if (forfeited) {
+    titleEmoji = "🏳️";
+    endReason = "FORFEIT";
+  } else if (loser.hp <= 0) {
+    titleEmoji = "💀";
+    endReason = "KNOCKOUT";
+  }
+
+  // Build winner showcase
+  const winnerShowcase =
+    `╔══════════════════════════════╗\n` +
+    `║     🏆 **WINNER** 🏆        ║\n` +
+    `╠══════════════════════════════╣\n` +
+    `║  ${winner.classData.emoji} **${winner.name}**\n` +
+    `║  Class: ${winner.classData.name}\n` +
+    `║  HP Remaining: ${winner.hp}/${winner.maxHp} (${winnerHpPercent}%)\n` +
+    `╚══════════════════════════════╝`;
+
+  // Build loser display
+  const loserDisplay =
+    `┌──────────────────────────────┐\n` +
+    `│     💀 Defeated 💀          │\n` +
+    `├──────────────────────────────┤\n` +
+    `│  ${loser.classData.emoji} ${loser.name}\n` +
+    `│  Class: ${loser.classData.name}\n` +
+    `│  Final HP: ${Math.max(0, loser.hp)}/${loser.maxHp} (${loserHpPercent}%)\n` +
+    `└──────────────────────────────┘`;
+
+  // Match summary
+  const matchSummary = forfeited
+    ? `🏳️ **${loser.name}** surrendered the battle!`
+    : `⚔️ **${winner.name}** struck the final blow!`;
+
   const victoryEmbed = new EmbedBuilder()
-    .setTitle("⚔️ GLADIATOR ARENA - VICTORY! ⚔️")
-    .setColor(0xFFD700)
+    .setTitle(`${titleEmoji} GAME OVER - ${endReason || "VICTORY"} ${titleEmoji}`)
+    .setColor(0xFFD700) // Gold for victory
     .setDescription(
-      forfeited
-        ? `🏳️ **${loser.name}** has forfeited!\n\n🏆 **${winner.name}** wins by default!`
-        : `💀 **${loser.name}** has been defeated!\n\n🏆 **${winner.name}** is victorious!`
+      `**═══════════════════════════════**\n` +
+      `${matchSummary}\n` +
+      `**═══════════════════════════════**`
     )
     .addFields(
-      { name: "🏆 Winner", value: `${winner.classData.emoji} ${winner.name}`, inline: true },
-      { name: "💀 Loser", value: `${loser.classData.emoji} ${loser.name}`, inline: true },
-      { name: "💰 Prize", value: prizeStr, inline: true },
+      {
+        name: "\u200B", // Empty field name for spacing
+        value: winnerShowcase,
+        inline: false,
+      },
+      {
+        name: "\u200B",
+        value: loserDisplay,
+        inline: false,
+      },
+      {
+        name: "💰 Prize Awarded",
+        value: `**${prizeStr}** → <@${winner.id}>`,
+        inline: true,
+      },
+      {
+        name: "⏱️ Match Duration",
+        value: `**${match.turn}** turns`,
+        inline: true,
+      },
+      {
+        name: "🏟️ Arena Fee",
+        value: `5% house cut`,
+        inline: true,
+      }
     )
     .setThumbnail(winner.avatarURL)
-    .setFooter({ text: `Match lasted ${match.turn} turns` })
+    .setFooter({ text: `GG! Use !gladiator @user <amount> to play again!` })
     .setTimestamp();
 
-  // Disable all buttons
+  // Disable all buttons with clear "Game Over" indicator
   const disabledRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("match_ended")
-      .setLabel("Match Ended")
+      .setCustomId("match_ended_winner")
+      .setLabel(`${winner.name} WINS!`)
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(true)
+      .setEmoji("🏆"),
+    new ButtonBuilder()
+      .setCustomId("match_ended_gg")
+      .setLabel("GG")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(true)
-      .setEmoji("🏁")
+      .setEmoji("🎮")
   );
 
   await interaction.update({ embeds: [victoryEmbed], components: [disabledRow] });
