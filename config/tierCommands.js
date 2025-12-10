@@ -87,7 +87,7 @@ const GAMBLING_COMMANDS = {
                 aliases: ['!rr']
             },
             gladiator: {
-                syntax: '!gladiator @user [amount] [class]',
+                syntax: '!gladiator @user [amount] [class] [duration]',
                 description: 'Epic turn-based arena combat with 6 classes',
                 payout: 'Winner takes all (minus 5% house)',
                 emoji: '⚔️',

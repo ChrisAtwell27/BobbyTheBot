@@ -33,7 +33,9 @@ const { formatCurrency, getCurrencyName } = require("../utils/currencyHelper");
 // CONSTANTS
 // ==========================================
 
-const CHALLENGE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const DEFAULT_CHALLENGE_TIMEOUT = 5 * 60 * 1000; // 5 minutes default
+const MIN_CHALLENGE_TIMEOUT = 1 * 60 * 1000; // 1 minute minimum
+const MAX_CHALLENGE_TIMEOUT = 60 * 60 * 1000; // 60 minutes maximum
 const TURN_TIMEOUT = 60 * 1000; // 60 seconds per turn
 const HOUSE_CUT = 0.05; // 5% house cut
 
@@ -42,40 +44,46 @@ const activeChallenges = new CleanupMap(5 * 60 * 1000, 1 * 60 * 1000);
 const activeMatches = new LimitedMap(50);
 
 // ==========================================
-// GLADIATOR CLASSES
+// GLADIATOR CLASSES - BALANCED SYSTEM
 // ==========================================
+// Balance Philosophy:
+// - Total stat budget: ~160 points per class (HP/10 + ATK + DEF + SPD)
+// - Each class has clear strengths/weaknesses but remains competitive
+// - Matchups are rock-paper-scissors style, not hard counters
+// - Average damage per turn roughly equal across classes (~15-18 effective)
 
 const GLADIATOR_CLASSES = {
   warrior: {
     name: "Warrior",
     emoji: "⚔️",
-    description: "Balanced fighter with high damage and good defense",
+    description: "Balanced all-rounder with consistent damage and durability",
     color: 0xE74C3C, // Red
-    baseStats: { hp: 120, attack: 18, defense: 12, speed: 10 },
+    // Budget: 110/10 + 16 + 12 + 11 = 50 (balanced across all stats)
+    baseStats: { hp: 110, attack: 16, defense: 12, speed: 11 },
     abilities: [
       {
         name: "Heavy Strike",
         emoji: "🗡️",
-        description: "Deal 150% damage",
+        description: "Deal 140% damage",
         type: "damage",
-        multiplier: 1.5,
+        multiplier: 1.4,
         cooldown: 0,
       },
       {
         name: "Shield Bash",
         emoji: "🛡️",
-        description: "Deal 80% damage and stun for 1 turn",
+        description: "Deal 70% damage and stun for 1 turn",
         type: "damage_stun",
-        multiplier: 0.8,
+        multiplier: 0.7,
         effect: { type: "stun", duration: 1 },
-        cooldown: 3,
+        cooldown: 4,
       },
       {
         name: "Battle Cry",
         emoji: "📣",
-        description: "Increase attack by 30% for 3 turns",
+        description: "Increase attack by 25% for 3 turns",
         type: "buff",
-        effect: { stat: "attack", bonus: 0.3, duration: 3 },
+        effect: { stat: "attack", bonus: 0.25, duration: 3 },
         cooldown: 4,
       },
     ],
@@ -83,9 +91,10 @@ const GLADIATOR_CLASSES = {
   mage: {
     name: "Mage",
     emoji: "🔮",
-    description: "High damage spellcaster with powerful abilities",
+    description: "High burst damage with utility, but fragile",
     color: 0x9B59B6, // Purple
-    baseStats: { hp: 80, attack: 25, defense: 6, speed: 12 },
+    // Budget: 90/10 + 20 + 8 + 12 = 49 (high ATK, low DEF, moderate SPD)
+    baseStats: { hp: 90, attack: 20, defense: 8, speed: 12 },
     abilities: [
       {
         name: "Fireball",
@@ -98,18 +107,18 @@ const GLADIATOR_CLASSES = {
       {
         name: "Ice Shard",
         emoji: "❄️",
-        description: "Deal 100% damage and slow enemy for 2 turns",
+        description: "Deal 90% damage and reduce enemy speed 30% for 2 turns",
         type: "damage_debuff",
-        multiplier: 1.0,
-        effect: { stat: "speed", penalty: 0.5, duration: 2 },
-        cooldown: 2,
+        multiplier: 0.9,
+        effect: { stat: "speed", penalty: 0.3, duration: 2 },
+        cooldown: 3,
       },
       {
         name: "Arcane Barrier",
         emoji: "✨",
-        description: "Gain a shield that absorbs 40 damage",
+        description: "Gain a shield that absorbs 30 damage",
         type: "shield",
-        shieldAmount: 40,
+        shieldAmount: 30,
         cooldown: 4,
       },
     ],
@@ -117,27 +126,28 @@ const GLADIATOR_CLASSES = {
   rogue: {
     name: "Rogue",
     emoji: "🗡️",
-    description: "Fast and deadly, excels at critical strikes",
+    description: "Fast striker with crits and evasion, moderate durability",
     color: 0x2ECC71, // Green
-    baseStats: { hp: 90, attack: 20, defense: 8, speed: 18 },
+    // Budget: 95/10 + 17 + 9 + 15 = 50.5 (high SPD, crit-focused)
+    baseStats: { hp: 95, attack: 17, defense: 9, speed: 15 },
     abilities: [
       {
         name: "Backstab",
         emoji: "🔪",
-        description: "Deal 120% damage, 40% chance for 200% crit",
+        description: "Deal 115% damage, 35% chance for 180% crit",
         type: "damage_crit",
-        multiplier: 1.2,
-        critChance: 0.4,
-        critMultiplier: 2.0,
+        multiplier: 1.15,
+        critChance: 0.35,
+        critMultiplier: 1.8,
         cooldown: 0,
       },
       {
         name: "Poison Blade",
         emoji: "☠️",
-        description: "Deal 80% damage + 8 poison damage for 3 turns",
+        description: "Deal 70% damage + 6 poison damage for 3 turns",
         type: "damage_dot",
-        multiplier: 0.8,
-        effect: { type: "poison", damage: 8, duration: 3 },
+        multiplier: 0.7,
+        effect: { type: "poison", damage: 6, duration: 3 },
         cooldown: 3,
       },
       {
@@ -146,39 +156,41 @@ const GLADIATOR_CLASSES = {
         description: "Evade all attacks next turn",
         type: "evade",
         duration: 1,
-        cooldown: 4,
+        cooldown: 5,
       },
     ],
   },
   tank: {
     name: "Tank",
     emoji: "🛡️",
-    description: "Incredibly durable with high HP and defense",
+    description: "Very durable with self-sustain, lower damage output",
     color: 0x3498DB, // Blue
-    baseStats: { hp: 160, attack: 12, defense: 18, speed: 6 },
+    // Budget: 130/10 + 13 + 16 + 8 = 50 (high HP/DEF, low ATK/SPD)
+    baseStats: { hp: 130, attack: 13, defense: 16, speed: 8 },
     abilities: [
       {
         name: "Slam",
         emoji: "💥",
-        description: "Deal damage equal to 50% of your defense",
+        description: "Deal 100% damage + 40% of your defense as bonus",
         type: "defense_damage",
-        defenseMultiplier: 0.5,
+        multiplier: 1.0,
+        defenseMultiplier: 0.4,
         cooldown: 0,
       },
       {
         name: "Fortify",
         emoji: "🏰",
-        description: "Increase defense by 50% for 3 turns",
+        description: "Increase defense by 35% for 3 turns",
         type: "buff",
-        effect: { stat: "defense", bonus: 0.5, duration: 3 },
-        cooldown: 3,
+        effect: { stat: "defense", bonus: 0.35, duration: 3 },
+        cooldown: 4,
       },
       {
-        name: "Taunt & Heal",
+        name: "Second Wind",
         emoji: "💪",
-        description: "Heal 25% of max HP",
+        description: "Heal 20% of max HP",
         type: "heal",
-        healPercent: 0.25,
+        healPercent: 0.20,
         cooldown: 4,
       },
     ],
@@ -186,35 +198,36 @@ const GLADIATOR_CLASSES = {
   assassin: {
     name: "Assassin",
     emoji: "🥷",
-    description: "Glass cannon with extremely high burst damage",
+    description: "Burst specialist with execute, high risk/reward",
     color: 0x1ABC9C, // Teal
-    baseStats: { hp: 70, attack: 28, defense: 5, speed: 20 },
+    // Budget: 85/10 + 21 + 7 + 14 = 50.5 (glass cannon, fast)
+    baseStats: { hp: 85, attack: 21, defense: 7, speed: 14 },
     abilities: [
       {
         name: "Execute",
         emoji: "⚰️",
-        description: "Deal 110% damage, +50% if enemy below 40% HP",
+        description: "Deal 110% damage, +40% if enemy below 35% HP",
         type: "execute",
         multiplier: 1.1,
-        executeThreshold: 0.4,
-        executeBonus: 0.5,
+        executeThreshold: 0.35,
+        executeBonus: 0.4,
         cooldown: 0,
       },
       {
         name: "Shadow Strike",
         emoji: "🌑",
-        description: "Deal 180% damage, but take 15% recoil",
+        description: "Deal 160% damage, but take 12% recoil",
         type: "recoil_damage",
-        multiplier: 1.8,
-        recoilPercent: 0.15,
-        cooldown: 2,
+        multiplier: 1.6,
+        recoilPercent: 0.12,
+        cooldown: 3,
       },
       {
         name: "Death Mark",
         emoji: "💀",
-        description: "Mark enemy: take 25% more damage for 3 turns",
+        description: "Mark enemy: take 20% more damage for 3 turns",
         type: "debuff",
-        effect: { type: "marked", damageIncrease: 0.25, duration: 3 },
+        effect: { type: "marked", damageIncrease: 0.20, duration: 3 },
         cooldown: 4,
       },
     ],
@@ -222,9 +235,10 @@ const GLADIATOR_CLASSES = {
   paladin: {
     name: "Paladin",
     emoji: "⚜️",
-    description: "Holy warrior with healing and protective abilities",
+    description: "Defensive hybrid with healing and invincibility",
     color: 0xF1C40F, // Gold
-    baseStats: { hp: 110, attack: 15, defense: 14, speed: 9 },
+    // Budget: 105/10 + 14 + 14 + 10 = 48.5 (balanced defensive, with strong utility)
+    baseStats: { hp: 105, attack: 14, defense: 14, speed: 10 },
     abilities: [
       {
         name: "Holy Smite",
@@ -240,15 +254,15 @@ const GLADIATOR_CLASSES = {
         description: "Become immune to damage for 1 turn",
         type: "invincible",
         duration: 1,
-        cooldown: 5,
+        cooldown: 6,
       },
       {
         name: "Lay on Hands",
         emoji: "🙏",
-        description: "Heal 35% of max HP and remove debuffs",
+        description: "Heal 25% of max HP and remove debuffs",
         type: "heal_cleanse",
-        healPercent: 0.35,
-        cooldown: 4,
+        healPercent: 0.25,
+        cooldown: 5,
       },
     ],
   },
@@ -515,7 +529,10 @@ function executeAbility(attacker, defender, abilityIndex) {
       break;
 
     case "defense_damage":
-      results.damage = calculateDamage(attacker, defender, attacker.defense * ability.defenseMultiplier);
+      // Base damage from attack stat + bonus from defense
+      const defBaseDamage = attacker.attack * (ability.multiplier || 1.0);
+      const defBonusDamage = attacker.defense * (ability.defenseMultiplier || 0);
+      results.damage = calculateDamage(attacker, defender, defBaseDamage + defBonusDamage);
       const defDmgResult = applyDamage(defender, results.damage);
       if (!defDmgResult.absorbed) {
         results.description.push(`Dealt **${results.damage}** damage!`);
@@ -687,7 +704,7 @@ function buildAbilityButtons(match, gladiator) {
 /**
  * Build challenge embed
  */
-async function buildChallengeEmbed(challenger, challenged, amount, className, guildId) {
+async function buildChallengeEmbed(challenger, challenged, amount, className, guildId, timeout = DEFAULT_CHALLENGE_TIMEOUT) {
   const classData = GLADIATOR_CLASSES[className];
   const prizePool = Math.floor(amount * 2 * (1 - HOUSE_CUT));
   const formattedPrize = await formatCurrency(guildId, prizePool);
@@ -704,7 +721,7 @@ async function buildChallengeEmbed(challenger, challenged, amount, className, gu
     .addFields(
       { name: "💰 Bet Amount", value: formattedBet, inline: true },
       { name: "🏆 Prize Pool", value: `${formattedPrize} (after 5% house cut)`, inline: true },
-      { name: "⏳ Expires", value: `<t:${Math.floor((Date.now() + CHALLENGE_TIMEOUT) / 1000)}:R>`, inline: true },
+      { name: "⏳ Expires", value: `<t:${Math.floor((Date.now() + timeout) / 1000)}:R>`, inline: true },
     )
     .addFields({
       name: "📋 Class Abilities",
@@ -820,8 +837,11 @@ async function buildStatsEmbed(userId, username, avatarURL, stats, guildId) {
  */
 function buildHelpEmbed() {
   const classInfo = Object.entries(GLADIATOR_CLASSES)
-    .map(([key, cls]) => `${cls.emoji} **${cls.name}** - ${cls.description}`)
-    .join("\n");
+    .map(([key, cls]) => {
+      const s = cls.baseStats;
+      return `${cls.emoji} **${cls.name}** - HP:${s.hp} ATK:${s.attack} DEF:${s.defense} SPD:${s.speed}\n*${cls.description}*`;
+    })
+    .join("\n\n");
 
   return new EmbedBuilder()
     .setTitle("⚔️ Gladiator Arena Guide ⚔️")
@@ -829,33 +849,190 @@ function buildHelpEmbed() {
     .setDescription(
       "Battle other players in epic turn-based combat! Choose your class wisely and use abilities strategically to claim victory.\n\n" +
       "**Commands:**\n" +
-      "`!gladiator @user <amount> [class]` - Challenge someone\n" +
-      "`!arena @user <amount> [class]` - Same as above\n" +
+      "`!gladiator @user <amount> [class] [duration]` - Challenge someone\n" +
+      "`!arena @user <amount> [class] [duration]` - Same as above\n" +
       "`!arenastats [@user]` - View combat statistics\n" +
+      "`!arenaclass` - View all classes and abilities\n" +
       "`!arenahelp` - Show this help\n\n" +
-      "**Classes (default: warrior):**\n" + classInfo
+      "**Duration:** Optional expiry time (e.g., `5m`, `30m`, `1h`). Default: 5m, Max: 60m"
     )
     .addFields(
       {
+        name: "📊 Classes & Stats",
+        value: classInfo,
+      },
+      {
         name: "⚔️ Combat Mechanics",
         value:
-          "• **Turn-based:** Faster gladiator goes first\n" +
-          "• **Abilities:** 3 unique abilities per class\n" +
-          "• **Cooldowns:** Powerful abilities have cooldowns\n" +
-          "• **Status Effects:** Stun, poison, buffs, debuffs\n" +
-          "• **House Cut:** 5% of prize pool goes to the house",
+          "• **Turn Order:** Higher speed goes first\n" +
+          "• **Damage:** ATK × Multiplier - (DEF × 0.5)\n" +
+          "• **Abilities:** 3 per class with cooldowns\n" +
+          "• **Effects:** Stun, poison, shields, buffs/debuffs\n" +
+          "• **House Cut:** 5% of prize pool",
+      },
+      {
+        name: "🎯 Class Matchups",
+        value:
+          "• **Warrior** beats Rogue (stun stops crits)\n" +
+          "• **Mage** beats Tank (high burst vs slow)\n" +
+          "• **Rogue** beats Mage (fast crits, evasion)\n" +
+          "• **Tank** beats Assassin (survives burst)\n" +
+          "• **Assassin** beats Paladin (execute vs heals)\n" +
+          "• **Paladin** beats Warrior (sustain war)",
+      }
+    )
+    .setFooter({ text: "All classes are balanced - skill determines victory!" })
+    .setTimestamp();
+}
+
+/**
+ * Build class list embed with buttons
+ */
+function buildClassListEmbed() {
+  const classOverview = Object.entries(GLADIATOR_CLASSES)
+    .map(([key, cls]) => {
+      const s = cls.baseStats;
+      return `${cls.emoji} **${cls.name}** - *${cls.description}*\nHP:${s.hp} | ATK:${s.attack} | DEF:${s.defense} | SPD:${s.speed}`;
+    })
+    .join("\n\n");
+
+  return new EmbedBuilder()
+    .setTitle("⚔️ Gladiator Classes ⚔️")
+    .setColor(0xFF4444)
+    .setDescription(
+      "Choose a class to see detailed abilities and strategies!\n\n" +
+      classOverview
+    )
+    .setFooter({ text: "Click a button below to see class details" })
+    .setTimestamp();
+}
+
+/**
+ * Build class selection buttons
+ */
+function buildClassListButtons() {
+  const rows = [];
+
+  // First row: warrior, mage, rogue
+  const row1 = new ActionRowBuilder();
+  for (const cls of ["warrior", "mage", "rogue"]) {
+    const classData = GLADIATOR_CLASSES[cls];
+    row1.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`gladiator_class_${cls}`)
+        .setLabel(classData.name)
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji(classData.emoji)
+    );
+  }
+  rows.push(row1);
+
+  // Second row: tank, assassin, paladin
+  const row2 = new ActionRowBuilder();
+  for (const cls of ["tank", "assassin", "paladin"]) {
+    const classData = GLADIATOR_CLASSES[cls];
+    row2.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`gladiator_class_${cls}`)
+        .setLabel(classData.name)
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji(classData.emoji)
+    );
+  }
+  rows.push(row2);
+
+  return rows;
+}
+
+/**
+ * Build detailed class embed
+ */
+function buildClassDetailEmbed(className) {
+  const cls = GLADIATOR_CLASSES[className];
+  if (!cls) return null;
+
+  const s = cls.baseStats;
+
+  // Build stat comparison bars
+  const maxStat = { hp: 130, attack: 21, defense: 16, speed: 15 };
+  const statBar = (value, max) => {
+    const filled = Math.round((value / max) * 10);
+    return "🟩".repeat(filled) + "⬛".repeat(10 - filled);
+  };
+
+  const statsDisplay =
+    `**HP:** ${statBar(s.hp, maxStat.hp)} ${s.hp}\n` +
+    `**ATK:** ${statBar(s.attack, maxStat.attack)} ${s.attack}\n` +
+    `**DEF:** ${statBar(s.defense, maxStat.defense)} ${s.defense}\n` +
+    `**SPD:** ${statBar(s.speed, maxStat.speed)} ${s.speed}`;
+
+  // Build abilities list
+  const abilitiesDisplay = cls.abilities.map(ability => {
+    const cooldownText = ability.cooldown > 0 ? `(${ability.cooldown} turn CD)` : "(No cooldown)";
+    return `${ability.emoji} **${ability.name}** ${cooldownText}\n${ability.description}`;
+  }).join("\n\n");
+
+  // Class-specific tips
+  const tips = {
+    warrior: "**Strategy:** Use Battle Cry early, then alternate Heavy Strike and Shield Bash. Save stun to interrupt enemy buffs or healing.",
+    mage: "**Strategy:** Open with Arcane Barrier for safety, then spam Fireball. Use Ice Shard to slow fast enemies like Rogue.",
+    rogue: "**Strategy:** Poison early for guaranteed damage, then fish for crits. Save Smoke Bomb to dodge big hits or heal abilities.",
+    tank: "**Strategy:** Fortify immediately, then outlast with Slam + Second Wind. Your defense bonus makes Slam hit harder than it looks!",
+    assassin: "**Strategy:** Death Mark first, then Shadow Strike for burst. Save Execute for when enemy is low - it's devastating below 35% HP.",
+    paladin: "**Strategy:** Balance offense and defense. Divine Shield blocks fatal hits. Lay on Hands removes poison/marks - use it wisely!",
+  };
+
+  // Matchup info
+  const matchups = {
+    warrior: "✅ Beats: Rogue | ❌ Loses to: Paladin | ⚖️ Even: Mage, Tank, Assassin",
+    mage: "✅ Beats: Tank | ❌ Loses to: Rogue | ⚖️ Even: Warrior, Assassin, Paladin",
+    rogue: "✅ Beats: Mage | ❌ Loses to: Warrior | ⚖️ Even: Tank, Assassin, Paladin",
+    tank: "✅ Beats: Assassin | ❌ Loses to: Mage | ⚖️ Even: Warrior, Rogue, Paladin",
+    assassin: "✅ Beats: Paladin | ❌ Loses to: Tank | ⚖️ Even: Warrior, Mage, Rogue",
+    paladin: "✅ Beats: Warrior | ❌ Loses to: Assassin | ⚖️ Even: Mage, Rogue, Tank",
+  };
+
+  return new EmbedBuilder()
+    .setTitle(`${cls.emoji} ${cls.name}`)
+    .setColor(cls.color)
+    .setDescription(`*${cls.description}*`)
+    .addFields(
+      {
+        name: "📊 Base Stats",
+        value: statsDisplay,
+        inline: false,
+      },
+      {
+        name: "⚔️ Abilities",
+        value: abilitiesDisplay,
+        inline: false,
+      },
+      {
+        name: "🎯 Matchups",
+        value: matchups[className],
+        inline: false,
       },
       {
         name: "💡 Tips",
-        value:
-          "• Counter assassins with tanks\n" +
-          "• Use crowd control against glass cannons\n" +
-          "• Save powerful abilities for critical moments\n" +
-          "• Watch enemy cooldowns!",
+        value: tips[className],
+        inline: false,
       }
     )
-    .setFooter({ text: "May the strongest gladiator win!" })
+    .setFooter({ text: "Use !gladiator @user <amount> " + className + " to fight!" })
     .setTimestamp();
+}
+
+/**
+ * Build back button to return to class list
+ */
+function buildBackToClassListButton() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("gladiator_class_list")
+      .setLabel("← Back to All Classes")
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji("📋")
+  );
 }
 
 // ==========================================
@@ -931,11 +1108,11 @@ async function handleGladiatorCommand(message, args) {
     return message.channel.send({ embeds: [buildHelpEmbed()] });
   }
 
-  // Parse arguments: !gladiator @user <amount> [class]
+  // Parse arguments: !gladiator @user <amount> [class] [duration]
   const mentioned = message.mentions.users.first();
   if (!mentioned) {
     return message.channel.send(
-      invalidUsageMessage("gladiator", "!gladiator @user <amount> [class]", "!gladiator @Bobby 100 warrior")
+      invalidUsageMessage("gladiator", "!gladiator @user <amount> [class] [duration]", "!gladiator @Bobby 100 warrior 10m")
     );
   }
 
@@ -947,11 +1124,11 @@ async function handleGladiatorCommand(message, args) {
     return message.reply("You can't challenge a bot!");
   }
 
-  // Find amount (first number after mention)
-  const amountArg = args.find(arg => !arg.startsWith("<@") && !isNaN(parseInt(arg)));
+  // Find amount (first number after mention, not a duration like "5m")
+  const amountArg = args.find(arg => !arg.startsWith("<@") && !isNaN(parseInt(arg)) && !/^\d+[mh]$/i.test(arg));
   if (!amountArg) {
     return message.channel.send(
-      invalidUsageMessage("gladiator", "!gladiator @user <amount> [class]", "!gladiator @Bobby 100 warrior")
+      invalidUsageMessage("gladiator", "!gladiator @user <amount> [class] [duration]", "!gladiator @Bobby 100 warrior 10m")
     );
   }
 
@@ -964,6 +1141,29 @@ async function handleGladiatorCommand(message, args) {
   const validClasses = Object.keys(GLADIATOR_CLASSES);
   const classArg = args.find(arg => validClasses.includes(arg.toLowerCase()));
   const className = classArg ? classArg.toLowerCase() : "warrior";
+
+  // Find duration (optional, e.g., "5m", "10m", "1h")
+  // Matches patterns like: 5m, 10m, 30m, 1h, etc.
+  const durationArg = args.find(arg => /^\d+[mh]$/i.test(arg));
+  let challengeTimeout = DEFAULT_CHALLENGE_TIMEOUT;
+
+  if (durationArg) {
+    const value = parseInt(durationArg);
+    const unit = durationArg.slice(-1).toLowerCase();
+
+    if (unit === "m") {
+      challengeTimeout = value * 60 * 1000; // minutes to ms
+    } else if (unit === "h") {
+      challengeTimeout = value * 60 * 60 * 1000; // hours to ms
+    }
+
+    // Clamp to min/max
+    if (challengeTimeout < MIN_CHALLENGE_TIMEOUT) {
+      challengeTimeout = MIN_CHALLENGE_TIMEOUT;
+    } else if (challengeTimeout > MAX_CHALLENGE_TIMEOUT) {
+      challengeTimeout = MAX_CHALLENGE_TIMEOUT;
+    }
+  }
 
   // Check balance
   const balance = await getBalance(guildId, message.author.id);
@@ -999,12 +1199,13 @@ async function handleGladiatorCommand(message, args) {
     guildId,
     channelId: message.channel.id,
     timestamp: Date.now(),
+    timeout: challengeTimeout,
   };
 
   activeChallenges.set(challengeId, challenge);
 
   // Send challenge embed
-  const embed = await buildChallengeEmbed(message.author, mentioned, amount, className, guildId);
+  const embed = await buildChallengeEmbed(message.author, mentioned, amount, className, guildId, challengeTimeout);
   const buttons = buildClassButtons(challengeId);
 
   const challengeMessage = await message.channel.send({
@@ -1034,7 +1235,7 @@ async function handleGladiatorCommand(message, args) {
         // Message may have been deleted
       }
     }
-  }, CHALLENGE_TIMEOUT);
+  }, challengeTimeout);
 }
 
 /**
@@ -1159,9 +1360,11 @@ async function handleGladiatorInteraction(interaction) {
 
   // Handle ability usage
   else if (customId.startsWith("gladiator_ability_")) {
+    // customId format: gladiator_ability_match_timestamp_abilityIndex
+    // parts: [gladiator, ability, match, timestamp, abilityIndex]
     const parts = customId.split("_");
-    const matchId = parts[2];
-    const abilityIndex = parseInt(parts[3]);
+    const matchId = `${parts[2]}_${parts[3]}`; // Reconstruct "match_timestamp"
+    const abilityIndex = parseInt(parts[4]);
 
     const match = activeMatches.get(matchId);
     if (!match) {
@@ -1193,6 +1396,28 @@ async function handleGladiatorInteraction(interaction) {
     const loser = userId === match.player1.id ? match.player1 : match.player2;
 
     await endMatch(interaction, match, winner, loser, true);
+  }
+
+  // Handle class info buttons
+  else if (customId.startsWith("gladiator_class_")) {
+    const className = customId.replace("gladiator_class_", "");
+
+    // Back to class list
+    if (className === "list") {
+      const embed = buildClassListEmbed();
+      const buttons = buildClassListButtons();
+      await interaction.update({ embeds: [embed], components: buttons });
+      return;
+    }
+
+    // Show specific class details
+    const detailEmbed = buildClassDetailEmbed(className);
+    if (!detailEmbed) {
+      return interaction.reply({ content: "Unknown class!", ephemeral: true });
+    }
+
+    const backButton = buildBackToClassListButton();
+    await interaction.update({ embeds: [detailEmbed], components: [backButton] });
   }
 }
 
@@ -1430,6 +1655,10 @@ module.exports = (client) => {
       await handleArenaStatsCommand(message, args);
     } else if (command === "!arenahelp") {
       await message.channel.send({ embeds: [buildHelpEmbed()] });
+    } else if (command === "!arenaclass" || command === "!arenaclasses") {
+      const embed = buildClassListEmbed();
+      const buttons = buildClassListButtons();
+      await message.channel.send({ embeds: [embed], components: buttons });
     }
   });
 

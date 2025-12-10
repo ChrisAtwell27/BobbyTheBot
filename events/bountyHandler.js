@@ -296,7 +296,6 @@ async function postAdminBounty(message, args) {
       createdAt: Date.now(),
     };
 
-    const guildId = message.guild.id;
     const embed = await formatBountyEmbed(bounty, false, guildId);
     embed.setDescription(
       `**${description}**\n\n🚨 **ADMIN BOUNTY** 🚨\n✅ Bounty posted! First person to complete this and provide proof wins **${await formatCurrency(guildId, amount)}**!`

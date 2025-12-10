@@ -204,18 +204,29 @@ const HELP_CATEGORIES = {
       },
       {
         name: "!gladiator",
-        description: "Epic gladiator arena combat with classes",
-        usage: "!gladiator @opponent <amount> [class]",
+        description: "Epic turn-based arena combat with 6 classes",
+        usage: "!gladiator @opponent <amount> [class] [duration]",
+        details: "Classes: warrior, mage, rogue, tank, assassin, paladin. Duration: 1m-60m (default 5m)",
       },
       {
         name: "!arena",
-        description: "Alternative gladiator command",
-        usage: "!arena @opponent <amount> [class]",
+        description: "Alias for !gladiator",
+        usage: "!arena @opponent <amount> [class] [duration]",
+      },
+      {
+        name: "!arenaclass",
+        description: "View all gladiator classes and their abilities",
+        usage: "!arenaclass",
       },
       {
         name: "!arenastats",
-        description: "View your or another user's arena statistics",
+        description: "View arena combat statistics",
         usage: "!arenastats [@user]",
+      },
+      {
+        name: "!arenahelp",
+        description: "Detailed arena guide with mechanics and matchups",
+        usage: "!arenahelp",
       },
       {
         name: "!challenges",
@@ -1271,7 +1282,7 @@ module.exports = (client) => {
           value: chunk
             .map(
               (cmd) =>
-                `**${cmd.name}**\n${cmd.description}\nUsage: \`${cmd.usage}\``
+                `**${cmd.name}**\n${cmd.description}\nUsage: \`${cmd.usage}\`${cmd.details ? `\n*${cmd.details}*` : ""}`
             )
             .join("\n\n"),
           inline: false,
