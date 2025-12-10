@@ -44,225 +44,225 @@ const activeChallenges = new CleanupMap(5 * 60 * 1000, 1 * 60 * 1000);
 const activeMatches = new LimitedMap(50);
 
 // ==========================================
-// GLADIATOR CLASSES - BALANCED SYSTEM
+// GLADIATOR CLASSES - ENERGY SYSTEM
 // ==========================================
 // Balance Philosophy:
-// - Total stat budget: ~160 points per class (HP/10 + ATK + DEF + SPD)
-// - Each class has clear strengths/weaknesses but remains competitive
-// - Matchups are rock-paper-scissors style, not hard counters
-// - Average damage per turn roughly equal across classes (~15-18 effective)
+// - Energy system: Start with 3, gain 1 per turn, max 5
+// - Abilities cost 1-3 energy based on power
+// - Fatigue: After turn 12, both players take escalating damage (ensures match ends)
+// - Max 20 turns total
+// - Each class has clear identity and counterplay
+
+const MAX_ENERGY = 5;
+const STARTING_ENERGY = 3;
+const ENERGY_PER_TURN = 1;
+const FATIGUE_START_TURN = 12;
+const MAX_TURNS = 20;
 
 const GLADIATOR_CLASSES = {
   warrior: {
     name: "Warrior",
     emoji: "⚔️",
-    description: "Balanced all-rounder with consistent damage and durability",
+    description: "Balanced fighter with stun and self-buff",
     color: 0xE74C3C, // Red
-    // Budget: 110/10 + 16 + 12 + 11 = 50 (balanced across all stats)
-    baseStats: { hp: 110, attack: 16, defense: 12, speed: 11 },
+    baseStats: { hp: 100, attack: 15, defense: 12, speed: 10 },
     abilities: [
       {
-        name: "Heavy Strike",
+        name: "Slash",
         emoji: "🗡️",
-        description: "Deal 140% damage",
+        description: "Deal 100% damage",
         type: "damage",
-        multiplier: 1.4,
-        cooldown: 0,
+        multiplier: 1.0,
+        energyCost: 1,
       },
       {
         name: "Shield Bash",
         emoji: "🛡️",
-        description: "Deal 70% damage and stun for 1 turn",
+        description: "Deal 60% damage and stun for 1 turn",
         type: "damage_stun",
-        multiplier: 0.7,
+        multiplier: 0.6,
         effect: { type: "stun", duration: 1 },
-        cooldown: 4,
+        energyCost: 2,
       },
       {
-        name: "Battle Cry",
+        name: "War Cry",
         emoji: "📣",
-        description: "Increase attack by 25% for 3 turns",
+        description: "Boost ATK by 40% for 2 turns",
         type: "buff",
-        effect: { stat: "attack", bonus: 0.25, duration: 3 },
-        cooldown: 4,
+        effect: { stat: "attack", bonus: 0.4, duration: 2 },
+        energyCost: 2,
       },
     ],
   },
   mage: {
     name: "Mage",
     emoji: "🔮",
-    description: "High burst damage with utility, but fragile",
+    description: "Glass cannon with burst and shield",
     color: 0x9B59B6, // Purple
-    // Budget: 90/10 + 20 + 8 + 12 = 49 (high ATK, low DEF, moderate SPD)
-    baseStats: { hp: 90, attack: 20, defense: 8, speed: 12 },
+    baseStats: { hp: 75, attack: 18, defense: 6, speed: 11 },
     abilities: [
       {
         name: "Fireball",
         emoji: "🔥",
-        description: "Deal 130% magic damage",
+        description: "Deal 110% magic damage",
         type: "damage",
-        multiplier: 1.3,
-        cooldown: 0,
+        multiplier: 1.1,
+        energyCost: 1,
       },
       {
-        name: "Ice Shard",
-        emoji: "❄️",
-        description: "Deal 90% damage and reduce enemy speed 30% for 2 turns",
-        type: "damage_debuff",
-        multiplier: 0.9,
-        effect: { stat: "speed", penalty: 0.3, duration: 2 },
-        cooldown: 3,
+        name: "Pyroblast",
+        emoji: "💥",
+        description: "Deal 180% damage (big nuke)",
+        type: "damage",
+        multiplier: 1.8,
+        energyCost: 3,
       },
       {
-        name: "Arcane Barrier",
+        name: "Mana Shield",
         emoji: "✨",
-        description: "Gain a shield that absorbs 30 damage",
+        description: "Gain 15 shield",
         type: "shield",
-        shieldAmount: 30,
-        cooldown: 4,
+        shieldAmount: 15,
+        energyCost: 2,
       },
     ],
   },
   rogue: {
     name: "Rogue",
     emoji: "🗡️",
-    description: "Fast striker with crits and evasion, moderate durability",
+    description: "Fast crits with poison and evasion",
     color: 0x2ECC71, // Green
-    // Budget: 95/10 + 17 + 9 + 15 = 50.5 (high SPD, crit-focused)
-    baseStats: { hp: 95, attack: 17, defense: 9, speed: 15 },
+    baseStats: { hp: 85, attack: 16, defense: 8, speed: 14 },
     abilities: [
       {
         name: "Backstab",
         emoji: "🔪",
-        description: "Deal 115% damage, 35% chance for 180% crit",
+        description: "Deal 90% damage, 40% crit for 170%",
         type: "damage_crit",
-        multiplier: 1.15,
-        critChance: 0.35,
-        critMultiplier: 1.8,
-        cooldown: 0,
+        multiplier: 0.9,
+        critChance: 0.4,
+        critMultiplier: 1.7,
+        energyCost: 1,
       },
       {
-        name: "Poison Blade",
+        name: "Envenom",
         emoji: "☠️",
-        description: "Deal 70% damage + 6 poison damage for 3 turns",
+        description: "Deal 50% + 8 poison for 3 turns",
         type: "damage_dot",
-        multiplier: 0.7,
-        effect: { type: "poison", damage: 6, duration: 3 },
-        cooldown: 3,
+        multiplier: 0.5,
+        effect: { type: "poison", damage: 8, duration: 3 },
+        energyCost: 2,
       },
       {
-        name: "Smoke Bomb",
+        name: "Vanish",
         emoji: "💨",
-        description: "Evade all attacks next turn",
+        description: "Evade next attack",
         type: "evade",
         duration: 1,
-        cooldown: 5,
+        energyCost: 2,
       },
     ],
   },
   tank: {
     name: "Tank",
     emoji: "🛡️",
-    description: "Very durable with self-sustain, lower damage output",
+    description: "Extremely durable with sustain",
     color: 0x3498DB, // Blue
-    // Budget: 130/10 + 13 + 16 + 8 = 50 (high HP/DEF, low ATK/SPD)
-    baseStats: { hp: 130, attack: 13, defense: 16, speed: 8 },
+    baseStats: { hp: 130, attack: 11, defense: 16, speed: 7 },
     abilities: [
       {
         name: "Slam",
         emoji: "💥",
-        description: "Deal 100% damage + 40% of your defense as bonus",
+        description: "Deal 80% + 30% of DEF as damage",
         type: "defense_damage",
-        multiplier: 1.0,
-        defenseMultiplier: 0.4,
-        cooldown: 0,
+        multiplier: 0.8,
+        defenseMultiplier: 0.3,
+        energyCost: 1,
       },
       {
         name: "Fortify",
         emoji: "🏰",
-        description: "Increase defense by 35% for 3 turns",
+        description: "Boost DEF by 50% for 2 turns",
         type: "buff",
-        effect: { stat: "defense", bonus: 0.35, duration: 3 },
-        cooldown: 4,
+        effect: { stat: "defense", bonus: 0.5, duration: 2 },
+        energyCost: 2,
       },
       {
-        name: "Second Wind",
+        name: "Recover",
         emoji: "💪",
-        description: "Heal 20% of max HP",
+        description: "Heal 25% of max HP",
         type: "heal",
-        healPercent: 0.20,
-        cooldown: 4,
+        healPercent: 0.25,
+        energyCost: 3,
       },
     ],
   },
   assassin: {
     name: "Assassin",
     emoji: "🥷",
-    description: "Burst specialist with execute, high risk/reward",
+    description: "High burst with execute finisher",
     color: 0x1ABC9C, // Teal
-    // Budget: 85/10 + 21 + 7 + 14 = 50.5 (glass cannon, fast)
-    baseStats: { hp: 85, attack: 21, defense: 7, speed: 14 },
+    baseStats: { hp: 70, attack: 19, defense: 6, speed: 13 },
     abilities: [
+      {
+        name: "Strike",
+        emoji: "⚔️",
+        description: "Deal 100% damage",
+        type: "damage",
+        multiplier: 1.0,
+        energyCost: 1,
+      },
+      {
+        name: "Ambush",
+        emoji: "🌑",
+        description: "Deal 150% damage, take 10% recoil",
+        type: "recoil_damage",
+        multiplier: 1.5,
+        recoilPercent: 0.1,
+        energyCost: 2,
+      },
       {
         name: "Execute",
         emoji: "⚰️",
-        description: "Deal 110% damage, +40% if enemy below 35% HP",
+        description: "Deal 100%, +80% if enemy <30% HP",
         type: "execute",
-        multiplier: 1.1,
-        executeThreshold: 0.35,
-        executeBonus: 0.4,
-        cooldown: 0,
-      },
-      {
-        name: "Shadow Strike",
-        emoji: "🌑",
-        description: "Deal 160% damage, but take 12% recoil",
-        type: "recoil_damage",
-        multiplier: 1.6,
-        recoilPercent: 0.12,
-        cooldown: 3,
-      },
-      {
-        name: "Death Mark",
-        emoji: "💀",
-        description: "Mark enemy: take 20% more damage for 3 turns",
-        type: "debuff",
-        effect: { type: "marked", damageIncrease: 0.20, duration: 3 },
-        cooldown: 4,
+        multiplier: 1.0,
+        executeThreshold: 0.3,
+        executeBonus: 0.8,
+        energyCost: 3,
       },
     ],
   },
   paladin: {
     name: "Paladin",
     emoji: "⚜️",
-    description: "Defensive hybrid with healing and invincibility",
+    description: "Tanky healer with invincibility",
     color: 0xF1C40F, // Gold
-    // Budget: 105/10 + 14 + 14 + 10 = 48.5 (balanced defensive, with strong utility)
-    baseStats: { hp: 105, attack: 14, defense: 14, speed: 10 },
+    baseStats: { hp: 110, attack: 13, defense: 13, speed: 9 },
     abilities: [
       {
-        name: "Holy Smite",
+        name: "Smite",
         emoji: "✝️",
-        description: "Deal 125% holy damage",
+        description: "Deal 110% holy damage",
         type: "damage",
-        multiplier: 1.25,
-        cooldown: 0,
+        multiplier: 1.1,
+        energyCost: 1,
       },
       {
         name: "Divine Shield",
         emoji: "🌟",
-        description: "Become immune to damage for 1 turn",
+        description: "Block ALL damage next turn",
         type: "invincible",
         duration: 1,
-        cooldown: 6,
+        energyCost: 3,
       },
       {
-        name: "Lay on Hands",
+        name: "Holy Light",
         emoji: "🙏",
-        description: "Heal 25% of max HP and remove debuffs",
+        description: "Heal 30% HP, cleanse debuffs",
         type: "heal_cleanse",
-        healPercent: 0.25,
-        cooldown: 5,
+        healPercent: 0.3,
+        energyCost: 3,
       },
     ],
   },
@@ -296,7 +296,7 @@ function createGladiator(userId, username, avatarURL, className) {
     shield: 0,
     buffs: [],
     debuffs: [],
-    cooldowns: [0, 0, 0], // Cooldowns for each ability
+    energy: STARTING_ENERGY, // Energy system - starts at 3, max 5, gain 1 per turn
     isStunned: false,
     isEvading: false,
     isInvincible: false,
@@ -331,9 +331,11 @@ function calculateDamage(attacker, defender, baseDamage) {
     }
   }
 
-  // Calculate final damage
-  let damage = Math.floor((baseDamage * attackMod - defense * 0.5) * damageIncrease);
-  damage = Math.max(1, damage); // Minimum 1 damage
+  // Calculate final damage - defense reduces damage but not below 30% of base
+  const defenseReduction = defense * 0.5;
+  const minDamage = Math.floor(baseDamage * attackMod * 0.3); // At least 30% of raw damage
+  let damage = Math.floor((baseDamage * attackMod - defenseReduction) * damageIncrease);
+  damage = Math.max(minDamage, damage); // Minimum 30% damage always goes through
 
   return damage;
 }
@@ -368,10 +370,23 @@ function applyDamage(gladiator, damage) {
 }
 
 /**
- * Process turn effects (buffs/debuffs tick down, DOT damage)
+ * Process turn effects (buffs/debuffs tick down, DOT damage, energy regen)
  */
-function processTurnEffects(gladiator) {
+function processTurnEffects(gladiator, matchTurn = 1) {
   const effects = [];
+
+  // Energy regeneration - gain 1 energy per turn, capped at MAX_ENERGY
+  if (gladiator.energy < MAX_ENERGY) {
+    gladiator.energy = Math.min(MAX_ENERGY, gladiator.energy + ENERGY_PER_TURN);
+    effects.push(`⚡ +${ENERGY_PER_TURN} energy (${gladiator.energy}/${MAX_ENERGY})`);
+  }
+
+  // Fatigue damage after FATIGUE_START_TURN
+  if (matchTurn >= FATIGUE_START_TURN) {
+    const fatigueDamage = (matchTurn - FATIGUE_START_TURN + 1) * 5; // 5, 10, 15, 20... damage
+    gladiator.hp -= fatigueDamage;
+    effects.push(`🔥 Fatigue! Took ${fatigueDamage} damage`);
+  }
 
   // Process poison/DOT damage
   for (const debuff of gladiator.debuffs) {
@@ -392,9 +407,6 @@ function processTurnEffects(gladiator) {
     debuff.duration--;
     return debuff.duration > 0;
   });
-
-  // Tick down cooldowns
-  gladiator.cooldowns = gladiator.cooldowns.map(cd => Math.max(0, cd - 1));
 
   // Reset temporary states
   gladiator.isEvading = false;
@@ -426,9 +438,20 @@ function processTurnEffects(gladiator) {
 
 /**
  * Execute an ability
+ * Returns null if insufficient energy
  */
 function executeAbility(attacker, defender, abilityIndex) {
   const ability = attacker.classData.abilities[abilityIndex];
+
+  // Check energy cost
+  const energyCost = ability.energyCost || 1;
+  if (attacker.energy < energyCost) {
+    return null; // Not enough energy
+  }
+
+  // Consume energy
+  attacker.energy -= energyCost;
+
   const results = {
     abilityName: ability.name,
     abilityEmoji: ability.emoji,
@@ -437,10 +460,12 @@ function executeAbility(attacker, defender, abilityIndex) {
     healing: 0,
     critical: false,
     missed: false,
+    energyCost: energyCost,
   };
 
-  // Check if defender is evading
-  if (defender.isEvading && ability.type.includes("damage")) {
+  // Check if defender is evading (only for damage abilities)
+  const isDamageAbility = ability.type.includes("damage") || ability.type === "execute" || ability.type === "recoil_damage" || ability.type === "defense_damage";
+  if (defender.isEvading && isDamageAbility) {
     results.missed = true;
     results.description.push("💨 Attack missed! Enemy evaded!");
     return results;
@@ -476,7 +501,9 @@ function executeAbility(attacker, defender, abilityIndex) {
     case "damage_stun":
       results.damage = calculateDamage(attacker, defender, attacker.attack * ability.multiplier);
       const stunResult = applyDamage(defender, results.damage);
-      if (!stunResult.absorbed) {
+      if (stunResult.absorbed) {
+        results.description.push("🌟 Attack was blocked by divine protection!");
+      } else {
         results.description.push(`Dealt **${results.damage}** damage!`);
         defender.isStunned = true;
         results.description.push("💫 Enemy is stunned for 1 turn!");
@@ -486,7 +513,9 @@ function executeAbility(attacker, defender, abilityIndex) {
     case "damage_debuff":
       results.damage = calculateDamage(attacker, defender, attacker.attack * ability.multiplier);
       const debuffResult = applyDamage(defender, results.damage);
-      if (!debuffResult.absorbed) {
+      if (debuffResult.absorbed) {
+        results.description.push("🌟 Attack was blocked by divine protection!");
+      } else {
         results.description.push(`Dealt **${results.damage}** damage!`);
         defender.debuffs.push({ ...ability.effect });
         results.description.push(`❄️ Enemy's ${ability.effect.stat} reduced for ${ability.effect.duration} turns!`);
@@ -496,7 +525,9 @@ function executeAbility(attacker, defender, abilityIndex) {
     case "damage_dot":
       results.damage = calculateDamage(attacker, defender, attacker.attack * ability.multiplier);
       const dotResult = applyDamage(defender, results.damage);
-      if (!dotResult.absorbed) {
+      if (dotResult.absorbed) {
+        results.description.push("🌟 Attack was blocked by divine protection!");
+      } else {
         results.description.push(`Dealt **${results.damage}** damage!`);
         defender.debuffs.push({ ...ability.effect });
         results.description.push(`☠️ Enemy is poisoned for ${ability.effect.duration} turns!`);
@@ -512,7 +543,9 @@ function executeAbility(attacker, defender, abilityIndex) {
       }
       results.damage = calculateDamage(attacker, defender, attacker.attack * execMult);
       const execResult = applyDamage(defender, results.damage);
-      if (!execResult.absorbed) {
+      if (execResult.absorbed) {
+        results.description.push("🌟 Attack was blocked by divine protection!");
+      } else {
         results.description.push(`Dealt **${results.damage}** damage!`);
       }
       break;
@@ -520,7 +553,9 @@ function executeAbility(attacker, defender, abilityIndex) {
     case "recoil_damage":
       results.damage = calculateDamage(attacker, defender, attacker.attack * ability.multiplier);
       const recoilResult = applyDamage(defender, results.damage);
-      if (!recoilResult.absorbed) {
+      if (recoilResult.absorbed) {
+        results.description.push("🌟 Attack was blocked by divine protection!");
+      } else {
         results.description.push(`Dealt **${results.damage}** damage!`);
       }
       const recoilDamage = Math.floor(results.damage * ability.recoilPercent);
@@ -534,7 +569,9 @@ function executeAbility(attacker, defender, abilityIndex) {
       const defBonusDamage = attacker.defense * (ability.defenseMultiplier || 0);
       results.damage = calculateDamage(attacker, defender, defBaseDamage + defBonusDamage);
       const defDmgResult = applyDamage(defender, results.damage);
-      if (!defDmgResult.absorbed) {
+      if (defDmgResult.absorbed) {
+        results.description.push("🌟 Attack was blocked by divine protection!");
+      } else {
         results.description.push(`Dealt **${results.damage}** damage!`);
       }
       break;
@@ -578,15 +615,20 @@ function executeAbility(attacker, defender, abilityIndex) {
       break;
   }
 
-  // Set cooldown
-  attacker.cooldowns[abilityIndex] = ability.cooldown;
-
   return results;
 }
 
 // ==========================================
 // EMBED BUILDERS
 // ==========================================
+
+/**
+ * Create an energy bar visualization
+ */
+function createEnergyBar(current, max) {
+  const filled = Math.min(current, max);
+  return "⚡".repeat(filled) + "⬜".repeat(max - filled);
+}
 
 /**
  * Build the match status embed
@@ -598,17 +640,33 @@ function buildMatchEmbed(match, turnMessage = null, isGameOver = false) {
   const p1HpBar = createHpBar(p1.hp, p1.maxHp);
   const p2HpBar = createHpBar(p2.hp, p2.maxHp);
 
+  const p1EnergyBar = createEnergyBar(p1.energy, MAX_ENERGY);
+  const p2EnergyBar = createEnergyBar(p2.energy, MAX_ENERGY);
+
   const p1StatusIcons = getStatusIcons(p1);
   const p2StatusIcons = getStatusIcons(p2);
 
+  // Fatigue warning
+  let fatigueWarning = "";
+  if (match.turn >= FATIGUE_START_TURN - 2) {
+    const turnsUntilFatigue = FATIGUE_START_TURN - match.turn;
+    if (turnsUntilFatigue > 0) {
+      fatigueWarning = `\n⚠️ **Fatigue starts in ${turnsUntilFatigue} turns!**`;
+    } else {
+      const fatigueDamage = (match.turn - FATIGUE_START_TURN + 1) * 5;
+      fatigueWarning = `\n🔥 **FATIGUE ACTIVE!** (${fatigueDamage} damage/turn)`;
+    }
+  }
+
   const embed = new EmbedBuilder()
     .setTitle("⚔️ GLADIATOR ARENA ⚔️")
-    .setColor(isGameOver ? 0xFFD700 : 0xFF4444)
-    .setDescription(turnMessage || `**Turn ${match.turn}** - ${match.currentTurn === p1.id ? p1.name : p2.name}'s turn!`)
+    .setColor(isGameOver ? 0xFFD700 : (match.turn >= FATIGUE_START_TURN ? 0xFF6600 : 0xFF4444))
+    .setDescription(turnMessage || `**Turn ${match.turn}/${MAX_TURNS}** - ${match.currentTurn === p1.id ? p1.name : p2.name}'s turn!${fatigueWarning}`)
     .addFields(
       {
         name: `${p1.classData.emoji} ${p1.name} (${p1.classData.name})`,
         value: `${p1HpBar} ${p1.hp}/${p1.maxHp} HP${p1.shield > 0 ? ` (+${p1.shield} 🛡️)` : ""}\n` +
+               `${p1EnergyBar} ${p1.energy}/${MAX_ENERGY}\n` +
                `⚔️ ${p1.attack} | 🛡️ ${p1.defense} | 💨 ${p1.speed}${p1StatusIcons}`,
         inline: true,
       },
@@ -620,6 +678,7 @@ function buildMatchEmbed(match, turnMessage = null, isGameOver = false) {
       {
         name: `${p2.classData.emoji} ${p2.name} (${p2.classData.name})`,
         value: `${p2HpBar} ${p2.hp}/${p2.maxHp} HP${p2.shield > 0 ? ` (+${p2.shield} 🛡️)` : ""}\n` +
+               `${p2EnergyBar} ${p2.energy}/${MAX_ENERGY}\n` +
                `⚔️ ${p2.attack} | 🛡️ ${p2.defense} | 💨 ${p2.speed}${p2StatusIcons}`,
         inline: true,
       }
@@ -674,15 +733,17 @@ function buildAbilityButtons(match, gladiator) {
 
   for (let i = 0; i < abilities.length; i++) {
     const ability = abilities[i];
-    const onCooldown = gladiator.cooldowns[i] > 0;
+    const energyCost = ability.energyCost || 1;
+    const hasEnergy = gladiator.energy >= energyCost;
+    const canUse = hasEnergy && !gladiator.isStunned;
 
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`gladiator_ability_${match.id}_${i}`)
-        .setLabel(`${ability.name}${onCooldown ? ` (${gladiator.cooldowns[i]})` : ""}`)
-        .setStyle(onCooldown ? ButtonStyle.Secondary : ButtonStyle.Primary)
+        .setLabel(`${ability.name} (${energyCost}⚡)`)
+        .setStyle(canUse ? ButtonStyle.Primary : ButtonStyle.Secondary)
         .setEmoji(ability.emoji)
-        .setDisabled(onCooldown || gladiator.isStunned)
+        .setDisabled(!canUse)
     );
   }
 
@@ -725,7 +786,11 @@ async function buildChallengeEmbed(challenger, challenged, amount, className, gu
     )
     .addFields({
       name: "📋 Class Abilities",
-      value: classData.abilities.map(a => `${a.emoji} **${a.name}** - ${a.description}`).join("\n"),
+      value: classData.abilities.map(a => `${a.emoji} **${a.name}** (${a.energyCost || 1}⚡) - ${a.description}`).join("\n"),
+    })
+    .addFields({
+      name: "⚡ Energy System",
+      value: `Start: ${STARTING_ENERGY} | Regen: +${ENERGY_PER_TURN}/turn | Max: ${MAX_ENERGY} | Fatigue: Turn ${FATIGUE_START_TURN}+ | Max turns: ${MAX_TURNS}`,
     })
     .setFooter({ text: "Click a button to accept with your chosen class!" })
     .setTimestamp();
@@ -862,12 +927,22 @@ function buildHelpEmbed() {
         value: classInfo,
       },
       {
+        name: "⚡ Energy System",
+        value:
+          `• **Start:** ${STARTING_ENERGY} energy\n` +
+          `• **Regen:** +${ENERGY_PER_TURN} energy per turn\n` +
+          `• **Max:** ${MAX_ENERGY} energy\n` +
+          "• **Abilities:** Cost 1-3 energy each\n" +
+          "• Manage energy wisely - can't use abilities without it!",
+      },
+      {
         name: "⚔️ Combat Mechanics",
         value:
           "• **Turn Order:** Higher speed goes first\n" +
-          "• **Damage:** ATK × Multiplier - (DEF × 0.5)\n" +
-          "• **Abilities:** 3 per class with cooldowns\n" +
+          "• **Damage:** ATK × Multiplier - (DEF × 0.5), min 30%\n" +
           "• **Effects:** Stun, poison, shields, buffs/debuffs\n" +
+          `• **Fatigue:** After turn ${FATIGUE_START_TURN}, both take escalating damage\n` +
+          `• **Max Turns:** ${MAX_TURNS} (winner by HP% if reached)\n` +
           "• **House Cut:** 5% of prize pool",
       },
       {
@@ -966,20 +1041,20 @@ function buildClassDetailEmbed(className) {
     `**DEF:** ${statBar(s.defense, maxStat.defense)} ${s.defense}\n` +
     `**SPD:** ${statBar(s.speed, maxStat.speed)} ${s.speed}`;
 
-  // Build abilities list
+  // Build abilities list with energy costs
   const abilitiesDisplay = cls.abilities.map(ability => {
-    const cooldownText = ability.cooldown > 0 ? `(${ability.cooldown} turn CD)` : "(No cooldown)";
-    return `${ability.emoji} **${ability.name}** ${cooldownText}\n${ability.description}`;
+    const energyCost = ability.energyCost || 1;
+    return `${ability.emoji} **${ability.name}** (${energyCost}⚡)\n${ability.description}`;
   }).join("\n\n");
 
   // Class-specific tips
   const tips = {
-    warrior: "**Strategy:** Use Battle Cry early, then alternate Heavy Strike and Shield Bash. Save stun to interrupt enemy buffs or healing.",
-    mage: "**Strategy:** Open with Arcane Barrier for safety, then spam Fireball. Use Ice Shard to slow fast enemies like Rogue.",
-    rogue: "**Strategy:** Poison early for guaranteed damage, then fish for crits. Save Smoke Bomb to dodge big hits or heal abilities.",
-    tank: "**Strategy:** Fortify immediately, then outlast with Slam + Second Wind. Your defense bonus makes Slam hit harder than it looks!",
-    assassin: "**Strategy:** Death Mark first, then Shadow Strike for burst. Save Execute for when enemy is low - it's devastating below 35% HP.",
-    paladin: "**Strategy:** Balance offense and defense. Divine Shield blocks fatal hits. Lay on Hands removes poison/marks - use it wisely!",
+    warrior: "**Strategy:** Use War Cry to buff, then alternate Slash and Shield Bash. Save stun to interrupt enemy heals or big attacks.",
+    mage: "**Strategy:** Build to 3 energy for Pyroblast burst. Use Mana Shield when low. Fireball is efficient at 1 energy.",
+    rogue: "**Strategy:** Poison early for guaranteed damage, then fish for crits with Backstab. Save Vanish to dodge big hits.",
+    tank: "**Strategy:** Fortify immediately, then outlast with Slam. Save Recover for when below 50% HP - it's expensive but powerful!",
+    assassin: "**Strategy:** Strike to build energy, then Ambush for burst. Save Execute for when enemy is below 30% HP!",
+    paladin: "**Strategy:** Balance offense with Smite. Divine Shield costs 3 but blocks ALL damage. Holy Light cleanses and heals.",
   };
 
   // Matchup info
@@ -1003,7 +1078,7 @@ function buildClassDetailEmbed(className) {
         inline: false,
       },
       {
-        name: "⚔️ Abilities",
+        name: "⚔️ Abilities (Energy Cost)",
         value: abilitiesDisplay,
         inline: false,
       },
@@ -1018,7 +1093,7 @@ function buildClassDetailEmbed(className) {
         inline: false,
       }
     )
-    .setFooter({ text: "Use !gladiator @user <amount> " + className + " to fight!" })
+    .setFooter({ text: `Energy: Start ${STARTING_ENERGY}, +${ENERGY_PER_TURN}/turn, max ${MAX_ENERGY} | !gladiator @user <amount> ${className}` })
     .setTimestamp();
 }
 
@@ -1493,9 +1568,15 @@ async function processAbility(interaction, match, abilityIndex) {
     await interaction.reply({ content: "You're stunned and can't act!", ephemeral: true });
 
     // Process turn effects and switch turns
-    processTurnEffects(attacker);
+    processTurnEffects(attacker, match.turn);
     match.currentTurn = defender.id;
     match.turn++;
+
+    // Check max turns - if exceeded, determine winner by HP %
+    if (match.turn > MAX_TURNS) {
+      await endMatchByHp(interaction, match);
+      return;
+    }
 
     const embed = buildMatchEmbed(match, `💫 **${attacker.name}** was stunned!\n**${defender.name}'s** turn!`);
     const buttons = buildAbilityButtons(match, defender);
@@ -1508,17 +1589,18 @@ async function processAbility(interaction, match, abilityIndex) {
   // Execute ability
   const result = executeAbility(attacker, defender, abilityIndex);
 
-  // Build result description
-  let turnDescription = `${result.abilityEmoji} **${attacker.name}** used **${result.abilityName}**!\n`;
-  turnDescription += result.description.join("\n");
-
-  // Process end-of-turn effects for attacker
-  const attackerEffects = processTurnEffects(attacker);
-  if (attackerEffects.length > 0) {
-    turnDescription += `\n\n**${attacker.name}:** ${attackerEffects.join(", ")}`;
+  // Check if ability failed due to insufficient energy
+  if (result === null) {
+    await interaction.reply({ content: "Not enough energy for that ability!", ephemeral: true });
+    match.turnTimeoutId = setTimeout(() => handleTurnTimeout(match), TURN_TIMEOUT);
+    return;
   }
 
-  // Check for death
+  // Build result description
+  let turnDescription = `${result.abilityEmoji} **${attacker.name}** used **${result.abilityName}** (${result.energyCost}⚡)!\n`;
+  turnDescription += result.description.join("\n");
+
+  // Check for death immediately after ability
   if (defender.hp <= 0) {
     await endMatch(interaction, match, attacker, defender, false);
     return;
@@ -1534,13 +1616,19 @@ async function processAbility(interaction, match, abilityIndex) {
   match.turn++;
   match.lastActivity = Date.now();
 
-  // Process start-of-turn effects for defender
-  const defenderEffects = processTurnEffects(defender);
+  // Check max turns - if exceeded, determine winner by HP %
+  if (match.turn > MAX_TURNS) {
+    await endMatchByHp(interaction, match);
+    return;
+  }
+
+  // Process start-of-turn effects for defender (includes energy regen and fatigue)
+  const defenderEffects = processTurnEffects(defender, match.turn);
   if (defenderEffects.length > 0) {
     turnDescription += `\n\n**${defender.name}:** ${defenderEffects.join(", ")}`;
   }
 
-  // Check if defender died from DOT
+  // Check if defender died from DOT or fatigue
   if (defender.hp <= 0) {
     await endMatch(interaction, match, attacker, defender, false);
     return;
@@ -1554,6 +1642,103 @@ async function processAbility(interaction, match, abilityIndex) {
 
   // Set new turn timeout
   match.turnTimeoutId = setTimeout(() => handleTurnTimeout(match), TURN_TIMEOUT);
+}
+
+/**
+ * End match by HP comparison when max turns reached
+ */
+async function endMatchByHp(interaction, match) {
+  // Clear timeout
+  if (match.turnTimeoutId) {
+    clearTimeout(match.turnTimeoutId);
+  }
+
+  const p1HpPercent = match.player1.hp / match.player1.maxHp;
+  const p2HpPercent = match.player2.hp / match.player2.maxHp;
+
+  let winner, loser;
+  let isDraw = false;
+
+  if (Math.abs(p1HpPercent - p2HpPercent) < 0.01) {
+    // Within 1% is a draw
+    isDraw = true;
+  } else if (p1HpPercent > p2HpPercent) {
+    winner = match.player1;
+    loser = match.player2;
+  } else {
+    winner = match.player2;
+    loser = match.player1;
+  }
+
+  activeMatches.delete(match.id);
+
+  if (isDraw) {
+    // Refund both players half the pot
+    const refundAmount = Math.floor(match.prizePool / 2);
+    await updateBalance(match.guildId, match.player1.id, refundAmount);
+    await updateBalance(match.guildId, match.player2.id, refundAmount);
+
+    const refundStr = await formatCurrency(match.guildId, refundAmount);
+
+    const drawEmbed = new EmbedBuilder()
+      .setTitle("⚔️ GLADIATOR ARENA - DRAW! ⚔️")
+      .setColor(0x808080)
+      .setDescription(
+        `⏰ **Time's up!** Maximum turns reached.\n\n` +
+        `Both gladiators fought to a standstill!\n` +
+        `**${match.player1.name}:** ${Math.floor(p1HpPercent * 100)}% HP\n` +
+        `**${match.player2.name}:** ${Math.floor(p2HpPercent * 100)}% HP\n\n` +
+        `💰 Each player receives ${refundStr}`
+      )
+      .setFooter({ text: `Match lasted ${MAX_TURNS} turns` })
+      .setTimestamp();
+
+    const disabledRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("match_draw")
+        .setLabel("Draw!")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true)
+        .setEmoji("🤝")
+    );
+
+    await interaction.update({ embeds: [drawEmbed], components: [disabledRow] });
+  } else {
+    // Award prize to winner with higher HP %
+    const prizePool = match.prizePool;
+    await updateBalance(match.guildId, winner.id, prizePool);
+    await updateStats(match.guildId, winner.id, loser.id, winner.class, loser.class, prizePool);
+
+    const prizeStr = await formatCurrency(match.guildId, prizePool);
+
+    const victoryEmbed = new EmbedBuilder()
+      .setTitle("⚔️ GLADIATOR ARENA - TIME'S UP! ⚔️")
+      .setColor(0xFFD700)
+      .setDescription(
+        `⏰ **Maximum turns reached!**\n\n` +
+        `**${winner.name}** wins with ${Math.floor((winner.hp / winner.maxHp) * 100)}% HP remaining!\n` +
+        `**${loser.name}** had ${Math.floor((loser.hp / loser.maxHp) * 100)}% HP`
+      )
+      .addFields(
+        { name: "🏆 Winner", value: `${winner.classData.emoji} ${winner.name}`, inline: true },
+        { name: "💀 Loser", value: `${loser.classData.emoji} ${loser.name}`, inline: true },
+        { name: "💰 Prize", value: prizeStr, inline: true },
+      )
+      .setThumbnail(winner.avatarURL)
+      .setFooter({ text: `Match lasted ${MAX_TURNS} turns` })
+      .setTimestamp();
+
+    const disabledRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("match_ended")
+        .setLabel("Match Ended")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true)
+        .setEmoji("🏁")
+    );
+
+    await interaction.update({ embeds: [victoryEmbed], components: [disabledRow] });
+  }
 }
 
 /**
