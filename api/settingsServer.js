@@ -628,6 +628,8 @@ class SettingsServer {
             "bounties",
             "team_builder",
             "valorant",
+            "audit_log",
+            "audit_logs",
           ];
 
           if (!validFeatures.includes(featureName)) {

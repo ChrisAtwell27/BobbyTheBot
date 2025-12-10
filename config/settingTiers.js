@@ -35,7 +35,7 @@ const SETTING_REQUIREMENTS = {
   // PLUS TIER FEATURE TOGGLES
   // =====================================================================
   "features.alerts": "plus", // Keyword alert system
-  "features.audit_logs": "plus", // Audit logs (message edits/deletes, bans)
+  "features.audit_logs": "plus", // Audit logs (singular alias)
   "features.gambling_plus": "plus", // Plus games: blackjack, rps, highercard, quickdraw, numberduel, russianroulette
   "features.mafia": "plus", // Bee Mafia game
   "features.birthdays": "plus",
@@ -81,7 +81,7 @@ const SETTING_REQUIREMENTS = {
   // ROLE SETTINGS (free tier - all servers can configure roles)
   // =====================================================================
   // Admin roles (who can use admin commands)
-  "adminRoles": "free",
+  adminRoles: "free",
 
   // Moderation roles
   "roles.dead": "free", // Role given to "dead" users in mafia/moderation
@@ -94,7 +94,6 @@ const SETTING_REQUIREMENTS = {
   // Team builder / Valorant roles
   "roles.valorant_team": "plus", // Role to ping for Valorant teams
   "roles.valorant_inhouse": "plus", // Role for in-house games
-
 };
 
 /**
