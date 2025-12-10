@@ -22,6 +22,7 @@ const {
 const apiHandler = require("./valorantApiHandler");
 const { saveTeamToHistory } = require("../database/helpers/teamHistoryHelpers");
 const { getSetting } = require("../utils/settingsManager");
+const { getAgentById } = require("../valorantApi/agentUtils");
 
 // Configuration - legacy fallback ID
 const DEFAULT_RAW_VALORANT_ROLE_ID = "1166209212418904145";
@@ -78,6 +79,7 @@ async function batchGetUserRankInfo(guildId, userIds) {
           ...rankInfo,
           tier: rankData.tier,
           rr: rankData.rr,
+          preferredAgents: registration.preferredAgents || [],
         };
         return { userId, data };
       } catch {
@@ -256,6 +258,21 @@ async function createTeamVisualization(team) {
           ctx.font = "bold 10px Arial";
           ctx.fillStyle = rankColor;
           ctx.fillText(`${userRankInfo.rr} RR`, x + slotWidth / 2, y + 102);
+        }
+
+        // Preferred agents display (below RR)
+        if (userRankInfo.preferredAgents && userRankInfo.preferredAgents.length > 0) {
+          ctx.font = "9px Arial";
+          ctx.fillStyle = "#aaaaaa";
+          ctx.textAlign = "center";
+          const agentText = userRankInfo.preferredAgents
+            .slice(0, 3)
+            .map(id => {
+              const agent = getAgentById(id);
+              return agent ? agent.name.substring(0, 4) : id.substring(0, 4);
+            })
+            .join("/");
+          ctx.fillText(agentText, x + slotWidth / 2, y + 113);
         }
       } else {
         // Not registered indicator

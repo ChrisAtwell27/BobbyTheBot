@@ -27,6 +27,10 @@ const {
   createUpgradeEmbed,
   TIERS,
 } = require("../utils/subscriptionUtils");
+const {
+  getAgentById,
+  formatAgentListCompact,
+} = require("../valorantApi/agentUtils");
 
 // ============ CONSTANTS ============
 // Configuration - legacy fallback ID
@@ -79,7 +83,7 @@ const activeTeams = new LimitedMap(ACTIVE_TEAMS_CACHE_SIZE);
 const rankCache = new LimitedMap(RANK_CACHE_SIZE);
 
 /**
- * Batch fetch rank info for multiple users with caching
+ * Batch fetch rank info and preferred agents for multiple users with caching
  */
 async function batchGetUserRankInfo(guildId, userIds) {
   const results = new Map();
@@ -113,6 +117,7 @@ async function batchGetUserRankInfo(guildId, userIds) {
           ...rankInfo,
           tier: rankData.tier,
           rr: rankData.rr,
+          preferredAgents: registration.preferredAgents || [],
         };
         return { userId, data };
       } catch {
@@ -286,6 +291,21 @@ async function createTeamVisualization(team) {
           ctx.font = "bold 10px Arial";
           ctx.fillStyle = rankColor;
           ctx.fillText(`${userRankInfo.rr} RR`, x + SLOT_WIDTH / 2, y + 102);
+        }
+
+        // Preferred agents display (below RR)
+        if (userRankInfo.preferredAgents && userRankInfo.preferredAgents.length > 0) {
+          ctx.font = "9px Arial";
+          ctx.fillStyle = "#aaaaaa";
+          ctx.textAlign = "center";
+          const agentText = userRankInfo.preferredAgents
+            .slice(0, 3)
+            .map(id => {
+              const agent = getAgentById(id);
+              return agent ? agent.name.substring(0, 4) : id.substring(0, 4);
+            })
+            .join("/");
+          ctx.fillText(agentText, x + SLOT_WIDTH / 2, y + 113);
         }
       } else {
         // Not registered indicator

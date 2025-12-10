@@ -7,6 +7,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
   AttachmentBuilder,
+  StringSelectMenuBuilder,
 } = require("discord.js");
 
 // ===============================================
@@ -57,8 +58,21 @@ const {
   getUserRankData,
   isUserRegistered,
   findOrMigrateUser,
+  updateUserRegistration,
   USERS_FILE,
 } = require("../valorantApi/registrationManager");
+const {
+  AGENT_DATA,
+  MAX_PREFERRED_AGENTS,
+  getAgentById,
+  getAgentName,
+  getAgentEmoji,
+  getAgentRole,
+  isValidAgent,
+  formatAgentList,
+  getAgentSelectOptions,
+  ROLE_EMOJIS,
+} = require("../valorantApi/agentUtils");
 const {
   getPlayerMatchStats,
   COMPETITIVE_MODES,
@@ -494,10 +508,17 @@ async function showUserStats(message, registration) {
       .setEmoji("📈")
       .setStyle(ButtonStyle.Secondary);
 
+    const agentsButton = new ButtonBuilder()
+      .setCustomId(`valagents_select_${message.author.id}`)
+      .setLabel("My Agents")
+      .setEmoji("🎮")
+      .setStyle(ButtonStyle.Secondary);
+
     const row = new ActionRowBuilder().addComponents(
       refreshButton,
       matchesButton,
-      mmrHistoryButton
+      mmrHistoryButton,
+      agentsButton
     );
 
     await loadingMessage.edit({
@@ -758,6 +779,139 @@ async function showMMRHistory(message, registration) {
 
     await loadingMessage.edit({ embeds: [errorEmbed] });
   }
+}
+
+// Show agent selection page
+async function showAgentSelection(interaction, registration) {
+  const currentAgents = registration.preferredAgents || [];
+
+  // Build the embed showing current selection
+  const embed = new EmbedBuilder()
+    .setTitle("🎮 Preferred Agents Selection")
+    .setColor("#ff4654")
+    .setDescription(
+      `Select up to **${MAX_PREFERRED_AGENTS} agents** you prefer to play.\n` +
+      "These will be displayed when you join team lobbies."
+    )
+    .setTimestamp()
+    .setFooter({ text: "Powered by HenrikDev API • Agent Selection" });
+
+  // Show current selection
+  if (currentAgents.length > 0) {
+    const agentDisplay = currentAgents.map(agentId => {
+      const agent = getAgentById(agentId);
+      if (!agent) return agentId;
+      return `${agent.emoji} **${agent.name}** (${agent.role})`;
+    }).join("\n");
+
+    embed.addFields({
+      name: `✅ Current Selection (${currentAgents.length}/${MAX_PREFERRED_AGENTS})`,
+      value: agentDisplay,
+      inline: false,
+    });
+  } else {
+    embed.addFields({
+      name: "✅ Current Selection",
+      value: "*No agents selected yet*",
+      inline: false,
+    });
+  }
+
+  // Add role legend
+  embed.addFields({
+    name: "📋 Agent Roles",
+    value: Object.entries(ROLE_EMOJIS).map(([role, emoji]) => `${emoji} ${role}`).join(" • "),
+    inline: false,
+  });
+
+  // Create select menu with all agents
+  const selectOptions = getAgentSelectOptions();
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId(`valagents_menu_${interaction.user.id}`)
+    .setPlaceholder("Select your preferred agents...")
+    .setMinValues(0)
+    .setMaxValues(MAX_PREFERRED_AGENTS)
+    .addOptions(selectOptions.map(opt => ({
+      ...opt,
+      default: currentAgents.includes(opt.value),
+    })));
+
+  const selectRow = new ActionRowBuilder().addComponents(selectMenu);
+
+  const backButton = new ButtonBuilder()
+    .setCustomId(`valstats_refresh_${interaction.user.id}`)
+    .setLabel("Back to Stats")
+    .setEmoji("◀️")
+    .setStyle(ButtonStyle.Secondary);
+
+  const clearButton = new ButtonBuilder()
+    .setCustomId(`valagents_clear_${interaction.user.id}`)
+    .setLabel("Clear Selection")
+    .setEmoji("🗑️")
+    .setStyle(ButtonStyle.Danger)
+    .setDisabled(currentAgents.length === 0);
+
+  const buttonRow = new ActionRowBuilder().addComponents(backButton, clearButton);
+
+  await interaction.editReply({
+    embeds: [embed],
+    components: [selectRow, buttonRow],
+  });
+}
+
+// Handle agent selection from menu
+async function handleAgentSelection(interaction, selectedAgents) {
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+
+  // Update registration with new preferred agents
+  const success = await updateUserRegistration(guildId, userId, {
+    preferredAgents: selectedAgents,
+  });
+
+  if (!success) {
+    return await interaction.reply({
+      content: "❌ Failed to save agent selection. Please try again.",
+      ephemeral: true,
+    });
+  }
+
+  // Get updated registration to show the new selection
+  const registration = await getUserRegistration(guildId, userId);
+
+  // Show confirmation
+  const agentDisplay = selectedAgents.length > 0
+    ? selectedAgents.map(agentId => {
+        const agent = getAgentById(agentId);
+        return agent ? `${agent.emoji} ${agent.name}` : agentId;
+      }).join(", ")
+    : "*None selected*";
+
+  const embed = new EmbedBuilder()
+    .setTitle("✅ Agents Updated!")
+    .setColor("#00ff00")
+    .setDescription(`Your preferred agents have been saved.`)
+    .addFields({
+      name: `🎮 Selected Agents (${selectedAgents.length}/${MAX_PREFERRED_AGENTS})`,
+      value: agentDisplay,
+      inline: false,
+    })
+    .setTimestamp();
+
+  await interaction.update({
+    embeds: [embed],
+    components: [],
+  });
+
+  // After a brief pause, show the full selection page again
+  setTimeout(async () => {
+    try {
+      await showAgentSelection(interaction, registration);
+    } catch {
+      // Message may have been deleted or interaction expired
+    }
+  }, 1500);
 }
 
 // Show detailed match history
@@ -1924,6 +2078,66 @@ module.exports = {
                 },
                 registration
               );
+            }
+
+            // Agent selection button
+            if (interaction.customId.startsWith("valagents_select_")) {
+              const userId = interaction.customId.split("_")[2];
+              if (interaction.user.id !== userId) {
+                return await safeInteractionResponse(interaction, "reply", {
+                  content: "❌ This is not your agents panel!",
+                  ephemeral: true,
+                });
+              }
+
+              const registration = await getUserRegistration(interaction.guild.id, userId);
+              if (!registration) {
+                return await safeInteractionResponse(interaction, "reply", {
+                  content:
+                    "❌ You are not registered! Use `!valstats` to register.",
+                  ephemeral: true,
+                });
+              }
+
+              await safeInteractionResponse(interaction, "defer");
+              await showAgentSelection(interaction, registration);
+            }
+
+            // Clear agents button
+            if (interaction.customId.startsWith("valagents_clear_")) {
+              const userId = interaction.customId.split("_")[2];
+              if (interaction.user.id !== userId) {
+                return await safeInteractionResponse(interaction, "reply", {
+                  content: "❌ This is not your agents panel!",
+                  ephemeral: true,
+                });
+              }
+
+              // Clear the preferred agents
+              await updateUserRegistration(interaction.guild.id, userId, {
+                preferredAgents: [],
+              });
+
+              const registration = await getUserRegistration(interaction.guild.id, userId);
+              await safeInteractionResponse(interaction, "defer");
+              await showAgentSelection(interaction, registration);
+            }
+          }
+
+          // Handle select menu interactions
+          if (interaction.isStringSelectMenu()) {
+            // Agent selection menu
+            if (interaction.customId.startsWith("valagents_menu_")) {
+              const userId = interaction.customId.split("_")[2];
+              if (interaction.user.id !== userId) {
+                return await safeInteractionResponse(interaction, "reply", {
+                  content: "❌ This is not your agents menu!",
+                  ephemeral: true,
+                });
+              }
+
+              const selectedAgents = interaction.values;
+              await handleAgentSelection(interaction, selectedAgents);
             }
           }
 
