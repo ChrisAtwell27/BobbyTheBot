@@ -20,22 +20,22 @@ const { getAgentById, ROLE_EMOJIS } = require('./agentUtils');
  * @returns {Promise<Canvas>} - The created canvas
  */
 async function createStatsVisualization(accountData, mmrData, matchData, userAvatar, registration, mmrDataV3 = null, bestAgent = null) {
-    const canvas = createCanvas(1000, 900);
+    const canvas = createCanvas(1000, 1050);
     const ctx = canvas.getContext('2d');
 
     // Enhanced background with pattern
-    const gradient = ctx.createLinearGradient(0, 0, 1000, 900);
+    const gradient = ctx.createLinearGradient(0, 0, 1000, 1050);
     gradient.addColorStop(0, '#0a0e13');
     gradient.addColorStop(0.3, '#1e2328');
     gradient.addColorStop(0.7, '#2c3e50');
     gradient.addColorStop(1, '#0a0e13');
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 1000, 900);
+    ctx.fillRect(0, 0, 1000, 1050);
 
     // Add subtle pattern overlay
     ctx.fillStyle = 'rgba(255, 70, 84, 0.03)';
     for (let i = 0; i < 1000; i += 50) {
-        for (let j = 0; j < 900; j += 50) {
+        for (let j = 0; j < 1050; j += 50) {
             if ((i + j) % 100 === 0) {
                 ctx.fillRect(i, j, 25, 25);
             }
@@ -49,9 +49,9 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     accentGradient.addColorStop(1, '#ff4654');
     ctx.fillStyle = accentGradient;
     ctx.fillRect(0, 0, 1000, 8);
-    ctx.fillRect(0, 892, 1000, 8);
-    ctx.fillRect(0, 0, 8, 900);
-    ctx.fillRect(992, 0, 8, 900);
+    ctx.fillRect(0, 1042, 1000, 8);
+    ctx.fillRect(0, 0, 8, 1050);
+    ctx.fillRect(992, 0, 8, 1050);
 
     // Enhanced header section
     ctx.fillStyle = '#ffffff';
@@ -388,7 +388,7 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
             ctx.textAlign = 'left';
             ctx.fillText('RECENT COMPETITIVE MATCHES', 80, matchSectionY + 22);
 
-            const recentMatches = competitiveMatches.slice(0, 5); // Reduced to 5 to fit with best agent
+            const recentMatches = competitiveMatches.slice(0, 8); // Show up to 8 recent matches
             recentMatches.forEach((match, index) => {
                 const y = matchSectionY + 55 + index * 60;
                 const player = match.players.find(p => p.name.toLowerCase() === accountData.name.toLowerCase());
@@ -464,7 +464,7 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     ctx.fillStyle = '#666666';
     ctx.font = '12px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('Powered by HenrikDev Valorant API • Enhanced Stats v4.0 • MMR + ELO + Seasonal Data', 500, 880);
+    ctx.fillText('Powered by HenrikDev Valorant API • Enhanced Stats v4.0 • MMR + ELO + Seasonal Data', 500, 1030);
 
     return canvas;
 }
