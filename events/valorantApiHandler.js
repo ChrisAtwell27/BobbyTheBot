@@ -378,6 +378,29 @@ async function showUserStats(message, registration) {
   const loadingMessage = await message.channel.send({ embeds: [loadingEmbed] });
 
   try {
+    // Validate registration data has required fields
+    if (!registration.name || !registration.tag || !registration.region) {
+      const missingFields = [];
+      if (!registration.name) missingFields.push("name");
+      if (!registration.tag) missingFields.push("tag");
+      if (!registration.region) missingFields.push("region");
+
+      const errorEmbed = new EmbedBuilder()
+        .setTitle("❌ Incomplete Registration")
+        .setColor("#ff0000")
+        .setDescription(
+          `Your Valorant registration is missing required data: **${missingFields.join(", ")}**`
+        )
+        .addFields({
+          name: "🔧 How to Fix",
+          value: "Please re-register using `!valstats` and click the **Register Now** button to update your account information.",
+          inline: false,
+        })
+        .setTimestamp();
+
+      return await loadingMessage.edit({ embeds: [errorEmbed] });
+    }
+
     console.log(
       `Fetching enhanced stats for: ${registration.name}#${registration.tag} in ${registration.region}`
     );
@@ -533,6 +556,29 @@ async function showUserMatches(message, registration) {
   const loadingMessage = await message.channel.send({ embeds: [loadingEmbed] });
 
   try {
+    // Validate registration data has required fields
+    if (!registration.name || !registration.tag || !registration.region) {
+      const missingFields = [];
+      if (!registration.name) missingFields.push("name");
+      if (!registration.tag) missingFields.push("tag");
+      if (!registration.region) missingFields.push("region");
+
+      const errorEmbed = new EmbedBuilder()
+        .setTitle("❌ Incomplete Registration")
+        .setColor("#ff0000")
+        .setDescription(
+          `Your Valorant registration is missing required data: **${missingFields.join(", ")}**`
+        )
+        .addFields({
+          name: "🔧 How to Fix",
+          value: "Please re-register using `!valstats` and click the **Register Now** button to update your account information.",
+          inline: false,
+        })
+        .setTimestamp();
+
+      return await loadingMessage.edit({ embeds: [errorEmbed] });
+    }
+
     console.log(
       `Fetching matches for: ${registration.name}#${registration.tag}`
     );

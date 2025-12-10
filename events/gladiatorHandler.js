@@ -59,6 +59,20 @@ const ENERGY_PER_TURN = 1;
 const FATIGUE_START_TURN = 12;
 const MAX_TURNS = 20;
 
+// ==========================================
+// DYNAMIC SPEED SYSTEM
+// ==========================================
+// Speed now determines turn order dynamically each round
+// - Each player accumulates "action points" based on their effective speed
+// - First to reach ACTION_THRESHOLD gets to act
+// - Energy affects speed: high energy = faster, low energy = slower
+// - This creates strategic depth: saving energy gives speed advantage
+
+const ACTION_THRESHOLD = 100; // Points needed to take a turn
+const ENERGY_SPEED_BONUS = 0.08; // +8% speed per energy above 2 (neutral point)
+const ENERGY_SPEED_PENALTY = 0.10; // -10% speed per energy below 2
+const DOUBLE_TURN_THRESHOLD = 1.8; // Need 80% more speed to get double turns
+
 const GLADIATOR_CLASSES = {
   warrior: {
     name: "Warrior",
@@ -297,10 +311,104 @@ function createGladiator(userId, username, avatarURL, className) {
     buffs: [],
     debuffs: [],
     energy: STARTING_ENERGY, // Energy system - starts at 3, max 5, gain 1 per turn
+    actionPoints: 0, // Dynamic turn system - accumulates based on effective speed
     isStunned: false,
     isEvading: false,
     isInvincible: false,
   };
+}
+
+/**
+ * Calculate effective speed based on current stats and energy
+ * Energy above 2 gives speed bonus, below 2 gives penalty
+ * This makes energy management strategic - saving energy = faster turns
+ */
+function calculateEffectiveSpeed(gladiator) {
+  let effectiveSpeed = gladiator.speed;
+
+  // Energy modifier: neutral at 2 energy
+  const energyDiff = gladiator.energy - 2;
+  if (energyDiff > 0) {
+    // Bonus speed for high energy
+    effectiveSpeed *= (1 + energyDiff * ENERGY_SPEED_BONUS);
+  } else if (energyDiff < 0) {
+    // Penalty for low energy
+    effectiveSpeed *= (1 + energyDiff * ENERGY_SPEED_PENALTY); // energyDiff is negative
+  }
+
+  // Apply speed buffs
+  for (const buff of gladiator.buffs) {
+    if (buff.stat === "speed") {
+      effectiveSpeed *= (1 + buff.bonus);
+    }
+  }
+
+  // Apply speed debuffs
+  for (const debuff of gladiator.debuffs) {
+    if (debuff.stat === "speed") {
+      effectiveSpeed *= (1 - debuff.penalty);
+    }
+  }
+
+  // Stunned = 0 effective speed (can't accumulate action points)
+  if (gladiator.isStunned) {
+    return 0;
+  }
+
+  return Math.max(1, Math.floor(effectiveSpeed));
+}
+
+/**
+ * Advance action points for both gladiators and determine who acts next
+ * Returns the gladiator who should act, or null if both acted (turn complete)
+ */
+function advanceActionPoints(p1, p2) {
+  const p1Speed = calculateEffectiveSpeed(p1);
+  const p2Speed = calculateEffectiveSpeed(p2);
+
+  // Accumulate action points based on effective speed
+  // We simulate until someone reaches the threshold
+  while (p1.actionPoints < ACTION_THRESHOLD && p2.actionPoints < ACTION_THRESHOLD) {
+    p1.actionPoints += p1Speed;
+    p2.actionPoints += p2Speed;
+  }
+
+  // Determine who acts (ties go to higher base speed, then p1)
+  if (p1.actionPoints >= ACTION_THRESHOLD && p2.actionPoints >= ACTION_THRESHOLD) {
+    // Both ready - higher effective speed goes first
+    if (p1Speed > p2Speed) {
+      return p1;
+    } else if (p2Speed > p1Speed) {
+      return p2;
+    } else {
+      // Tie: use base speed
+      return p1.baseSpeed >= p2.baseSpeed ? p1 : p2;
+    }
+  } else if (p1.actionPoints >= ACTION_THRESHOLD) {
+    return p1;
+  } else {
+    return p2;
+  }
+}
+
+/**
+ * Check if a gladiator gets a double turn (significantly faster)
+ */
+function checkDoubleTurn(actor, opponent) {
+  const actorSpeed = calculateEffectiveSpeed(actor);
+  const opponentSpeed = calculateEffectiveSpeed(opponent);
+
+  if (opponentSpeed === 0) return true; // Opponent stunned = always double turn
+
+  const speedRatio = actorSpeed / opponentSpeed;
+  return speedRatio >= DOUBLE_TURN_THRESHOLD;
+}
+
+/**
+ * Consume action points after taking a turn
+ */
+function consumeActionPoints(gladiator) {
+  gladiator.actionPoints = Math.max(0, gladiator.actionPoints - ACTION_THRESHOLD);
 }
 
 /**
@@ -637,14 +745,22 @@ function buildMatchEmbed(match, turnMessage = null, isGameOver = false) {
   const p1 = match.player1;
   const p2 = match.player2;
 
-  const p1HpBar = createHpBar(p1.hp, p1.maxHp);
-  const p2HpBar = createHpBar(p2.hp, p2.maxHp);
-
-  const p1EnergyBar = createEnergyBar(p1.energy, MAX_ENERGY);
-  const p2EnergyBar = createEnergyBar(p2.energy, MAX_ENERGY);
-
   const p1StatusIcons = getStatusIcons(p1);
   const p2StatusIcons = getStatusIcons(p2);
+
+  // Calculate effective speeds for display
+  const p1EffSpeed = calculateEffectiveSpeed(p1);
+  const p2EffSpeed = calculateEffectiveSpeed(p2);
+
+  // Speed comparison indicator
+  const getSpeedIndicator = (mySpeed, theirSpeed) => {
+    if (mySpeed === 0) return " 💫"; // Stunned
+    const ratio = mySpeed / Math.max(1, theirSpeed);
+    if (ratio >= DOUBLE_TURN_THRESHOLD) return " ⚡⚡"; // Double turn possible
+    if (ratio >= 1.3) return " ⚡"; // Significantly faster
+    if (ratio <= 0.7) return " 🐢"; // Significantly slower
+    return "";
+  };
 
   // Fatigue warning
   let fatigueWarning = "";
@@ -662,22 +778,42 @@ function buildMatchEmbed(match, turnMessage = null, isGameOver = false) {
   const currentPlayer = match.currentTurn === p1.id ? p1 : p2;
   const turnIndicator = isGameOver ? "" : `\n\n🎯 **<@${currentPlayer.id}> IT'S YOUR TURN!** 🎯`;
 
-  // Build compact stat lines
+  // Build compact stat lines with effective speed
   const p1Turn = match.currentTurn === p1.id && !isGameOver ? "▶️ " : "";
   const p2Turn = match.currentTurn === p2.id && !isGameOver ? "▶️ " : "";
 
+  // Show effective speed vs base speed if different
+  const p1SpeedDisplay = p1EffSpeed !== p1.baseSpeed
+    ? `💨${p1EffSpeed}(${p1.baseSpeed})${getSpeedIndicator(p1EffSpeed, p2EffSpeed)}`
+    : `💨${p1.baseSpeed}${getSpeedIndicator(p1EffSpeed, p2EffSpeed)}`;
+  const p2SpeedDisplay = p2EffSpeed !== p2.baseSpeed
+    ? `💨${p2EffSpeed}(${p2.baseSpeed})${getSpeedIndicator(p2EffSpeed, p1EffSpeed)}`
+    : `💨${p2.baseSpeed}${getSpeedIndicator(p2EffSpeed, p1EffSpeed)}`;
+
   const p1Stats = `${p1Turn}${p1.classData.emoji} **${p1.name}** (${p1.classData.name})\n` +
     `❤️ ${p1.hp}/${p1.maxHp}${p1.shield > 0 ? ` +${p1.shield}🛡️` : ""} | ⚡${p1.energy}/${MAX_ENERGY}\n` +
-    `⚔️${p1.attack} 🛡️${p1.defense} 💨${p1.speed}${p1StatusIcons}`;
+    `⚔️${p1.attack} 🛡️${p1.defense} ${p1SpeedDisplay}${p1StatusIcons}`;
 
   const p2Stats = `${p2Turn}${p2.classData.emoji} **${p2.name}** (${p2.classData.name})\n` +
     `❤️ ${p2.hp}/${p2.maxHp}${p2.shield > 0 ? ` +${p2.shield}🛡️` : ""} | ⚡${p2.energy}/${MAX_ENERGY}\n` +
-    `⚔️${p2.attack} 🛡️${p2.defense} 💨${p2.speed}${p2StatusIcons}`;
+    `⚔️${p2.attack} 🛡️${p2.defense} ${p2SpeedDisplay}${p2StatusIcons}`;
+
+  // Speed tip
+  let speedTip = "";
+  if (!isGameOver) {
+    const fasterPlayer = p1EffSpeed > p2EffSpeed ? p1 : p2;
+    if (p1EffSpeed !== p2EffSpeed) {
+      const ratio = Math.max(p1EffSpeed, p2EffSpeed) / Math.max(1, Math.min(p1EffSpeed, p2EffSpeed));
+      if (ratio >= DOUBLE_TURN_THRESHOLD) {
+        speedTip = `\n💨 **${fasterPlayer.name}** may get double turns!`;
+      }
+    }
+  }
 
   const embed = new EmbedBuilder()
     .setTitle("⚔️ GLADIATOR ARENA ⚔️")
     .setColor(isGameOver ? 0xFFD700 : (match.turn >= FATIGUE_START_TURN ? 0xFF6600 : 0xFF4444))
-    .setDescription((turnMessage || `**Turn ${match.turn}/${MAX_TURNS}**`) + turnIndicator + fatigueWarning)
+    .setDescription((turnMessage || `**Turn ${match.turn}/${MAX_TURNS}**`) + turnIndicator + fatigueWarning + speedTip)
     .addFields(
       {
         name: "🏟️ Combatants",
@@ -685,7 +821,7 @@ function buildMatchEmbed(match, turnMessage = null, isGameOver = false) {
         inline: false,
       }
     )
-    .setFooter({ text: `Prize Pool: ${match.prizePool} (5% house cut applied)` })
+    .setFooter({ text: `Prize Pool: ${match.prizePool} | High energy = faster turns!` })
     .setTimestamp();
 
   if (p1.avatarURL || p2.avatarURL) {
@@ -929,18 +1065,26 @@ function buildHelpEmbed() {
         value: classInfo,
       },
       {
+        name: "💨 Dynamic Speed System",
+        value:
+          "• **Speed determines turn order** - faster players act more often!\n" +
+          "• **Energy affects speed:** High energy = +8%/point, Low energy = -10%/point\n" +
+          "• **Double turns:** If 80%+ faster, you can act twice in a row!\n" +
+          "• **Strategy:** Save energy for speed boost, or spend for big abilities\n" +
+          "• Speed debuffs are now POWERFUL - slow enemies lose turns!",
+      },
+      {
         name: "⚡ Energy System",
         value:
-          `• **Start:** ${STARTING_ENERGY} energy\n` +
+          `• **Start:** ${STARTING_ENERGY} energy (neutral speed)\n` +
           `• **Regen:** +${ENERGY_PER_TURN} energy per turn\n` +
-          `• **Max:** ${MAX_ENERGY} energy\n` +
+          `• **Max:** ${MAX_ENERGY} energy (+24% speed at max!)\n` +
           "• **Abilities:** Cost 1-3 energy each\n" +
-          "• Manage energy wisely - can't use abilities without it!",
+          "• Spending big abilities = slower next turn!",
       },
       {
         name: "⚔️ Combat Mechanics",
         value:
-          "• **Turn Order:** Higher speed goes first\n" +
           "• **Damage:** ATK × Multiplier - (DEF × 0.5), min 30%\n" +
           "• **Effects:** Stun, poison, shields, buffs/debuffs\n" +
           `• **Fatigue:** After turn ${FATIGUE_START_TURN}, both take escalating damage\n` +
@@ -958,7 +1102,7 @@ function buildHelpEmbed() {
           "• **Paladin** beats Warrior (sustain war)",
       }
     )
-    .setFooter({ text: "All classes are balanced - skill determines victory!" })
+    .setFooter({ text: "Speed is king - manage your energy wisely!" })
     .setTimestamp();
 }
 
@@ -1519,8 +1663,11 @@ async function startMatch(interaction, challenge, acceptedClass) {
     acceptedClass
   );
 
-  // Determine who goes first based on speed
-  const firstPlayer = player1.speed >= player2.speed ? player1 : player2;
+  // Use dynamic speed system to determine who goes first
+  // Both start at 0 action points, advance until someone reaches threshold
+  const firstPlayer = advanceActionPoints(player1, player2);
+  const p1EffSpeed = calculateEffectiveSpeed(player1);
+  const p2EffSpeed = calculateEffectiveSpeed(player2);
 
   const match = {
     id: matchId,
@@ -1538,13 +1685,16 @@ async function startMatch(interaction, challenge, acceptedClass) {
 
   activeMatches.set(matchId, match);
 
-  // Build initial embed
-  const embed = buildMatchEmbed(match, `**${firstPlayer.name}** goes first! (Higher speed: ${firstPlayer.speed})`);
-  const currentPlayer = firstPlayer.id === player1.id ? player1 : player2;
-  const buttons = buildAbilityButtons(match, currentPlayer);
+  // Build initial embed with speed info
+  const speedComparison = p1EffSpeed === p2EffSpeed
+    ? `(Speed tied at ${p1EffSpeed})`
+    : `(Speed: ${firstPlayer.name} ${calculateEffectiveSpeed(firstPlayer)} vs ${firstPlayer.id === player1.id ? player2.name : player1.name} ${firstPlayer.id === player1.id ? p2EffSpeed : p1EffSpeed})`;
+
+  const embed = buildMatchEmbed(match, `**${firstPlayer.name}** goes first! ${speedComparison}`);
+  const buttons = buildAbilityButtons(match, firstPlayer);
 
   await interaction.update({
-    content: `⚔️ **MATCH STARTED!** ⚔️\n<@${player1.id}> vs <@${player2.id}>`,
+    content: `⚔️ **MATCH STARTED!** ⚔️\n<@${player1.id}> vs <@${player2.id}>\n💡 *Speed determines turn order - high energy makes you faster!*`,
     embeds: [embed],
     components: buttons
   });
@@ -1569,19 +1719,43 @@ async function processAbility(interaction, match, abilityIndex) {
   if (attacker.isStunned) {
     await interaction.reply({ content: "You're stunned and can't act!", ephemeral: true });
 
-    // Process turn effects and switch turns
-    processTurnEffects(attacker, match.turn);
-    match.currentTurn = defender.id;
+    // Stunned player loses their action points and recovers
+    consumeActionPoints(attacker);
+    attacker.isStunned = false;
+
+    // Process turn effects for attacker (energy regen happens)
+    const attackerEffects = processTurnEffects(attacker, match.turn);
+
+    // Determine next player using dynamic speed system
+    const nextPlayer = advanceActionPoints(match.player1, match.player2);
+    match.currentTurn = nextPlayer.id;
     match.turn++;
 
-    // Check max turns - if exceeded, determine winner by HP %
+    // Check max turns
     if (match.turn > MAX_TURNS) {
       await endMatchByHp(interaction, match);
       return;
     }
 
-    const embed = buildMatchEmbed(match, `💫 **${attacker.name}** was stunned!\n**${defender.name}'s** turn!`);
-    const buttons = buildAbilityButtons(match, defender);
+    // Process effects for the player whose turn is starting
+    const nextEffects = processTurnEffects(nextPlayer, match.turn);
+    let effectsMsg = "";
+    if (nextEffects.length > 0) {
+      effectsMsg = `\n**${nextPlayer.name}:** ${nextEffects.join(", ")}`;
+    }
+
+    // Check if anyone died from effects
+    if (match.player1.hp <= 0) {
+      await endMatch(interaction, match, match.player2, match.player1, false);
+      return;
+    }
+    if (match.player2.hp <= 0) {
+      await endMatch(interaction, match, match.player1, match.player2, false);
+      return;
+    }
+
+    const embed = buildMatchEmbed(match, `💫 **${attacker.name}** recovered from stun!${effectsMsg}\n\n**${nextPlayer.name}'s** turn!`);
+    const buttons = buildAbilityButtons(match, nextPlayer);
 
     await interaction.message.edit({ embeds: [embed], components: buttons });
     match.turnTimeoutId = setTimeout(() => handleTurnTimeout(match), TURN_TIMEOUT);
@@ -1598,6 +1772,9 @@ async function processAbility(interaction, match, abilityIndex) {
     return;
   }
 
+  // Consume action points after using ability
+  consumeActionPoints(attacker);
+
   // Build result description
   let turnDescription = `${result.abilityEmoji} **${attacker.name}** used **${result.abilityName}** (${result.energyCost}⚡)!\n`;
   turnDescription += result.description.join("\n");
@@ -1613,32 +1790,45 @@ async function processAbility(interaction, match, abilityIndex) {
     return;
   }
 
-  // Switch turns
-  match.currentTurn = defender.id;
+  // Use dynamic speed system to determine who goes next
+  // This can result in double turns for significantly faster players!
+  const nextPlayer = advanceActionPoints(match.player1, match.player2);
+  const isDoubleTurn = nextPlayer.id === attacker.id;
+
+  match.currentTurn = nextPlayer.id;
   match.turn++;
   match.lastActivity = Date.now();
 
-  // Check max turns - if exceeded, determine winner by HP %
+  // Check max turns
   if (match.turn > MAX_TURNS) {
     await endMatchByHp(interaction, match);
     return;
   }
 
-  // Process start-of-turn effects for defender (includes energy regen and fatigue)
-  const defenderEffects = processTurnEffects(defender, match.turn);
-  if (defenderEffects.length > 0) {
-    turnDescription += `\n\n**${defender.name}:** ${defenderEffects.join(", ")}`;
+  // Process start-of-turn effects for the next player (energy regen, fatigue, DOTs)
+  const nextEffects = processTurnEffects(nextPlayer, match.turn);
+  if (nextEffects.length > 0) {
+    turnDescription += `\n\n**${nextPlayer.name}:** ${nextEffects.join(", ")}`;
   }
 
-  // Check if defender died from DOT or fatigue
+  // Check if anyone died from DOT or fatigue
   if (defender.hp <= 0) {
     await endMatch(interaction, match, attacker, defender, false);
     return;
   }
+  if (attacker.hp <= 0) {
+    await endMatch(interaction, match, defender, attacker, false);
+    return;
+  }
+
+  // Add double turn notification if applicable
+  if (isDoubleTurn) {
+    turnDescription += `\n\n⚡⚡ **DOUBLE TURN!** ${attacker.name} is so fast they act again!`;
+  }
 
   // Update embed
-  const embed = buildMatchEmbed(match, turnDescription + `\n\n**${defender.name}'s** turn!`);
-  const buttons = buildAbilityButtons(match, defender);
+  const embed = buildMatchEmbed(match, turnDescription + `\n\n**${nextPlayer.name}'s** turn!`);
+  const buttons = buildAbilityButtons(match, nextPlayer);
 
   await interaction.update({ embeds: [embed], components: buttons });
 
