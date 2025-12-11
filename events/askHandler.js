@@ -24,11 +24,17 @@ if (!DEFAULT_OPENAI_KEY) {
 // Conversation history storage (in-memory, per user)
 // Auto-cleanup conversations after 1 hour of inactivity
 const conversationHistory = new CleanupMap(60 * 60 * 1000, 10 * 60 * 1000);
-const MAX_HISTORY_LENGTH = 5; // Keep last 5 message pairs per user (user message + Bobby's response)
+const MAX_HISTORY_LENGTH = 5; // Keep last 5 Bobby conversation pairs per user
+
+// Background message history - stores ALL user messages (not just Bobby mentions)
+// This gives Bobby context about what users have been saying
+const backgroundMessages = new CleanupMap(60 * 60 * 1000, 10 * 60 * 1000);
+const MAX_BACKGROUND_MESSAGES = 3; // Keep last 3 general messages per user
 
 // Store CleanupMap for graceful shutdown cleanup
 if (!global.askHandlerCleanupMaps) global.askHandlerCleanupMaps = [];
 global.askHandlerCleanupMaps.push(conversationHistory);
+global.askHandlerCleanupMaps.push(backgroundMessages);
 
 // Function to get user's memory/personal details
 async function getUserMemory(userId, guildId) {
@@ -468,6 +474,17 @@ ${userMemory}
 **IMPORTANT: Remember and naturally reference these personal details when talking to this user. Use their preferred name/nickname if specified. Incorporate these memories naturally into conversation.**`;
   }
 
+  // Add recent background messages for context (what user has been saying in chat)
+  const backgroundContext = getBackgroundContext(userId);
+  if (backgroundContext) {
+    customPrompt += `
+
+**RECENT MESSAGES FROM THIS USER (for context):**
+${backgroundContext}
+
+**NOTE: These are messages the user sent recently (not necessarily to you). Use this context naturally if relevant - you can reference what they were talking about. Don't repeat back their messages verbatim.**`;
+  }
+
   if (!conversationHistory.has(userId)) {
     // Create new conversation with personality
     conversationHistory.set(userId, [
@@ -490,8 +507,8 @@ ${userMemory}
 }
 
 // Function to add message to conversation history
-async function addToHistory(userId, guildId, role, content) {
-  const history = await getConversationHistory(userId, guildId);
+// If history is already fetched, pass it directly to avoid redundant DB calls
+function addToHistory(userId, history, role, content) {
   history.push({ role, content });
 
   // Keep only system message + last N messages
@@ -500,6 +517,40 @@ async function addToHistory(userId, guildId, role, content) {
     const recentMessages = history.slice(-MAX_HISTORY_LENGTH);
     conversationHistory.set(userId, [systemMsg, ...recentMessages]);
   }
+}
+
+// Function to track background messages (all user messages, not just Bobby mentions)
+function addBackgroundMessage(userId, username, content, channelName) {
+  if (!backgroundMessages.has(userId)) {
+    backgroundMessages.set(userId, []);
+  }
+
+  const messages = backgroundMessages.get(userId);
+  messages.push({
+    content,
+    username,
+    channelName,
+    timestamp: Date.now(),
+  });
+
+  // Keep only last N background messages
+  if (messages.length > MAX_BACKGROUND_MESSAGES) {
+    backgroundMessages.set(userId, messages.slice(-MAX_BACKGROUND_MESSAGES));
+  }
+}
+
+// Function to get background messages for context
+function getBackgroundContext(userId) {
+  const messages = backgroundMessages.get(userId);
+  if (!messages || messages.length === 0) return null;
+
+  const contextLines = messages.map(msg => {
+    const timeAgo = Math.round((Date.now() - msg.timestamp) / 60000);
+    const timeStr = timeAgo < 1 ? "just now" : `${timeAgo}m ago`;
+    return `[${timeStr} in #${msg.channelName}]: "${msg.content}"`;
+  });
+
+  return contextLines.join("\n");
 }
 
 // Helper to get OpenAI client
@@ -518,19 +569,11 @@ async function getBobbyResponse(userId, userMessage, guildId) {
     throw new Error("OpenAI API key not configured");
   }
 
-  // Get conversation history (this also updates personality)
+  // Get conversation history (this also updates personality and logs the score)
   const history = await getConversationHistory(userId, guildId);
 
-  // Add user message to history
-  await addToHistory(userId, guildId, "user", userMessage);
-
-  // Debug: Log personality score
-  const currentScore = await getUserPersonalityScore(userId, guildId);
-  if (currentScore !== 5) {
-    console.log(
-      `🎭 Responding to user ${userId} with personality score: ${currentScore}/10`
-    );
-  }
+  // Add user message to history (pass history directly to avoid redundant DB call)
+  addToHistory(userId, history, "user", userMessage);
 
   try {
     // Call OpenAI API with GPT-4 Mini
@@ -577,7 +620,7 @@ async function getBobbyResponse(userId, userMessage, guildId) {
     }
 
     // Add Bobby's response to history (without the memory markers)
-    await addToHistory(userId, guildId, "assistant", response);
+    addToHistory(userId, history, "assistant", response);
 
     return response;
   } catch (error) {
@@ -837,6 +880,15 @@ module.exports = (client) => {
 
     // Skip if message starts with ! (other commands)
     if (userMessage.startsWith("!")) return;
+
+    // Track ALL user messages for background context (last 3 messages)
+    // This gives Bobby awareness of what users are talking about
+    addBackgroundMessage(
+      message.author.id,
+      message.author.username,
+      userMessage.substring(0, 200), // Limit length
+      message.channel.name || "unknown"
+    );
 
     // Only respond if "bobby" is mentioned in the message
     if (!userMessageLower.includes("bobby")) return;
