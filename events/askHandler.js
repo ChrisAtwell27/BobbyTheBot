@@ -477,12 +477,15 @@ ${userMemory}
   // Add recent background messages for context (what user has been saying in chat)
   const backgroundContext = getBackgroundContext(userId);
   if (backgroundContext) {
+    console.log(`📝 Background context for ${userId}:\n${backgroundContext}`);
     customPrompt += `
 
 **RECENT MESSAGES FROM THIS USER (for context):**
 ${backgroundContext}
 
 **NOTE: These are messages the user sent recently (not necessarily to you). Use this context naturally if relevant - you can reference what they were talking about. Don't repeat back their messages verbatim.**`;
+  } else {
+    console.log(`📝 No background context for ${userId}`);
   }
 
   if (!conversationHistory.has(userId)) {
