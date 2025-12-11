@@ -35,17 +35,34 @@ export const getEnabledItems = query({
 });
 
 /**
- * Get a specific shop item
+ * Get a specific shop item (supports both custom itemId and Convex _id)
  */
 export const getItem = query({
   args: { guildId: v.string(), itemId: v.string() },
   handler: async (ctx, { guildId, itemId }) => {
-    return await ctx.db
+    // First try to find by custom itemId
+    const byItemId = await ctx.db
       .query("shopItems")
       .withIndex("by_guild_and_item", (q) =>
         q.eq("guildId", guildId).eq("itemId", itemId)
       )
       .first();
+
+    if (byItemId) {
+      return byItemId;
+    }
+
+    // If not found, try to find by Convex _id (frontend may send _id)
+    try {
+      const byId = await ctx.db.get(itemId as any);
+      if (byId && byId.guildId === guildId) {
+        return byId;
+      }
+    } catch {
+      // Invalid ID format, return null
+    }
+
+    return null;
   },
 });
 
@@ -162,7 +179,7 @@ export const createItem = mutation({
 });
 
 /**
- * Update an existing shop item
+ * Update an existing shop item (supports both custom itemId and Convex _id)
  */
 export const updateItem = mutation({
   args: {
@@ -180,12 +197,25 @@ export const updateItem = mutation({
     messageId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const item = await ctx.db
+    // First try to find by custom itemId
+    let item = await ctx.db
       .query("shopItems")
       .withIndex("by_guild_and_item", (q) =>
         q.eq("guildId", args.guildId).eq("itemId", args.itemId)
       )
       .first();
+
+    // If not found, try to find by Convex _id (frontend may send _id)
+    if (!item) {
+      try {
+        const byId = await ctx.db.get(args.itemId as any);
+        if (byId && byId.guildId === args.guildId) {
+          item = byId;
+        }
+      } catch {
+        // Invalid ID format
+      }
+    }
 
     if (!item) {
       throw new Error(`Item with ID ${args.itemId} not found`);
@@ -210,17 +240,30 @@ export const updateItem = mutation({
 });
 
 /**
- * Delete a shop item
+ * Delete a shop item (supports both custom itemId and Convex _id)
  */
 export const deleteItem = mutation({
   args: { guildId: v.string(), itemId: v.string() },
   handler: async (ctx, { guildId, itemId }) => {
-    const item = await ctx.db
+    // First try to find by custom itemId
+    let item = await ctx.db
       .query("shopItems")
       .withIndex("by_guild_and_item", (q) =>
         q.eq("guildId", guildId).eq("itemId", itemId)
       )
       .first();
+
+    // If not found, try to find by Convex _id (frontend may send _id)
+    if (!item) {
+      try {
+        const byId = await ctx.db.get(itemId as any);
+        if (byId && byId.guildId === guildId) {
+          item = byId;
+        }
+      } catch {
+        // Invalid ID format
+      }
+    }
 
     if (!item) {
       return false;
