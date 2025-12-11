@@ -50,7 +50,7 @@ const SETTING_REQUIREMENTS = {
   "features.custom_branding": "ultimate",
 
   // =====================================================================
-  // ULTIMATE TIER CUSTOMIZATION
+  // PLUS TIER CUSTOMIZATION
   // =====================================================================
   "currency.name": "ultimate", // Custom currency name (max 20 chars, letters only)
   "currency.emoji": "ultimate", // Custom currency emoji (single emoji)

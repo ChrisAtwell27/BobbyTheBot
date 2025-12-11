@@ -617,6 +617,115 @@ class SettingsServer {
     );
 
     // =====================================================================
+    // CURRENCY SETTINGS ENDPOINTS
+    // =====================================================================
+
+    // Get currency settings for a guild
+    this.app.get(
+      "/api/settings/:guildId/currency",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId } = req.params;
+          const currencyName = await getSetting(guildId, "currency.name", null);
+          const currencyEmoji = await getSetting(guildId, "currency.emoji", null);
+
+          res.json({
+            success: true,
+            guildId,
+            currency: {
+              name: currencyName,
+              emoji: currencyEmoji,
+            },
+          });
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // Set currency settings (name and/or emoji)
+    this.app.post(
+      "/api/settings/:guildId/currency",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId } = req.params;
+          const { name, emoji, tier: passedTier } = req.body;
+
+          // Check tier for currency settings (requires plus tier)
+          const currentTier = passedTier || (await getServerTier(guildId));
+          const requiredTier = getRequirement("currency.name"); // Both use same tier
+
+          if (!meetsRequirement(currentTier, requiredTier)) {
+            return res.status(403).json({
+              success: false,
+              error: "Forbidden: Higher subscription tier required",
+              tier: { current: currentTier, required: requiredTier },
+            });
+          }
+
+          const results = {};
+
+          // Validate and set currency name
+          if (name !== undefined) {
+            if (name === null || name === "") {
+              // Clear the setting
+              await setSetting(guildId, "currency.name", null);
+              results.name = { success: true, value: null, cleared: true };
+            } else if (!/^[a-zA-Z]{1,20}$/.test(name)) {
+              results.name = {
+                success: false,
+                error: "Invalid name: max 20 characters, letters only",
+              };
+            } else {
+              await setSetting(guildId, "currency.name", name);
+              results.name = { success: true, value: name };
+            }
+          }
+
+          // Validate and set currency emoji
+          if (emoji !== undefined) {
+            if (emoji === null || emoji === "") {
+              // Clear the setting
+              await setSetting(guildId, "currency.emoji", null);
+              results.emoji = { success: true, value: null, cleared: true };
+            } else {
+              // Accept any non-empty string for emoji (Discord custom emojis, unicode, etc.)
+              await setSetting(guildId, "currency.emoji", emoji);
+              results.emoji = { success: true, value: emoji };
+            }
+          }
+
+          // If neither was provided
+          if (name === undefined && emoji === undefined) {
+            return res.status(400).json({
+              success: false,
+              error: "Provide 'name' and/or 'emoji' in request body",
+            });
+          }
+
+          // Fetch updated values
+          const updatedName = await getSetting(guildId, "currency.name", null);
+          const updatedEmoji = await getSetting(guildId, "currency.emoji", null);
+
+          res.json({
+            success: true,
+            message: "Currency settings updated",
+            results,
+            currency: {
+              name: updatedName,
+              emoji: updatedEmoji,
+            },
+          });
+        } catch (error) {
+          console.error("[Settings API] Currency update error:", error);
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // =====================================================================
     // FEATURE TOGGLES ENDPOINTS
     // =====================================================================
 

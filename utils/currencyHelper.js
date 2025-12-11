@@ -21,15 +21,28 @@ function validateCurrencyName(name) {
 }
 
 /**
- * Validate currency emoji - single emoji only
+ * Validate currency emoji - accepts multiple formats:
+ * - Unicode emojis (💩, 🍯)
+ * - Discord shortcodes (:poop:, :honey_pot:)
+ * - Discord custom emojis (<:custom:123456789>, <a:animated:123456789>)
  * @param {string} emoji
  * @returns {boolean}
  */
 function validateCurrencyEmoji(emoji) {
   if (!emoji || typeof emoji !== "string") return false;
-  // Match single Unicode emoji (with optional variation selector)
-  const emojiRegex = /^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F?)$/u;
-  return emojiRegex.test(emoji);
+
+  // Unicode emoji (with optional variation selector)
+  const unicodeEmojiRegex = /^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F?)$/u;
+
+  // Discord shortcode format (:emoji_name:)
+  const shortcodeRegex = /^:[a-zA-Z0-9_]+:$/;
+
+  // Discord custom emoji format (<:name:id> or <a:name:id> for animated)
+  const customEmojiRegex = /^<a?:[a-zA-Z0-9_]+:\d+>$/;
+
+  return unicodeEmojiRegex.test(emoji) ||
+         shortcodeRegex.test(emoji) ||
+         customEmojiRegex.test(emoji);
 }
 
 /**
@@ -40,6 +53,7 @@ function validateCurrencyEmoji(emoji) {
 async function getCurrencyName(guildId) {
   if (!guildId) return DEFAULTS.name;
   const name = await getSetting(guildId, "currency.name", null);
+  console.log(`[Currency] getCurrencyName for ${guildId}: fetched "${name}", valid: ${validateCurrencyName(name)}`);
   return name && validateCurrencyName(name) ? name : DEFAULTS.name;
 }
 
@@ -51,6 +65,7 @@ async function getCurrencyName(guildId) {
 async function getCurrencyEmoji(guildId) {
   if (!guildId) return DEFAULTS.emoji;
   const emoji = await getSetting(guildId, "currency.emoji", null);
+  console.log(`[Currency] getCurrencyEmoji for ${guildId}: fetched "${emoji}", valid: ${validateCurrencyEmoji(emoji)}`);
   return emoji && validateCurrencyEmoji(emoji) ? emoji : DEFAULTS.emoji;
 }
 
