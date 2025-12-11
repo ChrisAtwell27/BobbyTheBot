@@ -693,13 +693,11 @@ module.exports = (client) => {
         });
       }
 
-      const parts = interaction.customId.split("_");
+      const customId = interaction.customId;
 
       // Handle admin buttons: bet_admin_<action>_<betId>
-      if (parts[1] === "admin") {
-        const action = parts[2];
-        const betId = parts[3];
-
+      // Format: bet_admin_lock_bet_xyz123 or bet_admin_resolve_bet_xyz123
+      if (customId.startsWith("bet_admin_")) {
         // Check admin permission
         const isAdmin = await hasAdminPermission(interaction.member, guildId);
         if (!isAdmin) {
@@ -709,22 +707,25 @@ module.exports = (client) => {
           });
         }
 
-        if (action === "lock") {
+        if (customId.startsWith("bet_admin_lock_")) {
+          const betId = customId.slice("bet_admin_lock_".length);
           return handleAdminLockButton(interaction, betId);
-        } else if (action === "resolve") {
+        } else if (customId.startsWith("bet_admin_resolve_")) {
+          const betId = customId.slice("bet_admin_resolve_".length);
           return handleAdminResolveButton(interaction, betId);
-        } else if (action === "cancel") {
+        } else if (customId.startsWith("bet_admin_cancel_")) {
+          const betId = customId.slice("bet_admin_cancel_".length);
           return handleAdminCancelButton(interaction, betId);
         }
       }
 
       // Handle user buttons: bet_<action>_<betId>
-      const action = parts[1];
-      const betId = parts[2];
-
-      if (action === "place") {
+      // Format: bet_place_bet_xyz123 or bet_mybet_bet_xyz123
+      if (customId.startsWith("bet_place_")) {
+        const betId = customId.slice("bet_place_".length);
         return handlePlaceBetButton(interaction, betId);
-      } else if (action === "mybet") {
+      } else if (customId.startsWith("bet_mybet_")) {
+        const betId = customId.slice("bet_mybet_".length);
         return handleViewMyBetButton(interaction, betId);
       }
     }
@@ -836,7 +837,8 @@ module.exports = (client) => {
    */
   async function handleResolveWinnerSelect(interaction) {
     const guildId = interaction.guild.id;
-    const betId = interaction.customId.replace("bet_resolve_winner_", "");
+    // customId format: bet_resolve_winner_<betId> where betId contains underscore
+    const betId = interaction.customId.slice("bet_resolve_winner_".length);
     const winningOptionId = interaction.values[0];
     const currencyEmoji = await getCurrencyEmoji(guildId);
 
@@ -1010,7 +1012,8 @@ module.exports = (client) => {
    */
   async function handleOptionSelect(interaction) {
     const guildId = interaction.guild.id;
-    const betId = interaction.customId.replace("bet_option_", "");
+    // customId format: bet_option_<betId> where betId contains underscore (e.g., bet_m4z5abc123)
+    const betId = interaction.customId.slice("bet_option_".length);
     const selectedOption = interaction.values[0];
     const currencyEmoji = await getCurrencyEmoji(guildId);
 
@@ -1047,9 +1050,13 @@ module.exports = (client) => {
     const username = interaction.user.displayName || interaction.user.username;
 
     // Parse customId: bet_modal_<betId>_<optionId>
-    const parts = interaction.customId.split("_");
-    const betId = parts[2];
-    const optionId = parts[3];
+    // betId format is "bet_<timestamp><random>" so it contains an underscore
+    // optionId is always single letter (a, b, c, etc.)
+    // So we extract optionId from the end and reconstruct betId
+    const customId = interaction.customId;
+    const optionId = customId.slice(-1); // Last character is the option (a, b, c, etc.)
+    // Remove "bet_modal_" prefix and "_<optionId>" suffix to get betId
+    const betId = customId.slice("bet_modal_".length, -2); // -2 for "_a" at the end
 
     const amountStr = interaction.fields.getTextInputValue("bet_amount");
     const amount = parseInt(amountStr.replace(/,/g, ""), 10);

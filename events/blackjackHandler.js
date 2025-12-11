@@ -34,8 +34,7 @@ const blackjackStreaksFilePath = path.join(
 );
 
 // Multi-deck shoe configuration
-const NUM_DECKS = 6;
-const SHUFFLE_THRESHOLD = 0.75; // Shuffle when 75% of cards are dealt
+const NUM_DECKS = 5; // 3-deck shoe (156 cards)
 let gameShoe = [];
 let runningCount = 0;
 let cardsDealt = 0;
@@ -97,7 +96,11 @@ module.exports = (client) => {
     // Blackjack game
     if (args[0] === "!blackjack") {
       // Check subscription tier (PLUS required for blackjack)
-      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS, message.guild.ownerId);
+      const subCheck = await checkSubscription(
+        message.guild.id,
+        TIERS.PLUS,
+        message.guild.ownerId
+      );
       if (!subCheck.hasAccess) {
         const upgradeEmbed = createUpgradeEmbed(
           "Blackjack",
@@ -543,7 +546,9 @@ module.exports = (client) => {
         });
 
         let bonusText =
-          streakBonus > 0 ? `\n🔥 **Streak Bonus: +${await formatCurrency(guildId, streakBonus)}**` : "";
+          streakBonus > 0
+            ? `\n🔥 **Streak Bonus: +${await formatCurrency(guildId, streakBonus)}**`
+            : "";
 
         gameEmbed = new EmbedBuilder()
           .setTitle("🎰 Blackjack - Natural 21!")
@@ -1106,8 +1111,8 @@ module.exports = (client) => {
   }
 
   function needsShuffle() {
-    const totalCards = NUM_DECKS * 52;
-    return cardsDealt >= totalCards * SHUFFLE_THRESHOLD;
+    // Auto-shuffle only when deck is completely exhausted
+    return gameShoe.length === 0;
   }
 
   function getDeckStatus() {
@@ -1141,7 +1146,9 @@ module.exports = (client) => {
   }
 
   function drawCard(shoe) {
-    if (needsShuffle() || shoe.length === 0) {
+    // Auto-shuffle when shoe is empty
+    if (shoe.length === 0) {
+      console.log("[Blackjack] Shoe exhausted - shuffling new 3-deck shoe");
       initializeShoe();
       shoe = gameShoe;
     }
@@ -1338,7 +1345,10 @@ module.exports = (client) => {
         },
         {
           name: "💰 Balance",
-          value: await formatCurrency(guildId, await getBalance(guildId, userId)),
+          value: await formatCurrency(
+            guildId,
+            await getBalance(guildId, userId)
+          ),
           inline: true,
         }
       )

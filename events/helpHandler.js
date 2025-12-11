@@ -453,6 +453,115 @@ const HELP_CATEGORIES = {
       },
     ],
   },
+  lottery: {
+    name: "🎰 Weekly Lottery",
+    emoji: "🎰",
+    description: "Weekly number lottery with massive jackpots (PLUS TIER)",
+    tier: "plus",
+    commands: [
+      {
+        name: "!lottery setup",
+        description: "**[ADMIN]** Set up the weekly lottery in a channel",
+        usage: "!lottery setup [#channel]",
+      },
+      {
+        name: "!lottery status",
+        description: "**[ADMIN]** View lottery status and settings",
+        usage: "!lottery status",
+      },
+      {
+        name: "!lottery forcedraw",
+        description: "**[ADMIN]** Force an immediate lottery draw",
+        usage: "!lottery forcedraw",
+      },
+      {
+        name: "!lottery history",
+        description: "View past lottery results",
+        usage: "!lottery history",
+      },
+      {
+        name: "Enter Lottery (Button)",
+        description: "Click the button on the lottery embed to pick 3 numbers",
+        usage: "Click 'Enter Lottery' button",
+      },
+    ],
+  },
+  betting: {
+    name: "🎲 Betting Pools",
+    emoji: "🎲",
+    description: "Admin-created betting pools with pari-mutuel payouts (PLUS TIER)",
+    tier: "plus",
+    commands: [
+      {
+        name: "!bet create",
+        description: '**[ADMIN]** Create a new betting pool with options',
+        usage: '!bet create "Title" "Option A" "Option B" ...',
+      },
+      {
+        name: "!bet lock",
+        description: "**[ADMIN]** Lock betting to stop new wagers",
+        usage: "!bet lock <betId>",
+      },
+      {
+        name: "!bet resolve",
+        description: "**[ADMIN]** Select winner and distribute payouts",
+        usage: "!bet resolve <betId> <optionId>",
+      },
+      {
+        name: "!bet cancel",
+        description: "**[ADMIN]** Cancel bet and refund all wagers",
+        usage: "!bet cancel <betId>",
+      },
+      {
+        name: "!bet list",
+        description: "**[ADMIN]** View all active bets",
+        usage: "!bet list",
+      },
+      {
+        name: "!bet info",
+        description: "View detailed bet information",
+        usage: "!bet info <betId>",
+      },
+      {
+        name: "!mybets",
+        description: "View your active bets and wagers",
+        usage: "!mybets",
+      },
+      {
+        name: "Place Bet (Button)",
+        description: "Click button on bet embed to wager on an option",
+        usage: "Click 'Place Bet' button",
+      },
+    ],
+  },
+  shop: {
+    name: "🛒 Server Shop",
+    emoji: "🛒",
+    description: "Purchase items and roles with currency (PLUS TIER)",
+    tier: "plus",
+    commands: [
+      {
+        name: "!shop",
+        description: "View available items in the server shop",
+        usage: "!shop",
+      },
+      {
+        name: "!shop setup",
+        description: "**[ADMIN]** Set up the shop in a channel",
+        usage: "!shop setup [#channel]",
+      },
+      {
+        name: "!shop refresh",
+        description: "**[ADMIN]** Refresh shop item embeds",
+        usage: "!shop refresh",
+      },
+      {
+        name: "Buy Item (Button)",
+        description: "Click the buy button on any shop item",
+        usage: "Click item button in shop channel",
+      },
+    ],
+  },
   activity: {
     name: "📊 Activity Tracking",
     emoji: "📊",
@@ -1148,7 +1257,7 @@ module.exports = (client) => {
           {
             name: "⭐ Plus Features",
             value:
-              "⚔️ PvP Games\n👑 King of the Hill\n🐝 Bee Mafia (65+ roles)\n🎯 Bounty System\n👥 Team Builder\n🎂 Birthday Tracking\n🤖 Bobby AI Chat",
+              "⚔️ PvP Games\n👑 King of the Hill\n🐝 Bee Mafia (65+ roles)\n🎯 Bounty System\n🎰 Lottery & Betting\n🛒 Server Shop\n🎂 Birthdays",
             inline: true,
           },
           {
@@ -1329,7 +1438,7 @@ module.exports = (client) => {
           {
             name: "⭐ Plus Features",
             value:
-              "⚔️ PvP Games\n👑 King of the Hill\n🐝 Bee Mafia (65+ roles)\n🎯 Bounty System\n👥 Team Builder\n🎂 Birthday Tracking",
+              "⚔️ PvP Games\n👑 King of the Hill\n🐝 Bee Mafia (65+ roles)\n🎯 Bounty System\n🎰 Lottery & Betting\n🛒 Server Shop\n🎂 Birthdays",
             inline: true,
           },
           {
