@@ -42,6 +42,7 @@ const SETTING_REQUIREMENTS = {
   "features.team_builder": "plus",
   "features.ask": "plus", // Bobby AI Chat
   "features.shop": "plus",
+  "features.lottery": "plus", // Weekly lottery system
 
   // =====================================================================
   // ULTIMATE TIER FEATURE TOGGLES
@@ -80,6 +81,9 @@ const SETTING_REQUIREMENTS = {
   // Shop channels
   "channels.shop": "plus", // Channel where shop items are displayed
   "channels.shop_notifications": "plus", // Channel for purchase notifications
+
+  // Lottery channels
+  "channels.lottery": "plus", // Channel for lottery draws and entries
 
   // =====================================================================
   // ROLE SETTINGS (free tier - all servers can configure roles)

@@ -44,6 +44,9 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Guild join handler - monitors guildCreate/guildDelete for guild registration
     require('./guildJoinHandler')(client);
 
+    // Lottery handler - weekly lottery system with scheduled draws
+    require('./lotteryHandler')(client);
+
     // ==========================================
     // MESSAGE PROCESSORS
     // (These need to see ALL messages, not just commands)

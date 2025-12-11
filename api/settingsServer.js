@@ -459,6 +459,7 @@ class SettingsServer {
             "clip_submission",
             "shop",
             "shop_notifications",
+            "lottery",
           ];
 
           if (!validTypes.includes(channelType)) {
@@ -782,6 +783,7 @@ class SettingsServer {
             "shop",
             "ask",
             "custom_branding",
+            "lottery",
           ];
 
           if (!validFeatures.includes(featureName)) {
