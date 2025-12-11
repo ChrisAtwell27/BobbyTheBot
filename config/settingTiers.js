@@ -77,6 +77,10 @@ const SETTING_REQUIREMENTS = {
   // Clip submission
   "channels.clip_submission": "free",
 
+  // Shop channels
+  "channels.shop": "plus", // Channel where shop items are displayed
+  "channels.shop_notifications": "plus", // Channel for purchase notifications
+
   // =====================================================================
   // ROLE SETTINGS (free tier - all servers can configure roles)
   // =====================================================================
@@ -94,6 +98,9 @@ const SETTING_REQUIREMENTS = {
   // Team builder / Valorant roles
   "roles.valorant_team": "plus", // Role to ping for Valorant teams
   "roles.valorant_inhouse": "plus", // Role for in-house games
+
+  // Shop roles
+  "roles.shop_notifications": "plus", // Role to ping for shop purchases
 };
 
 /**

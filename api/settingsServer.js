@@ -822,6 +822,212 @@ class SettingsServer {
         }
       }
     );
+
+    // =====================================================================
+    // SHOP ENDPOINTS
+    // =====================================================================
+
+    // Get all shop items for a guild
+    this.app.get(
+      "/api/settings/:guildId/shop/items",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId } = req.params;
+          const { getConvexClient } = require("../database/convexClient");
+          const { api } = require("../convex/_generated/api");
+          const client = getConvexClient();
+
+          const items = await client.query(api.shop.getItems, { guildId });
+          res.json({ success: true, guildId, items });
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // Get a specific shop item
+    this.app.get(
+      "/api/settings/:guildId/shop/items/:itemId",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId, itemId } = req.params;
+          const { getConvexClient } = require("../database/convexClient");
+          const { api } = require("../convex/_generated/api");
+          const client = getConvexClient();
+
+          const item = await client.query(api.shop.getItem, { guildId, itemId });
+          if (!item) {
+            return res.status(404).json({ success: false, error: "Item not found" });
+          }
+          res.json({ success: true, item });
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // Create a new shop item
+    this.app.post(
+      "/api/settings/:guildId/shop/items",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId } = req.params;
+          const { itemId, title, description, price, imageUrl, stock, maxPerUser, roleReward, sortOrder } = req.body;
+
+          if (!itemId || !title || price === undefined) {
+            return res.status(400).json({
+              success: false,
+              error: "Missing required fields: itemId, title, price",
+            });
+          }
+
+          if (typeof price !== "number" || price < 0) {
+            return res.status(400).json({
+              success: false,
+              error: "Price must be a non-negative number",
+            });
+          }
+
+          const { getConvexClient } = require("../database/convexClient");
+          const { api } = require("../convex/_generated/api");
+          const client = getConvexClient();
+
+          await client.mutation(api.shop.createItem, {
+            guildId,
+            itemId,
+            title,
+            description,
+            price,
+            imageUrl,
+            stock,
+            maxPerUser,
+            roleReward,
+            sortOrder,
+          });
+
+          res.json({ success: true, message: "Shop item created", itemId });
+        } catch (error) {
+          if (error.message.includes("already exists")) {
+            return res.status(409).json({ success: false, error: error.message });
+          }
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // Update a shop item
+    this.app.put(
+      "/api/settings/:guildId/shop/items/:itemId",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId, itemId } = req.params;
+          const { title, description, price, imageUrl, stock, maxPerUser, roleReward, enabled, sortOrder, messageId } = req.body;
+
+          const { getConvexClient } = require("../database/convexClient");
+          const { api } = require("../convex/_generated/api");
+          const client = getConvexClient();
+
+          await client.mutation(api.shop.updateItem, {
+            guildId,
+            itemId,
+            title,
+            description,
+            price,
+            imageUrl,
+            stock,
+            maxPerUser,
+            roleReward,
+            enabled,
+            sortOrder,
+            messageId,
+          });
+
+          res.json({ success: true, message: "Shop item updated", itemId });
+        } catch (error) {
+          if (error.message.includes("not found")) {
+            return res.status(404).json({ success: false, error: error.message });
+          }
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // Delete a shop item
+    this.app.delete(
+      "/api/settings/:guildId/shop/items/:itemId",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId, itemId } = req.params;
+          const { getConvexClient } = require("../database/convexClient");
+          const { api } = require("../convex/_generated/api");
+          const client = getConvexClient();
+
+          const deleted = await client.mutation(api.shop.deleteItem, { guildId, itemId });
+          if (!deleted) {
+            return res.status(404).json({ success: false, error: "Item not found" });
+          }
+          res.json({ success: true, message: "Shop item deleted", itemId });
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // Reorder shop items
+    this.app.post(
+      "/api/settings/:guildId/shop/items/reorder",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId } = req.params;
+          const { itemIds } = req.body;
+
+          if (!Array.isArray(itemIds)) {
+            return res.status(400).json({
+              success: false,
+              error: "itemIds must be an array of item IDs in desired order",
+            });
+          }
+
+          const { getConvexClient } = require("../database/convexClient");
+          const { api } = require("../convex/_generated/api");
+          const client = getConvexClient();
+
+          await client.mutation(api.shop.reorderItems, { guildId, itemIds });
+          res.json({ success: true, message: "Shop items reordered" });
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
+    // Get shop purchases
+    this.app.get(
+      "/api/settings/:guildId/shop/purchases",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId } = req.params;
+          const { limit } = req.query;
+          const { getConvexClient } = require("../database/convexClient");
+          const { api } = require("../convex/_generated/api");
+          const client = getConvexClient();
+
+          const purchases = await client.query(api.shop.getPurchases, {
+            guildId,
+            limit: limit ? parseInt(limit, 10) : undefined,
+          });
+          res.json({ success: true, guildId, purchases });
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
   }
 
   start(port = 3003) {

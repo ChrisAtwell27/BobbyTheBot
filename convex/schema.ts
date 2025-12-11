@@ -258,6 +258,48 @@ export default defineSchema({
     .index("by_guild_and_month", ["guildId", "month"]),
 
   // ============================================================================
+  // SHOP ITEMS TABLE
+  // ============================================================================
+  shopItems: defineTable({
+    guildId: v.string(),
+    itemId: v.string(), // Unique identifier for the item
+    title: v.string(),
+    description: v.optional(v.string()),
+    price: v.number(),
+    imageUrl: v.optional(v.string()),
+    stock: v.optional(v.number()), // null = unlimited
+    maxPerUser: v.optional(v.number()), // null = unlimited
+    enabled: v.boolean(),
+    roleReward: v.optional(v.string()), // Role ID to give on purchase
+    messageId: v.optional(v.string()), // Discord message ID for the shop embed
+    sortOrder: v.number(), // For ordering items in the shop
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_guild", ["guildId"])
+    .index("by_guild_and_item", ["guildId", "itemId"])
+    .index("by_guild_and_enabled", ["guildId", "enabled"])
+    .index("by_guild_and_order", ["guildId", "sortOrder"]),
+
+  // ============================================================================
+  // SHOP PURCHASES TABLE
+  // ============================================================================
+  shopPurchases: defineTable({
+    guildId: v.string(),
+    itemId: v.string(),
+    userId: v.string(),
+    username: v.string(),
+    price: v.number(), // Price at time of purchase
+    itemTitle: v.string(), // Title at time of purchase
+    purchasedAt: v.number(),
+    notified: v.boolean(), // Whether admin notification was sent
+  })
+    .index("by_guild", ["guildId"])
+    .index("by_guild_and_item", ["guildId", "itemId"])
+    .index("by_guild_and_user", ["guildId", "userId"])
+    .index("by_guild_item_user", ["guildId", "itemId", "userId"]),
+
+  // ============================================================================
   // SERVER TABLE (Guild-wide settings)
   // ============================================================================
   servers: defineTable({

@@ -166,6 +166,16 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Bounty handler - !bounty, !claim
     registerCommandHandler(client, commandRouter, interactionRouter, './bountyHandler');
 
+    // Shop handler - !shop, !refreshshop, !clearshop (with buy button interactions)
+    const shopHandler = require('./shopHandler');
+    const shopWrapper = createHandlerWrapper(client, () => shopHandler);
+    if (shopWrapper.messageHandler) {
+        commandRouter.registerMessageProcessor(shopWrapper.messageHandler);
+    }
+    if (shopWrapper.interactionHandler) {
+        interactionRouter.registerButton('shop_buy_', shopWrapper.interactionHandler);
+    }
+
     // Subscription command handler - !subscription, !sub, !tier
     registerCommandHandler(client, commandRouter, interactionRouter, './subscriptionCommandHandler');
 

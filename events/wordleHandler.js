@@ -8,12 +8,12 @@ const { getSetting } = require("../utils/settingsManager");
 
 // Honey rewards based on score
 const HONEY_REWARDS = {
-  1: 10000,
-  2: 5000,
-  3: 2500,
-  4: 1000,
-  5: 500,
-  6: 100,
+  1: 2500,
+  2: 1000,
+  3: 500,
+  4: 250,
+  5: 100,
+  6: 10,
   7: 0, // Failed wordle (X/6)
 };
 
@@ -451,8 +451,12 @@ async function calculateStats(guildId, timeFilter = null) {
 
     // Debug: Log time filter info
     if (timeFilter) {
-      console.log(`[WORDLE DEBUG] Time filter: start=${timeFilter.start.toISOString()}, end=${timeFilter.end.toISOString()}`);
-      console.log(`[WORDLE DEBUG] Start ms: ${timeFilter.start.getTime()}, End ms: ${timeFilter.end.getTime()}`);
+      console.log(
+        `[WORDLE DEBUG] Time filter: start=${timeFilter.start.toISOString()}, end=${timeFilter.end.toISOString()}`
+      );
+      console.log(
+        `[WORDLE DEBUG] Start ms: ${timeFilter.start.getTime()}, End ms: ${timeFilter.end.getTime()}`
+      );
     }
 
     allUserWordles.forEach((userWordle) => {
@@ -461,11 +465,15 @@ async function calculateStats(guildId, timeFilter = null) {
       if (timeFilter) {
         // Debug: Log first few scores for this user
         if (userWordle.scores.length > 0) {
-          console.log(`[WORDLE DEBUG] User ${userWordle.userId} has ${userWordle.scores.length} total scores`);
+          console.log(
+            `[WORDLE DEBUG] User ${userWordle.userId} has ${userWordle.scores.length} total scores`
+          );
           const sampleScores = userWordle.scores.slice(0, 3);
           sampleScores.forEach((s, i) => {
             const scoreDate = new Date(s.timestamp);
-            console.log(`[WORDLE DEBUG]   Score ${i}: timestamp=${s.timestamp}, date=${scoreDate.toISOString()}, inRange=${scoreDate >= timeFilter.start && scoreDate <= timeFilter.end}`);
+            console.log(
+              `[WORDLE DEBUG]   Score ${i}: timestamp=${s.timestamp}, date=${scoreDate.toISOString()}, inRange=${scoreDate >= timeFilter.start && scoreDate <= timeFilter.end}`
+            );
           });
         }
 
@@ -474,7 +482,9 @@ async function calculateStats(guildId, timeFilter = null) {
           return scoreDate >= timeFilter.start && scoreDate <= timeFilter.end;
         });
 
-        console.log(`[WORDLE DEBUG] User ${userWordle.userId}: ${filteredScores.length}/${userWordle.scores.length} scores in range`);
+        console.log(
+          `[WORDLE DEBUG] User ${userWordle.userId}: ${filteredScores.length}/${userWordle.scores.length} scores in range`
+        );
       }
 
       if (filteredScores.length > 0) {
