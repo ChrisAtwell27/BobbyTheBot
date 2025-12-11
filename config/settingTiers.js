@@ -25,7 +25,7 @@ const SETTING_REQUIREMENTS = {
   "features.moderation": "free", // Basic spam/rate limiting - free
   "features.clips": "free",
   "features.bump_reminder": "free",
-
+  "features.shop": "free",
   // =====================================================================
   // FREE GAMBLING (House Games)
   // =====================================================================
