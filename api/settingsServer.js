@@ -294,6 +294,43 @@ class SettingsServer {
       }
     );
 
+    // Get all available emojis in the guild (for emoji picker)
+    this.app.get(
+      "/api/settings/:guildId/available-emojis",
+      this.verifyAuth.bind(this),
+      async (req, res) => {
+        try {
+          const { guildId } = req.params;
+
+          if (!this.client) {
+            return res
+              .status(500)
+              .json({ success: false, error: "Bot client not available" });
+          }
+
+          const guild = await this.client.guilds.fetch(guildId);
+
+          // Fetch emojis if not cached
+          await guild.emojis.fetch();
+
+          const emojis = guild.emojis.cache.map((emoji) => ({
+            id: emoji.id,
+            name: emoji.name,
+            animated: emoji.animated || false,
+            url: emoji.url,
+          }));
+
+          res.json({
+            success: true,
+            guildId,
+            emojis,
+          });
+        } catch (error) {
+          res.status(500).json({ success: false, error: error.message });
+        }
+      }
+    );
+
     // =====================================================================
     // CHANNEL SETTINGS ENDPOINTS
     // =====================================================================
