@@ -457,6 +457,8 @@ class SettingsServer {
             "mafia_voice",
             "graveyard",
             "clip_submission",
+            "shop",
+            "shop_notifications",
           ];
 
           if (!validTypes.includes(channelType)) {
@@ -569,6 +571,7 @@ class SettingsServer {
             "clip_winner",
             "valorant_team",
             "valorant_inhouse",
+            "shop_notifications",
           ];
 
           if (!validTypes.includes(roleType)) {
