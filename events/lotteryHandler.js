@@ -26,10 +26,10 @@ const {
   formatCurrency,
 } = require("../utils/currencyHelper");
 const {
-  checkFeatureAccess,
+  checkSubscription,
   createUpgradeEmbed,
   TIERS,
-} = require("../utils/subscriptionHelper");
+} = require("../utils/subscriptionUtils");
 const { setSetting } = require("../utils/settingsManager");
 
 // Constants
@@ -341,7 +341,7 @@ module.exports = (client) => {
       const subcommand = args[0]?.toLowerCase();
 
       // Check subscription
-      const subCheck = await checkFeatureAccess(message.guild.id, "features.lottery", TIERS.PLUS);
+      const subCheck = await checkSubscription(message.guild.id, TIERS.PLUS, message.guild.ownerId);
       if (!subCheck.hasAccess) {
         const upgradeEmbed = createUpgradeEmbed("Lottery System", TIERS.PLUS, subCheck.guildTier);
         return message.channel.send({ embeds: [upgradeEmbed] });
