@@ -4,11 +4,34 @@
  */
 
 const { getSetting } = require("./settingsManager");
+const emoji = require("node-emoji");
 
 const DEFAULTS = {
   name: "Honey",
-  emoji: "\uD83C\uDF6F", // Honey pot emoji
+  emoji: "🍯", // Honey pot emoji
 };
+
+/**
+ * Convert Discord shortcode to Unicode emoji using node-emoji library
+ * @param {string} input - Could be shortcode (:poop:), unicode (💩), or custom (<:name:id>)
+ * @returns {string} - Unicode emoji if convertible, original string otherwise
+ */
+function convertToUnicode(input) {
+  if (!input) return input;
+
+  // If it's a shortcode format (:name:), try to convert it
+  if (input.startsWith(":") && input.endsWith(":")) {
+    const name = input.slice(1, -1); // Remove colons
+    const unicode = emoji.get(name);
+    // emoji.get returns the shortcode back if not found, so check if it changed
+    if (unicode && unicode !== `:${name}:`) {
+      return unicode;
+    }
+  }
+
+  // Return as-is (already unicode or custom emoji that can't be converted)
+  return input;
+}
 
 /**
  * Validate currency name - max 20 chars, letters only
@@ -53,20 +76,23 @@ function validateCurrencyEmoji(emoji) {
 async function getCurrencyName(guildId) {
   if (!guildId) return DEFAULTS.name;
   const name = await getSetting(guildId, "currency.name", null);
-  console.log(`[Currency] getCurrencyName for ${guildId}: fetched "${name}", valid: ${validateCurrencyName(name)}`);
   return name && validateCurrencyName(name) ? name : DEFAULTS.name;
 }
 
 /**
  * Get currency emoji for a guild (defaults to honey pot)
+ * Converts Discord shortcodes to Unicode for canvas/image compatibility
  * @param {string} guildId
  * @returns {Promise<string>}
  */
 async function getCurrencyEmoji(guildId) {
   if (!guildId) return DEFAULTS.emoji;
-  const emoji = await getSetting(guildId, "currency.emoji", null);
-  console.log(`[Currency] getCurrencyEmoji for ${guildId}: fetched "${emoji}", valid: ${validateCurrencyEmoji(emoji)}`);
-  return emoji && validateCurrencyEmoji(emoji) ? emoji : DEFAULTS.emoji;
+  const emojiValue = await getSetting(guildId, "currency.emoji", null);
+  if (emojiValue && validateCurrencyEmoji(emojiValue)) {
+    // Convert shortcodes to unicode for canvas compatibility
+    return convertToUnicode(emojiValue);
+  }
+  return DEFAULTS.emoji;
 }
 
 /**
@@ -100,5 +126,6 @@ module.exports = {
   getCurrencyInfo,
   validateCurrencyName,
   validateCurrencyEmoji,
+  convertToUnicode,
   DEFAULTS,
 };

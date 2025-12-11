@@ -106,7 +106,7 @@ module.exports = (client) => {
       const balance = await getBalance(guildId, userId);
       const rankData = await getUserRank(guildId, userId);
       const rank = rankData?.rank || "N/A";
-      const balanceCard = await createBalanceCard(user, balance);
+      const balanceCard = await createBalanceCard(user, balance, guildId);
       const attachment = new AttachmentBuilder(balanceCard.toBuffer(), {
         name: "balance-card.png",
       });
@@ -147,7 +147,8 @@ module.exports = (client) => {
 
       const leaderboardImage = await createLeaderboard(
         topBalances,
-        message.guild
+        message.guild,
+        guildId
       );
       const attachment = new AttachmentBuilder(leaderboardImage.toBuffer(), {
         name: "leaderboard.png",
@@ -215,7 +216,8 @@ module.exports = (client) => {
         oldBalance,
         newBalance,
         "AWARD",
-        message.author
+        message.author,
+        guildId
       );
       const attachment = new AttachmentBuilder(transactionReceipt.toBuffer(), {
         name: "transaction-receipt.png",
@@ -271,7 +273,8 @@ module.exports = (client) => {
           oldBalance,
           newBalance,
           "SPEND",
-          message.author
+          message.author,
+          guildId
         );
         const attachment = new AttachmentBuilder(
           transactionReceipt.toBuffer(),
@@ -1019,7 +1022,10 @@ module.exports = (client) => {
   });
 
   // Create balance card visualization
-  async function createBalanceCard(user, balance) {
+  async function createBalanceCard(user, balance, guildId) {
+    // Get custom currency info
+    const currencyName = await getCurrencyName(guildId);
+    const currencyEmoji = await getCurrencyEmoji(guildId);
     const canvas = createCanvas(500, 300);
     const ctx = canvas.getContext("2d");
 
@@ -1167,7 +1173,7 @@ module.exports = (client) => {
     ctx.fillStyle = logoColor;
     ctx.font = "bold 20px Arial";
     ctx.textAlign = "left";
-    ctx.fillText("🍯 Honey Bank", 30, 45);
+    ctx.fillText(`${currencyEmoji} ${currencyName} Bank`, 30, 45);
 
     // Tier indicator with special styling
     if (cardTier === "PLATINUM") {
@@ -1294,15 +1300,15 @@ module.exports = (client) => {
     if (cardTier === "PLATINUM") {
       ctx.font = "bold 40px Arial";
       ctx.fillStyle = "#333333";
-      ctx.fillText(`🍯${balance.toLocaleString()}`, 30, 220);
+      ctx.fillText(`${currencyEmoji}${balance.toLocaleString()}`, 30, 220);
       // Add subtle glow effect
       ctx.shadowColor = "#ffffff";
       ctx.shadowBlur = 5;
-      ctx.fillText(`🍯${balance.toLocaleString()}`, 30, 220);
+      ctx.fillText(`${currencyEmoji}${balance.toLocaleString()}`, 30, 220);
       ctx.shadowBlur = 0;
     } else {
       ctx.font = "bold 36px Arial";
-      ctx.fillText(`🍯${balance.toLocaleString()}`, 30, 220);
+      ctx.fillText(`${currencyEmoji}${balance.toLocaleString()}`, 30, 220);
     }
 
     // Card type with special symbols
@@ -1326,7 +1332,10 @@ module.exports = (client) => {
   }
 
   // Create leaderboard visualization
-  async function createLeaderboard(topBalances, guild) {
+  async function createLeaderboard(topBalances, guild, guildId) {
+    // Get custom currency info
+    const currencyName = await getCurrencyName(guildId);
+    const currencyEmoji = await getCurrencyEmoji(guildId);
     const canvas = createCanvas(600, 400 + topBalances.length * 35);
     const ctx = canvas.getContext("2d");
 
@@ -1351,7 +1360,7 @@ module.exports = (client) => {
     ctx.fillStyle = "#ffd700";
     ctx.font = "bold 32px Arial";
     ctx.textAlign = "center";
-    ctx.fillText("🏆 Honey LEADERBOARD", 300, 50);
+    ctx.fillText(`🏆 ${currencyName} LEADERBOARD`, 300, 50);
 
     // Server name
     ctx.fillStyle = "#ffffff";
@@ -1396,7 +1405,7 @@ module.exports = (client) => {
       ctx.fillStyle = "#ffd700";
       ctx.font = "bold 18px Arial";
       ctx.textAlign = "right";
-      ctx.fillText(`🍯${entry.balance.toLocaleString()}`, 570, y - 5);
+      ctx.fillText(`${currencyEmoji}${entry.balance.toLocaleString()}`, 570, y - 5);
 
       // Separator line
       if (i < topBalances.length - 1) {
@@ -1419,8 +1428,13 @@ module.exports = (client) => {
     oldBalance,
     newBalance,
     type,
-    admin
+    admin,
+    guildId
   ) {
+    // Get custom currency info
+    const currencyName = await getCurrencyName(guildId);
+    const currencyEmoji = await getCurrencyEmoji(guildId);
+
     const canvas = createCanvas(400, 350);
     const ctx = canvas.getContext("2d");
 
@@ -1432,7 +1446,7 @@ module.exports = (client) => {
     ctx.fillStyle = "#000000";
     ctx.font = "bold 24px Arial";
     ctx.textAlign = "center";
-    ctx.fillText("🏦 Honey Bank", 200, 30);
+    ctx.fillText(`🏦 ${currencyName} Bank`, 200, 30);
     ctx.font = "16px Arial";
     ctx.fillText("TRANSACTION RECEIPT", 200, 50);
 
@@ -1454,12 +1468,12 @@ module.exports = (client) => {
     ctx.fillText(`Type: ${type}`, 20, 130);
     ctx.fillText(`User: ${user.username}`, 20, 150);
     ctx.fillText(
-      `Amount: ${type === "SPEND" ? "-" : "+"}🍯${amount.toLocaleString()}`,
+      `Amount: ${type === "SPEND" ? "-" : "+"}${currencyEmoji}${amount.toLocaleString()}`,
       20,
       170
     );
-    ctx.fillText(`Previous Balance: 🍯${oldBalance.toLocaleString()}`, 20, 190);
-    ctx.fillText(`New Balance: 🍯${newBalance.toLocaleString()}`, 20, 210);
+    ctx.fillText(`Previous Balance: ${currencyEmoji}${oldBalance.toLocaleString()}`, 20, 190);
+    ctx.fillText(`New Balance: ${currencyEmoji}${newBalance.toLocaleString()}`, 20, 210);
     if (admin && type === "AWARD") {
       ctx.fillText(`Authorized by: ${admin.username}`, 20, 230);
     }
@@ -1471,7 +1485,7 @@ module.exports = (client) => {
     // Footer
     ctx.font = "12px Arial";
     ctx.textAlign = "center";
-    ctx.fillText("Thank you for banking with Honey Bank!", 200, 310);
+    ctx.fillText(`Thank you for banking with ${currencyName} Bank!`, 200, 310);
     ctx.fillText("Questions? Contact support at #help", 200, 330);
 
     return canvas;

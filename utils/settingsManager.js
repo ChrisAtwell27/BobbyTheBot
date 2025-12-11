@@ -12,21 +12,15 @@ const settingsCache = new CleanupMap(300000, 60000);
  */
 async function getSettings(guildId) {
   // Return empty if convex is not configured
-  if (!convex) {
-    console.log(`[SettingsManager] getSettings("${guildId}"): Convex not configured`);
-    return {};
-  }
+  if (!convex) return {};
 
   if (settingsCache.has(guildId)) {
-    const cached = settingsCache.get(guildId);
-    console.log(`[SettingsManager] getSettings("${guildId}"): returning cached settings:`, JSON.stringify(cached));
-    return cached;
+    return settingsCache.get(guildId);
   }
 
   try {
     // Use string identifier for query to avoid ESM import issues
     const server = await convex.query("servers:getServer", { guildId });
-    console.log(`[SettingsManager] getSettings("${guildId}"): Convex returned server:`, server ? `found (settings: ${JSON.stringify(server.settings)})` : "null");
     const settings = server && server.settings ? server.settings : {};
     settingsCache.set(guildId, settings);
     return settings;
@@ -54,11 +48,6 @@ async function getSetting(guildId, key, defaultValue = undefined) {
   for (const part of parts) {
     if (value === undefined || value === null) return defaultValue;
     value = value[part];
-  }
-
-  // Debug logging for currency settings
-  if (key.startsWith("currency.")) {
-    console.log(`[SettingsManager] getSetting("${guildId}", "${key}"): settings=${JSON.stringify(settings?.currency)}, value=${JSON.stringify(value)}`);
   }
 
   return value !== undefined ? value : defaultValue;

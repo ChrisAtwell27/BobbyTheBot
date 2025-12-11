@@ -12,7 +12,8 @@
       "Bash(dir:*)",
       "Bash(del /Q \"d:\\TestDCBot\\BobbyTheBot\\data\\pet_items.txt\" \"d:\\TestDCBot\\BobbyTheBot\\data\\virtual_pets.txt\" \"d:\\TestDCBot\\BobbyTheBot\\database\\helpers\\petHelpers.js\")",
       "Bash(npx convex deploy:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npm install:*)"
     ],
     "deny": []
   }
