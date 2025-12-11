@@ -504,6 +504,12 @@ module.exports = (client) => {
       return message.channel.send({ embeds: [upgradeEmbed] });
     }
 
+    // Check if shop feature is enabled for this guild
+    const shopEnabled = await getSetting(message.guild.id, "features.shop", true);
+    if (!shopEnabled) {
+      return message.reply("❌ The shop feature is disabled for this server. An admin can enable it in the dashboard.");
+    }
+
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
@@ -534,6 +540,15 @@ module.exports = (client) => {
       if (!subCheck.hasAccess) {
         return interaction.reply({
           content: "❌ The shop feature requires Plus tier subscription.",
+          ephemeral: true,
+        });
+      }
+
+      // Check if shop feature is enabled
+      const shopEnabled = await getSetting(interaction.guild.id, "features.shop", true);
+      if (!shopEnabled) {
+        return interaction.reply({
+          content: "❌ The shop feature is disabled for this server.",
           ephemeral: true,
         });
       }

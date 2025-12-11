@@ -776,6 +776,9 @@ class SettingsServer {
             "valorant",
             "audit_log",
             "audit_logs",
+            "shop",
+            "ask",
+            "custom_branding",
           ];
 
           if (!validFeatures.includes(featureName)) {

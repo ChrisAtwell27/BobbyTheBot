@@ -25,7 +25,6 @@ const SETTING_REQUIREMENTS = {
   "features.moderation": "free", // Basic spam/rate limiting - free
   "features.clips": "free",
   "features.bump_reminder": "free",
-  "features.shop": "free",
   // =====================================================================
   // FREE GAMBLING (House Games)
   // =====================================================================
@@ -42,6 +41,7 @@ const SETTING_REQUIREMENTS = {
   "features.bounties": "plus",
   "features.team_builder": "plus",
   "features.ask": "plus", // Bobby AI Chat
+  "features.shop": "plus",
 
   // =====================================================================
   // ULTIMATE TIER FEATURE TOGGLES
