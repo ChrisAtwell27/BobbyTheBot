@@ -47,6 +47,18 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Lottery handler - weekly lottery system with scheduled draws
     require('./lotteryHandler')(client);
 
+    // Betting handler - custom betting pools with button/modal interactions
+    const bettingHandler = require('./bettingHandler');
+    const bettingWrapper = createHandlerWrapper(client, () => bettingHandler);
+    if (bettingWrapper.messageHandler) {
+        commandRouter.registerMessageProcessor(bettingWrapper.messageHandler);
+    }
+    if (bettingWrapper.interactionHandler) {
+        interactionRouter.registerButton('bet_', bettingWrapper.interactionHandler);
+        interactionRouter.registerModal('bet_', bettingWrapper.interactionHandler);
+        interactionRouter.registerSelectMenu('bet_', bettingWrapper.interactionHandler);
+    }
+
     // ==========================================
     // MESSAGE PROCESSORS
     // (These need to see ALL messages, not just commands)

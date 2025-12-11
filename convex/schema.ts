@@ -376,6 +376,58 @@ export default defineSchema({
     .index("by_guild_and_week", ["guildId", "weekNumber"]),
 
   // ============================================================================
+  // BETTING POOLS TABLE (Admin-created bets)
+  // ============================================================================
+  bets: defineTable({
+    guildId: v.string(),
+    betId: v.string(), // Unique ID (e.g., "bet_abc123")
+    title: v.string(), // "Who wins tonight's game?"
+    description: v.optional(v.string()), // Optional details
+    options: v.array(v.object({
+      id: v.string(), // "a", "b", "c", etc.
+      label: v.string(), // "Team A", "Team B"
+      totalWagered: v.number(), // Running total for this option
+    })),
+    creatorId: v.string(),
+    creatorName: v.string(),
+    channelId: v.string(),
+    messageId: v.optional(v.string()), // Main embed message ID
+    status: v.union(
+      v.literal("open"), // Accepting bets
+      v.literal("locked"), // No more bets, awaiting result
+      v.literal("resolved"), // Winner selected, payouts done
+      v.literal("cancelled") // Refunded
+    ),
+    winningOption: v.optional(v.string()), // Option ID that won
+    totalPool: v.number(), // Total wagered across all options
+    houseCut: v.number(), // 5% of pool (calculated on resolve)
+    createdAt: v.number(),
+    lockedAt: v.optional(v.number()),
+    resolvedAt: v.optional(v.number()),
+  })
+    .index("by_guild", ["guildId"])
+    .index("by_guild_and_status", ["guildId", "status"])
+    .index("by_bet_id", ["guildId", "betId"]),
+
+  // ============================================================================
+  // BET ENTRIES TABLE (User wagers)
+  // ============================================================================
+  betEntries: defineTable({
+    guildId: v.string(),
+    betId: v.string(),
+    oddsAtEntry: v.optional(v.number()), // Potential payout multiplier at time of bet
+    userId: v.string(),
+    username: v.string(),
+    optionId: v.string(), // Which option they bet on
+    amount: v.number(), // How much they wagered
+    payout: v.optional(v.number()), // Filled when resolved
+    createdAt: v.number(),
+  })
+    .index("by_bet", ["guildId", "betId"])
+    .index("by_bet_and_user", ["guildId", "betId", "userId"])
+    .index("by_user", ["guildId", "userId"]),
+
+  // ============================================================================
   // SUBSCRIPTION TABLE (Global - not per-guild)
   // ============================================================================
   subscriptions: defineTable({

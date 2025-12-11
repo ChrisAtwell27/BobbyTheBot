@@ -460,6 +460,7 @@ class SettingsServer {
             "shop",
             "shop_notifications",
             "lottery",
+            "betting",
           ];
 
           if (!validTypes.includes(channelType)) {
@@ -784,6 +785,7 @@ class SettingsServer {
             "ask",
             "custom_branding",
             "lottery",
+            "betting",
           ];
 
           if (!validFeatures.includes(featureName)) {
