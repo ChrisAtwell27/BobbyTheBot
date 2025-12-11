@@ -139,11 +139,15 @@ module.exports = (client) => {
     // Enhanced leaderboard command
     if (args[0] === "!baltop") {
       const guildId = message.guild.id; // Get guild ID
-      const topBalances = await getTopBalances(guildId, 10);
+      const topBalances = await getTopBalances(guildId, 15);
 
       if (topBalances.length === 0) {
         return message.channel.send("No balances found.");
       }
+
+      // Get currency info once for efficiency
+      const currencyName = await getCurrencyName(guildId);
+      const currencyEmoji = await getCurrencyEmoji(guildId);
 
       const leaderboardImage = await createLeaderboard(
         topBalances,
@@ -158,28 +162,28 @@ module.exports = (client) => {
       const houseBalance = await getHouseBalance(guildId);
 
       const embed = new EmbedBuilder()
-        .setTitle(`${await getCurrencyEmoji(guildId)} ${await getCurrencyName(guildId)} Leaderboard - Top Beekeepers`)
+        .setTitle(`${currencyEmoji} ${currencyName} Leaderboard - Top Collectors`)
         .setColor("#FFD700")
-        .setDescription(`**🐝 Top 10 ${await getCurrencyName(guildId)} Collectors**`)
+        .setDescription(`**🏆 Top 15 ${currencyName} Collectors**`)
         .setImage("attachment://leaderboard.png")
         .addFields(
           {
-            name: `${await getCurrencyEmoji(guildId)} Total ${await getCurrencyName(guildId)} Supply`,
+            name: `${currencyEmoji} Total ${currencyName} Supply`,
             value: `${await formatCurrency(guildId, totalEconomy)}`,
             inline: true,
           },
           {
-            name: "🏦 Hive Reserve",
+            name: "🏦 Reserve",
             value: `${await formatCurrency(guildId, houseBalance)}`,
             inline: true,
           },
           {
-            name: "🐝 Active Beekeepers",
-            value: `${topBalances.length} members`,
+            name: "👥 Active Members",
+            value: `${topBalances.length} ranked`,
             inline: true,
           }
         )
-        .setFooter({ text: `Sweet rankings updated in real-time! ${await getCurrencyEmoji(guildId)}` })
+        .setFooter({ text: `Rankings updated in real-time! ${currencyEmoji}` })
         .setTimestamp();
 
       return message.channel.send({ embeds: [embed], files: [attachment] });
