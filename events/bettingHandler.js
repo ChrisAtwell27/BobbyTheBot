@@ -18,7 +18,7 @@ const {
 const { getConvexClient } = require("../database/convexClient");
 const { api } = require("../convex/_generated/api");
 const { getSetting } = require("../utils/settingsManager");
-const { updateBalance, getBalance } = require("../database/helpers/economyHelpers");
+const { updateBalance, getBalance } = require("../database/helpers/convexEconomyHelpers");
 const {
   getCurrencyName,
   getCurrencyEmoji,
