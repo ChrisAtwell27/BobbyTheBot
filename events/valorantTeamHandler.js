@@ -76,6 +76,45 @@ async function getValorantRoleId(guildId) {
   return await getSetting(guildId, 'roles.valorant_team', DEFAULT_VALORANT_ROLE_ID);
 }
 
+// ============ PLACEHOLDER HELPERS ============
+/**
+ * Get count of real members (excluding placeholders)
+ * Includes the leader
+ */
+function getRealMemberCount(team) {
+  return 1 + team.members.filter(m => m.type !== 'placeholder').length;
+}
+
+/**
+ * Get all placeholder members
+ */
+function getPlaceholders(team) {
+  return team.members.filter(m => m.type === 'placeholder');
+}
+
+/**
+ * Get total slots filled (real members + placeholders)
+ * Includes the leader
+ */
+function getTotalSlotsFilled(team) {
+  return 1 + team.members.length;
+}
+
+/**
+ * Check if team has empty slots (not counting placeholders)
+ */
+function hasEmptySlots(team) {
+  return team.members.length < TEAM_SIZE - 1; // -1 for leader
+}
+
+/**
+ * Check if team has any placeholders
+ */
+function hasPlaceholders(team) {
+  return team.members.some(m => m.type === 'placeholder');
+}
+// =============================================
+
 // Store active teams (auto-cleanup with size limit)
 const activeTeams = new LimitedMap(ACTIVE_TEAMS_CACHE_SIZE);
 
@@ -90,8 +129,13 @@ async function batchGetUserRankInfo(guildId, userIds) {
   const now = Date.now();
   const idsToFetch = [];
 
-  // Check cache first
+  // Check cache first (skip placeholder IDs)
   for (const userId of userIds) {
+    // Skip placeholder IDs - they're not real Discord users
+    if (userId.startsWith('placeholder_')) {
+      continue;
+    }
+
     const cacheKey = `${guildId}_${userId}`;
     const cached = rankCache.get(cacheKey);
     if (cached && now - cached.timestamp < RANK_CACHE_TTL) {
@@ -228,105 +272,152 @@ async function createTeamVisualization(team) {
     );
 
     if (member) {
+      const isPlaceholder = member.type === 'placeholder';
       const avatar = avatars[i];
       const isLeader = i === 0;
 
-      // Leader glow
-      if (isLeader) {
-        ctx.shadowColor = "#ffd700";
-        ctx.shadowBlur = GLOW_BLUR_LEADER;
-      }
+      // Draw placeholder slot differently
+      if (isPlaceholder) {
+        // Orange background for placeholder
+        ctx.fillStyle = "rgba(255, 170, 0, 0.15)";
+        ctx.fillRect(x + 4, y + 4, SLOT_WIDTH - 8, SLOT_HEIGHT - 8);
 
-      // Draw avatar
-      if (avatar) {
-        ctx.save();
+        // Dashed orange border for reserved
+        ctx.strokeStyle = "#ffaa00";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(x + 8, y + 8, SLOT_WIDTH - 16, SLOT_HEIGHT - 16);
+        ctx.setLineDash([]);
+
+        // "RESERVED" label at top
+        ctx.font = "bold 10px Arial";
+        ctx.fillStyle = "#ffaa00";
+        ctx.textAlign = "center";
+        ctx.fillText("RESERVED", x + SLOT_WIDTH / 2, y + 20);
+
+        // Placeholder icon
+        ctx.fillStyle = "rgba(255, 170, 0, 0.3)";
         ctx.beginPath();
-        ctx.arc(x + SLOT_WIDTH / 2, y + 40, AVATAR_RADIUS, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.drawImage(avatar, x + SLOT_WIDTH / 2 - AVATAR_RADIUS, y + 10, AVATAR_FALLBACK_SIZE, AVATAR_FALLBACK_SIZE);
-        ctx.restore();
-      } else {
-        // Fallback avatar
-        ctx.fillStyle = "#5865f2";
-        ctx.beginPath();
-        ctx.arc(x + SLOT_WIDTH / 2, y + 40, AVATAR_RADIUS, 0, Math.PI * 2);
+        ctx.arc(x + SLOT_WIDTH / 2, y + 50, AVATAR_RADIUS, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "#ffffff";
+        ctx.fillStyle = "#ffaa00";
         ctx.font = "30px Arial";
+        ctx.fillText("👤", x + SLOT_WIDTH / 2, y + 60);
+
+        // Display placeholder name
+        ctx.font = "bold 12px Arial";
+        ctx.fillStyle = "#ffaa00";
         ctx.textAlign = "center";
-        ctx.fillText("👤", x + SLOT_WIDTH / 2, y + 50);
-      }
-      ctx.shadowBlur = 0;
+        const placeholderName = member.displayName || "Reserved";
+        const truncatedName = placeholderName.length > 12
+          ? placeholderName.substring(0, 11) + "…"
+          : placeholderName;
+        ctx.fillText(truncatedName, x + SLOT_WIDTH / 2, y + 90);
 
-      // Leader crown
-      if (isLeader) {
-        ctx.font = "22px Arial";
-        ctx.fillStyle = "#ffd700";
-        ctx.shadowColor = "#ffd700";
-        ctx.shadowBlur = 5;
-        ctx.textAlign = "center";
-        ctx.fillText("👑", x + SLOT_WIDTH / 2, y - 5);
-        ctx.shadowBlur = 0;
-      }
-
-      // Username
-      ctx.font = "bold 12px Arial";
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center";
-      const displayName = member.displayName || member.username;
-      const truncatedName =
-        displayName.length > 12
-          ? displayName.substring(0, 11) + "…"
-          : displayName;
-      ctx.fillText(truncatedName, x + SLOT_WIDTH / 2, y + 85);
-
-      // Rank info (from batch fetch)
-      const userRankInfo = rankInfoMap.get(member.id);
-      if (userRankInfo) {
-        // Draw rank indicator
-        const rankColor = userRankInfo.color || getRankColor(userRankInfo.tier);
-        ctx.fillStyle = rankColor;
-        ctx.beginPath();
-        ctx.arc(x + SLOT_WIDTH - 20, y + SLOT_HEIGHT - 20, RANK_BADGE_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Rank text
-        ctx.font = "bold 8px Arial";
-        ctx.fillStyle = "#fff";
-        ctx.textAlign = "center";
-        const rankAbbr = userRankInfo.name
-          .split(" ")[0]
-          .substring(0, 3)
-          .toUpperCase();
-        ctx.fillText(rankAbbr, x + SLOT_WIDTH - 20, y + SLOT_HEIGHT - 17);
-
-        // RR display
-        if (userRankInfo.rr !== undefined) {
-          ctx.font = "bold 10px Arial";
-          ctx.fillStyle = rankColor;
-          ctx.fillText(`${userRankInfo.rr} RR`, x + SLOT_WIDTH / 2, y + 102);
-        }
-
-        // Preferred agents display (below RR)
-        if (userRankInfo.preferredAgents && userRankInfo.preferredAgents.length > 0) {
-          ctx.font = "9px Arial";
-          ctx.fillStyle = "#aaaaaa";
-          ctx.textAlign = "center";
-          const agentText = userRankInfo.preferredAgents
-            .slice(0, 3)
-            .map(id => {
-              const agent = getAgentById(id);
-              return agent ? agent.name.substring(0, 4) : id.substring(0, 4);
-            })
-            .join("/");
-          ctx.fillText(agentText, x + SLOT_WIDTH / 2, y + 113);
-        }
+        // "Click Join" hint
+        ctx.font = "9px Arial";
+        ctx.fillStyle = "#888";
+        ctx.fillText("Click Join", x + SLOT_WIDTH / 2, y + 105);
       } else {
-        // Not registered indicator
-        ctx.font = "bold 9px Arial";
-        ctx.fillStyle = "#666";
+        // Regular member rendering
+
+        // Leader glow
+        if (isLeader) {
+          ctx.shadowColor = "#ffd700";
+          ctx.shadowBlur = GLOW_BLUR_LEADER;
+        }
+
+        // Draw avatar
+        if (avatar) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(x + SLOT_WIDTH / 2, y + 40, AVATAR_RADIUS, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(avatar, x + SLOT_WIDTH / 2 - AVATAR_RADIUS, y + 10, AVATAR_FALLBACK_SIZE, AVATAR_FALLBACK_SIZE);
+          ctx.restore();
+        } else {
+          // Fallback avatar
+          ctx.fillStyle = "#5865f2";
+          ctx.beginPath();
+          ctx.arc(x + SLOT_WIDTH / 2, y + 40, AVATAR_RADIUS, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "30px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText("👤", x + SLOT_WIDTH / 2, y + 50);
+        }
+        ctx.shadowBlur = 0;
+
+        // Leader crown
+        if (isLeader) {
+          ctx.font = "22px Arial";
+          ctx.fillStyle = "#ffd700";
+          ctx.shadowColor = "#ffd700";
+          ctx.shadowBlur = 5;
+          ctx.textAlign = "center";
+          ctx.fillText("👑", x + SLOT_WIDTH / 2, y - 5);
+          ctx.shadowBlur = 0;
+        }
+
+        // Username
+        ctx.font = "bold 12px Arial";
+        ctx.fillStyle = "#ffffff";
         ctx.textAlign = "center";
-        ctx.fillText("!valstats", x + SLOT_WIDTH / 2, y + 102);
+        const displayName = member.displayName || member.username;
+        const truncatedName =
+          displayName.length > 12
+            ? displayName.substring(0, 11) + "…"
+            : displayName;
+        ctx.fillText(truncatedName, x + SLOT_WIDTH / 2, y + 85);
+
+        // Rank info (from batch fetch)
+        const userRankInfo = rankInfoMap.get(member.id);
+        if (userRankInfo) {
+          // Draw rank indicator
+          const rankColor = userRankInfo.color || getRankColor(userRankInfo.tier);
+          ctx.fillStyle = rankColor;
+          ctx.beginPath();
+          ctx.arc(x + SLOT_WIDTH - 20, y + SLOT_HEIGHT - 20, RANK_BADGE_RADIUS, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Rank text
+          ctx.font = "bold 8px Arial";
+          ctx.fillStyle = "#fff";
+          ctx.textAlign = "center";
+          const rankAbbr = userRankInfo.name
+            .split(" ")[0]
+            .substring(0, 3)
+            .toUpperCase();
+          ctx.fillText(rankAbbr, x + SLOT_WIDTH - 20, y + SLOT_HEIGHT - 17);
+
+          // RR display
+          if (userRankInfo.rr !== undefined) {
+            ctx.font = "bold 10px Arial";
+            ctx.fillStyle = rankColor;
+            ctx.fillText(`${userRankInfo.rr} RR`, x + SLOT_WIDTH / 2, y + 102);
+          }
+
+          // Preferred agents display (below RR)
+          if (userRankInfo.preferredAgents && userRankInfo.preferredAgents.length > 0) {
+            ctx.font = "9px Arial";
+            ctx.fillStyle = "#aaaaaa";
+            ctx.textAlign = "center";
+            const agentText = userRankInfo.preferredAgents
+              .slice(0, 3)
+              .map(id => {
+                const agent = getAgentById(id);
+                return agent ? agent.name.substring(0, 4) : id.substring(0, 4);
+              })
+              .join("/");
+            ctx.fillText(agentText, x + SLOT_WIDTH / 2, y + 113);
+          }
+        } else {
+          // Not registered indicator
+          ctx.font = "bold 9px Arial";
+          ctx.fillStyle = "#666";
+          ctx.textAlign = "center";
+          ctx.fillText("!valstats", x + SLOT_WIDTH / 2, y + 102);
+        }
       }
     } else {
       // Empty slot
@@ -362,26 +453,29 @@ async function createTeamVisualization(team) {
 async function createTeamEmbed(team) {
   const totalMembers = getTotalMembers(team);
   const isFull = totalMembers >= TEAM_SIZE;
+  const placeholders = getPlaceholders(team);
+  const realMemberCount = getRealMemberCount(team);
 
   const teamImageBuffer = await createTeamVisualization(team);
   const attachment = new AttachmentBuilder(teamImageBuffer, {
     name: "team.png",
   });
 
-  // Get leader rank from cache
+  // Get leader rank from cache (only real members)
+  const realMembers = [team.leader, ...team.members].filter(m => m.type !== 'placeholder');
   const rankInfoMap = await batchGetUserRankInfo(
     team.guildId,
-    [team.leader, ...team.members].map((m) => m.id)
+    realMembers.map((m) => m.id)
   );
   const leaderRankInfo = rankInfoMap.get(team.leader.id);
   const leaderRankText = leaderRankInfo
     ? `${leaderRankInfo.name} (${leaderRankInfo.rr ?? 0} RR)`
     : "❓ Use !valstats to register";
 
-  // Calculate average rank
+  // Calculate average rank (only real members)
   let totalTier = 0;
   let rankedCount = 0;
-  for (const member of [team.leader, ...team.members]) {
+  for (const member of realMembers) {
     const rank = rankInfoMap.get(member.id);
     if (rank) {
       totalTier += rank.tier;
@@ -394,6 +488,12 @@ async function createTeamEmbed(team) {
         "Unknown"
       : "N/A";
 
+  // Build status text
+  let statusText = `${realMemberCount}/${TEAM_SIZE} Players`;
+  if (placeholders.length > 0) {
+    statusText += ` (${placeholders.length} reserved)`;
+  }
+
   const embed = new EmbedBuilder()
     .setColor(isFull ? "#00ff88" : "#ff4654")
     .setTitle(team.name ? `🎯 ${team.name}` : "🎯 Valorant Team Builder")
@@ -402,7 +502,10 @@ async function createTeamEmbed(team) {
         `**Leader:** ${team.leader.displayName}`,
         `**Rank:** ${leaderRankText}`,
         `**Avg Rank:** ${avgRank}`,
-        `**Status:** ${totalMembers}/${TEAM_SIZE} Players`,
+        `**Status:** ${statusText}`,
+        placeholders.length > 0
+          ? `**Reserved for:** ${placeholders.map(p => p.displayName).join(", ")}`
+          : "",
         team.targetTime
           ? `**Event Time:** <t:${Math.floor(team.targetTime / 1000)}:R>`
           : "",
@@ -508,6 +611,35 @@ function createTeamButtons(teamId, isFull, team = null) {
       .setEmoji("⏱️")
   );
 
+  // Row 3: Filler controls (leader only)
+  const row3 = new ActionRowBuilder();
+
+  // Add Filler button - only show if team has space
+  if (team && !isFull) {
+    row3.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`valorant_addfiller_${messageId}`)
+        .setLabel("Add Filler")
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji("👤")
+    );
+  }
+
+  // Remove Filler button - only show if team has placeholders
+  if (team && hasPlaceholders(team)) {
+    row3.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`valorant_removefiller_${messageId}`)
+        .setLabel("Remove Filler")
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji("❌")
+    );
+  }
+
+  // Only return row3 if it has components
+  if (row3.components.length > 0) {
+    return [row1, row2, row3];
+  }
   return [row1, row2];
 }
 
@@ -1038,6 +1170,228 @@ module.exports = (client) => {
         return;
       }
 
+      // Handle Filler Modal Submit
+      if (
+        interaction.isModalSubmit() &&
+        interaction.customId.startsWith("valorant_filler_modal_")
+      ) {
+        const teamId = interaction.customId.replace("valorant_filler_modal_", "");
+        const fullTeamId = `valorant_team_${teamId}`;
+        const team = activeTeams.get(fullTeamId);
+
+        if (!team) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Team no longer exists.",
+            ephemeral: true,
+          });
+        }
+
+        const fillerName = interaction.fields.getTextInputValue("fillerNameInput").trim();
+
+        // Create placeholder member
+        const placeholder = {
+          id: `placeholder_${Date.now()}`,
+          displayName: fillerName,
+          type: 'placeholder',
+          addedBy: interaction.user.id,
+          createdAt: Date.now()
+        };
+
+        team.members.push(placeholder);
+        console.log(`[Team] Added placeholder "${fillerName}" to team ${fullTeamId}`);
+
+        try {
+          const isFull = getTotalSlotsFilled(team) >= TEAM_SIZE;
+          const updatedEmbed = await createTeamEmbed(team);
+          const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
+
+          const channel = await client.channels.fetch(team.channelId).catch(() => null);
+          if (!channel) {
+            console.error("[Team] Channel not found for filler modal:", team.channelId);
+            activeTeams.delete(fullTeamId);
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Team channel not found.",
+              ephemeral: true,
+            });
+          }
+
+          const message = await channel.messages.fetch(team.messageId).catch(() => null);
+          if (!message) {
+            console.error("[Team] Message not found for filler modal:", team.messageId);
+            activeTeams.delete(fullTeamId);
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Team message not found.",
+              ephemeral: true,
+            });
+          }
+
+          await message.edit({
+            embeds: [updatedEmbed.embed],
+            files: updatedEmbed.files,
+            components: updatedComponents,
+          });
+
+          await safeInteractionResponse(interaction, "reply", {
+            content: `✅ Added filler spot for **${fillerName}**!\n💡 When they're ready, they can click Join to replace this spot.`,
+            ephemeral: true,
+          });
+        } catch (error) {
+          console.error("[Team] Add filler error:", error.message);
+          // Remove the placeholder we just added since update failed
+          team.members = team.members.filter(m => m.id !== placeholder.id);
+          await safeInteractionResponse(interaction, "reply", {
+            content: "❌ Failed to add filler spot.",
+            ephemeral: true,
+          });
+        }
+        return;
+      }
+
+      // Handle Remove Filler Select Menu
+      if (
+        interaction.isStringSelectMenu() &&
+        interaction.customId.startsWith("valorant_removefiller_select_")
+      ) {
+        const teamId = interaction.customId.replace("valorant_removefiller_select_", "");
+        const fullTeamId = `valorant_team_${teamId}`;
+        const team = activeTeams.get(fullTeamId);
+
+        if (!team) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Team no longer exists.",
+            ephemeral: true,
+          });
+        }
+
+        const placeholderId = interaction.values[0];
+        const placeholderIndex = team.members.findIndex(m => m.id === placeholderId);
+
+        if (placeholderIndex === -1) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Filler spot not found.",
+            ephemeral: true,
+          });
+        }
+
+        const removedName = team.members[placeholderIndex].displayName;
+        team.members.splice(placeholderIndex, 1);
+        console.log(`[Team] Removed placeholder "${removedName}" from team ${fullTeamId}`);
+
+        try {
+          await interaction.deferUpdate();
+
+          const isFull = getTotalSlotsFilled(team) >= TEAM_SIZE;
+          const updatedEmbed = await createTeamEmbed(team);
+          const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
+
+          const channel = await client.channels.fetch(team.channelId).catch(() => null);
+          if (channel) {
+            const message = await channel.messages.fetch(team.messageId).catch(() => null);
+            if (message) {
+              await message.edit({
+                embeds: [updatedEmbed.embed],
+                files: updatedEmbed.files,
+                components: updatedComponents,
+              });
+            }
+          }
+
+          await interaction.followUp({
+            content: `✅ Removed filler spot for **${removedName}**.`,
+            ephemeral: true,
+          });
+        } catch (error) {
+          console.error("[Team] Remove filler error:", error.message);
+          await interaction.followUp({
+            content: "❌ Failed to remove filler spot.",
+            ephemeral: true,
+          }).catch(() => {});
+        }
+        return;
+      }
+
+      // Handle Replace Filler Select Menu (when joining and team has placeholders)
+      if (
+        interaction.isStringSelectMenu() &&
+        interaction.customId.startsWith("valorant_replacefiller_select_")
+      ) {
+        const teamId = interaction.customId.replace("valorant_replacefiller_select_", "");
+        const fullTeamId = `valorant_team_${teamId}`;
+        const team = activeTeams.get(fullTeamId);
+
+        if (!team) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Team no longer exists.",
+            ephemeral: true,
+          });
+        }
+
+        const userId = interaction.user.id;
+
+        // Check if user is already in the team
+        if (team.leader.id === userId || team.members.some(m => m.id === userId)) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ You're already on this team!",
+            ephemeral: true,
+          });
+        }
+
+        const placeholderId = interaction.values[0];
+        const placeholderIndex = team.members.findIndex(m => m.id === placeholderId);
+
+        if (placeholderIndex === -1) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ That filler spot no longer exists.",
+            ephemeral: true,
+          });
+        }
+
+        const replacedName = team.members[placeholderIndex].displayName;
+
+        // Replace placeholder with real member
+        team.members[placeholderIndex] = {
+          id: userId,
+          username: interaction.user.username,
+          displayName: interaction.user.displayName || interaction.user.username,
+          avatarURL: interaction.user.displayAvatarURL({ extension: "png", size: 128 }),
+          type: 'real'
+        };
+
+        console.log(`[Team] ${interaction.user.username} replaced placeholder "${replacedName}" in team ${fullTeamId}`);
+
+        try {
+          await interaction.deferUpdate();
+
+          const isFull = getTotalSlotsFilled(team) >= TEAM_SIZE;
+          const updatedEmbed = await createTeamEmbed(team);
+          const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
+
+          const channel = await client.channels.fetch(team.channelId).catch(() => null);
+          if (channel) {
+            const message = await channel.messages.fetch(team.messageId).catch(() => null);
+            if (message) {
+              await message.edit({
+                embeds: [updatedEmbed.embed],
+                files: updatedEmbed.files,
+                components: updatedComponents,
+              });
+            }
+          }
+
+          await interaction.followUp({
+            content: `✅ You replaced the spot reserved for **${replacedName}**!`,
+            ephemeral: true,
+          });
+        } catch (error) {
+          console.error("[Team] Replace filler error:", error.message);
+          await interaction.followUp({
+            content: "❌ Failed to join the team.",
+            ephemeral: true,
+          }).catch(() => {});
+        }
+        return;
+      }
+
       // Handle leader selection menu
       if (
         interaction.isStringSelectMenu() &&
@@ -1161,17 +1515,41 @@ module.exports = (client) => {
           });
         }
 
-        if (getTotalMembers(team) >= TEAM_SIZE) {
+        // Check if team has space (empty slots)
+        if (hasEmptySlots(team)) {
+          // Defer immediately to prevent timeout (canvas generation can take >3s)
+          await interaction.deferUpdate().catch(() => {});
+
+          team.members.push({ ...userInfo, type: 'real' });
+        } else if (hasPlaceholders(team)) {
+          // Team is full but has placeholders - show selection menu
+          const placeholders = getPlaceholders(team);
+
+          const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`valorant_replacefiller_select_${teamId}`)
+            .setPlaceholder("Select spot to take")
+            .addOptions(
+              placeholders.map(p => ({
+                label: `Replace ${p.displayName}`,
+                value: p.id,
+                description: `Reserved spot for ${p.displayName}`
+              }))
+            );
+
+          const row = new ActionRowBuilder().addComponents(selectMenu);
+
+          return safeInteractionResponse(interaction, "reply", {
+            content: `Team is full, but there are **${placeholders.length}** reserved spot(s).\nSelect which spot you're replacing:`,
+            components: [row],
+            ephemeral: true,
+          });
+        } else {
+          // Truly full - no empty slots, no placeholders
           return safeInteractionResponse(interaction, "reply", {
             content: "❌ Team is full!",
             ephemeral: true,
           });
         }
-
-        // Defer immediately to prevent timeout (canvas generation can take >3s)
-        await interaction.deferUpdate().catch(() => {});
-
-        team.members.push(userInfo);
 
         try {
           const isFull = getTotalMembers(team) >= TEAM_SIZE;
@@ -1439,6 +1817,79 @@ module.exports = (client) => {
         modal.addComponents(firstActionRow);
 
         await interaction.showModal(modal);
+      }
+
+      // ADD FILLER
+      else if (action === "addfiller") {
+        if (userId !== team.leader.id) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Only the leader can add filler spots!",
+            ephemeral: true,
+          });
+        }
+
+        if (getTotalSlotsFilled(team) >= TEAM_SIZE) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Team is already full!",
+            ephemeral: true,
+          });
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId(`valorant_filler_modal_${teamId}`)
+          .setTitle("Add Filler Spot");
+
+        const fillerInput = new TextInputBuilder()
+          .setCustomId("fillerNameInput")
+          .setLabel("Who is this spot for?")
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder("e.g., John, Mike's friend")
+          .setMaxLength(20)
+          .setMinLength(1)
+          .setRequired(true);
+
+        const firstActionRow = new ActionRowBuilder().addComponents(fillerInput);
+        modal.addComponents(firstActionRow);
+
+        await interaction.showModal(modal);
+      }
+
+      // REMOVE FILLER
+      else if (action === "removefiller") {
+        if (userId !== team.leader.id) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Only the leader can remove filler spots!",
+            ephemeral: true,
+          });
+        }
+
+        const placeholders = getPlaceholders(team);
+        if (placeholders.length === 0) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ No filler spots to remove!",
+            ephemeral: true,
+          });
+        }
+
+        // Create select menu for choosing which placeholder to remove
+        const selectMenu = new StringSelectMenuBuilder()
+          .setCustomId(`valorant_removefiller_select_${teamId}`)
+          .setPlaceholder("Select filler to remove")
+          .addOptions(
+            placeholders.map(p => ({
+              label: p.displayName,
+              value: p.id,
+              description: `Added ${Math.floor((Date.now() - p.createdAt) / 60000)} min ago`
+            }))
+          );
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        return safeInteractionResponse(interaction, "reply", {
+          content: "Select which filler spot to remove:",
+          components: [row],
+          ephemeral: true,
+        });
       }
 
       // CLOSE TEAM
