@@ -16,6 +16,8 @@ const {
   drawGlowText,
   drawPlayerSlotBackground,
   getRankColor,
+  loadRankImages,
+  drawRankIcon,
 } = require("../utils/valorantCanvasUtils");
 
 // Import functions from the API handler (with persistent storage)
@@ -239,6 +241,9 @@ async function createTeamVisualization(team) {
   const userIds = allMembers.filter((m) => m).map((m) => m.id);
   const rankInfoMap = await batchGetUserRankInfo(team.guildId, userIds);
 
+  // Load rank images for displaying rank icons
+  const rankImages = await loadRankImages();
+
   // Batch load all avatars in parallel
   const avatarPromises = allMembers.map(async (member) => {
     if (!member) return null;
@@ -373,24 +378,19 @@ async function createTeamVisualization(team) {
         // Rank info (from batch fetch)
         const userRankInfo = rankInfoMap.get(member.id);
         if (userRankInfo) {
-          // Draw rank indicator
-          const rankColor = userRankInfo.color || getRankColor(userRankInfo.tier);
-          ctx.fillStyle = rankColor;
-          ctx.beginPath();
-          ctx.arc(x + SLOT_WIDTH - 20, y + SLOT_HEIGHT - 20, RANK_BADGE_RADIUS, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Rank text
-          ctx.font = "bold 8px Arial";
-          ctx.fillStyle = "#fff";
-          ctx.textAlign = "center";
-          const rankAbbr = userRankInfo.name
-            .split(" ")[0]
-            .substring(0, 3)
-            .toUpperCase();
-          ctx.fillText(rankAbbr, x + SLOT_WIDTH - 20, y + SLOT_HEIGHT - 17);
+          // Draw rank icon using actual rank images
+          const rankIconSize = RANK_BADGE_RADIUS * 2 + 4; // Slightly larger for better visibility
+          await drawRankIcon(
+            ctx,
+            userRankInfo.tier,
+            x + SLOT_WIDTH - 20,
+            y + SLOT_HEIGHT - 20,
+            rankIconSize,
+            rankImages
+          );
 
           // RR display
+          const rankColor = userRankInfo.color || getRankColor(userRankInfo.tier);
           if (userRankInfo.rr !== undefined) {
             ctx.font = "bold 10px Arial";
             ctx.fillStyle = rankColor;
