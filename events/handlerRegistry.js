@@ -207,6 +207,17 @@ module.exports = (client, commandRouter, interactionRouter) => {
         interactionRouter.registerButton('gladiator_', gladiatorWrapper.interactionHandler);
     }
 
+    // Tournament handler - !tournament, !tour (bracket system for external games)
+    const tournamentHandler = require('./tournamentHandler');
+    const tournamentWrapper = createHandlerWrapper(client, () => tournamentHandler);
+    if (tournamentWrapper.messageHandler) {
+        commandRouter.registerMessageProcessor(tournamentWrapper.messageHandler);
+    }
+    if (tournamentWrapper.interactionHandler) {
+        interactionRouter.registerButton('tournament_', tournamentWrapper.interactionHandler);
+        interactionRouter.registerSelectMenu('tournament_', tournamentWrapper.interactionHandler);
+    }
+
     // Mafia handler - !createmafia, !join, !vote, etc.
     const mafiaHandler = require('./mafiaHandler');
     const mafiaWrapper = createHandlerWrapper(client, () => mafiaHandler);

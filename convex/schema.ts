@@ -482,4 +482,152 @@ export default defineSchema({
     .index("by_discord_id", ["discordId"])
     .index("by_status", ["status"])
     .index("by_tier", ["tier"]),
+
+  // ============================================================================
+  // TOURNAMENT TABLE
+  // ============================================================================
+  tournaments: defineTable({
+    guildId: v.string(),
+    tournamentId: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+
+    // Configuration
+    type: v.union(
+      v.literal("single_elim"),
+      v.literal("double_elim"),
+      v.literal("round_robin")
+    ),
+    teamSize: v.number(), // 1 = 1v1, 2 = 2v2, etc.
+    maxParticipants: v.optional(v.number()), // null = unlimited
+
+    // Timing
+    startTime: v.number(), // Unix timestamp
+    registrationCloseTime: v.number(), // startTime - 15 min
+
+    // State
+    status: v.union(
+      v.literal("open"),      // Registration open
+      v.literal("closed"),    // Registration closed, waiting to start
+      v.literal("active"),    // Tournament in progress
+      v.literal("completed"), // Tournament finished
+      v.literal("cancelled")  // Tournament cancelled
+    ),
+    currentRound: v.number(),
+
+    // Discord references
+    channelId: v.string(),
+    mainMessageId: v.optional(v.string()),
+    bracketMessageId: v.optional(v.string()),
+
+    // Organizer
+    creatorId: v.string(),
+    creatorName: v.string(),
+
+    // Results
+    winnerId: v.optional(v.string()), // Winner participant/team ID
+    winnerName: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_guild", ["guildId"])
+    .index("by_guild_and_status", ["guildId", "status"])
+    .index("by_tournament_id", ["guildId", "tournamentId"]),
+
+  // ============================================================================
+  // TOURNAMENT PARTICIPANTS TABLE
+  // ============================================================================
+  tournamentParticipants: defineTable({
+    guildId: v.string(),
+    tournamentId: v.string(),
+
+    participantId: v.string(), // Unique ID for this participant/team
+
+    // For 1v1: single user
+    // For team: team captain + members
+    userId: v.string(), // Captain or solo player
+    username: v.string(),
+    teamName: v.optional(v.string()), // For team tournaments
+    teamMembers: v.optional(v.array(v.object({
+      userId: v.string(),
+      username: v.string(),
+    }))),
+
+    // Seeding
+    seed: v.optional(v.number()),
+
+    // Stats for this tournament
+    wins: v.number(),
+    losses: v.number(),
+
+    // Status
+    eliminated: v.boolean(),
+
+    joinedAt: v.number(),
+  })
+    .index("by_tournament", ["guildId", "tournamentId"])
+    .index("by_tournament_and_user", ["guildId", "tournamentId", "userId"])
+    .index("by_participant_id", ["guildId", "tournamentId", "participantId"]),
+
+  // ============================================================================
+  // TOURNAMENT MATCHES TABLE
+  // ============================================================================
+  tournamentMatches: defineTable({
+    guildId: v.string(),
+    tournamentId: v.string(),
+    matchId: v.string(),
+
+    // Bracket position
+    round: v.number(), // 1, 2, 3... (for double elim: negative = losers bracket)
+    matchNumber: v.number(), // Position within round
+    bracketType: v.union(
+      v.literal("winners"),
+      v.literal("losers"),
+      v.literal("grand_finals"),
+      v.literal("round_robin")
+    ),
+
+    // Participants
+    participant1Id: v.optional(v.string()), // null = TBD (waiting for previous match)
+    participant1Name: v.optional(v.string()),
+    participant2Id: v.optional(v.string()),
+    participant2Name: v.optional(v.string()),
+
+    // Result
+    winnerId: v.optional(v.string()),
+    winnerName: v.optional(v.string()),
+    score: v.optional(v.string()), // e.g., "13-7" or "2-1"
+
+    // Status
+    status: v.union(
+      v.literal("pending"),    // Waiting for participants
+      v.literal("ready"),      // Both participants known
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("bye")         // One participant auto-advances
+    ),
+
+    // Discord thread
+    threadId: v.optional(v.string()),
+    threadMessageId: v.optional(v.string()),
+
+    // For progression
+    nextMatchId: v.optional(v.string()), // Winner goes here
+    nextMatchSlot: v.optional(v.number()), // 1 or 2 (which slot in next match)
+    loserNextMatchId: v.optional(v.string()), // For double elim losers bracket
+
+    // Reporting
+    reportedBy: v.optional(v.string()),
+    reportedWinnerId: v.optional(v.string()),
+    reportedAt: v.optional(v.number()),
+    confirmedBy: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_tournament", ["guildId", "tournamentId"])
+    .index("by_match_id", ["guildId", "tournamentId", "matchId"])
+    .index("by_tournament_and_round", ["guildId", "tournamentId", "round"])
+    .index("by_tournament_and_status", ["guildId", "tournamentId", "status"]),
 });

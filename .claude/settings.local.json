@@ -15,7 +15,10 @@
       "Bash(find:*)",
       "Bash(npm install:*)",
       "Bash(npx convex dev:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(findstr:*)",
+      "Bash(cat:*)",
+      "Bash(npm ls:*)"
     ],
     "deny": []
   }

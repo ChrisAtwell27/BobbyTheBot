@@ -17,6 +17,7 @@ import type * as servers from "../servers.js";
 import type * as shop from "../shop.js";
 import type * as subscriptions from "../subscriptions.js";
 import type * as teams from "../teams.js";
+import type * as tournaments from "../tournaments.js";
 import type * as trivia from "../trivia.js";
 import type * as users from "../users.js";
 import type * as wordle from "../wordle.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   shop: typeof shop;
   subscriptions: typeof subscriptions;
   teams: typeof teams;
+  tournaments: typeof tournaments;
   trivia: typeof trivia;
   users: typeof users;
   wordle: typeof wordle;
