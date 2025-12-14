@@ -80,6 +80,7 @@ const {
   COMPETITIVE_MODES,
 } = require("../valorantApi/matchStats");
 const { createStatsVisualization } = require("../valorantApi/statsVisualizer");
+const { createCompareVisualization } = require("../valorantApi/compareVisualizer");
 const {
   calculateEnhancedSkillScore,
   createBalancedTeams,
@@ -381,6 +382,186 @@ async function handleUpdateRegistration(message, args) {
   } catch (error) {
     console.error("Update error:", error);
     await loadingMsg.edit(`❌ Error updating account: ${error.message}`);
+  }
+}
+
+// Handle !valcompare command - Head-to-head comparison
+async function handleValCompare(message) {
+  const mentions = message.mentions.users;
+
+  // Get the two users to compare
+  let user1 = message.author;
+  let user2 = null;
+
+  if (mentions.size === 0) {
+    // No mentions - show help
+    const helpEmbed = new EmbedBuilder()
+      .setTitle("⚔️ Head-to-Head Comparison")
+      .setColor("#ff4654")
+      .setDescription(
+        "Compare your Valorant stats with another player!\n\n" +
+        "**Usage:**\n" +
+        "`!valcompare @user` - Compare yourself vs another user\n" +
+        "`!valcompare @user1 @user2` - Compare two other users\n\n" +
+        "Both players must be registered with `!valstats`"
+      )
+      .setFooter({ text: "Stats based on recent competitive matches" });
+    return message.channel.send({ embeds: [helpEmbed] });
+  } else if (mentions.size === 1) {
+    // One mention - compare author vs mentioned user
+    user2 = mentions.first();
+  } else if (mentions.size >= 2) {
+    // Two mentions - compare the two mentioned users
+    const mentionArray = [...mentions.values()];
+    user1 = mentionArray[0];
+    user2 = mentionArray[1];
+  }
+
+  // Can't compare to yourself
+  if (user1.id === user2.id) {
+    return message.channel.send("❌ You can't compare a player to themselves!");
+  }
+
+  // Check registrations
+  const reg1 = await findOrMigrateUser(message.guild.id, user1);
+  const reg2 = await findOrMigrateUser(message.guild.id, user2);
+
+  if (!reg1 || !reg1.name || !reg1.tag || !reg1.region) {
+    return message.channel.send(
+      `❌ **${user1.displayName || user1.username}** is not registered. They need to use \`!valstats\` first.`
+    );
+  }
+  if (!reg2 || !reg2.name || !reg2.tag || !reg2.region) {
+    return message.channel.send(
+      `❌ **${user2.displayName || user2.username}** is not registered. They need to use \`!valstats\` first.`
+    );
+  }
+
+  // Show loading message
+  const loadingEmbed = new EmbedBuilder()
+    .setTitle("⚔️ Loading Head-to-Head Comparison...")
+    .setColor("#ff4654")
+    .setDescription(
+      `Fetching stats for **${reg1.name}#${reg1.tag}** vs **${reg2.name}#${reg2.tag}**...`
+    )
+    .setTimestamp();
+
+  const loadingMessage = await message.channel.send({ embeds: [loadingEmbed] });
+
+  try {
+    // Fetch data for both players in parallel
+    const [player1Data, player2Data] = await Promise.all([
+      fetchPlayerCompareData(reg1, user1),
+      fetchPlayerCompareData(reg2, user2)
+    ]);
+
+    // Generate comparison visualization
+    const compareBuffer = await createCompareVisualization(player1Data, player2Data);
+    const attachment = new AttachmentBuilder(compareBuffer, { name: "compare.png" });
+
+    // Calculate winner summary
+    const winner = determineOverallWinner(player1Data, player2Data);
+
+    const resultEmbed = new EmbedBuilder()
+      .setTitle(`⚔️ ${reg1.name} vs ${reg2.name}`)
+      .setColor("#ff4654")
+      .setImage("attachment://compare.png")
+      .setDescription(winner.summary)
+      .setFooter({ text: "Based on recent competitive matches • Stats refresh every 10 minutes" })
+      .setTimestamp();
+
+    await loadingMessage.edit({
+      embeds: [resultEmbed],
+      files: [attachment]
+    });
+
+  } catch (error) {
+    console.error("[ValCompare] Error:", error);
+    await loadingMessage.edit({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("❌ Comparison Failed")
+          .setColor("#ff0000")
+          .setDescription(
+            "Failed to fetch player data. This could be due to:\n" +
+            "• API rate limiting\n" +
+            "• Invalid player registration\n" +
+            "• Players have no recent competitive matches\n\n" +
+            "Try again in a few moments."
+          )
+      ]
+    });
+  }
+}
+
+// Fetch all data needed for comparison
+async function fetchPlayerCompareData(registration, discordUser) {
+  const [accountData, mmrData, matchData] = await Promise.all([
+    getAccountData(registration.name, registration.tag).catch(() => null),
+    getMMRData(registration.region, registration.name, registration.tag).catch(() => null),
+    getMatches(registration.region, registration.name, registration.tag, "competitive", 10).catch(() => null)
+  ]);
+
+  // Get match stats
+  const matchStats = await getPlayerMatchStats(registration, false).catch(() => ({}));
+
+  // Get best agent
+  const { bestAgent } = getAgentStatsFromMatches(registration, matchData?.data || []);
+
+  return {
+    account: accountData?.data || { name: registration.name, tag: registration.tag },
+    mmr: mmrData,
+    matchStats,
+    bestAgent,
+    avatar: discordUser.displayAvatarURL({ extension: "png", size: 128 }),
+    registration
+  };
+}
+
+// Determine overall winner based on stats
+function determineOverallWinner(player1, player2) {
+  let p1Wins = 0;
+  let p2Wins = 0;
+
+  const p1Stats = player1.matchStats || {};
+  const p2Stats = player2.matchStats || {};
+  const p1Rank = player1.mmr?.data?.current_data || player1.mmr?.current_data;
+  const p2Rank = player2.mmr?.data?.current_data || player2.mmr?.current_data;
+
+  // Compare rank
+  if ((p1Rank?.currenttier || 0) > (p2Rank?.currenttier || 0)) p1Wins++;
+  else if ((p2Rank?.currenttier || 0) > (p1Rank?.currenttier || 0)) p2Wins++;
+
+  // Compare win rate
+  if ((p1Stats.winRate || 0) > (p2Stats.winRate || 0)) p1Wins++;
+  else if ((p2Stats.winRate || 0) > (p1Stats.winRate || 0)) p2Wins++;
+
+  // Compare KDA
+  if ((p1Stats.avgKDA || 0) > (p2Stats.avgKDA || 0)) p1Wins++;
+  else if ((p2Stats.avgKDA || 0) > (p1Stats.avgKDA || 0)) p2Wins++;
+
+  // Compare ACS
+  if ((p1Stats.avgACS || 0) > (p2Stats.avgACS || 0)) p1Wins++;
+  else if ((p2Stats.avgACS || 0) > (p1Stats.avgACS || 0)) p2Wins++;
+
+  const p1Name = player1.account?.name || player1.registration?.name;
+  const p2Name = player2.account?.name || player2.registration?.name;
+
+  if (p1Wins > p2Wins) {
+    return {
+      winner: 1,
+      summary: `🏆 **${p1Name}** wins ${p1Wins}-${p2Wins} in head-to-head stats!`
+    };
+  } else if (p2Wins > p1Wins) {
+    return {
+      winner: 2,
+      summary: `🏆 **${p2Name}** wins ${p2Wins}-${p1Wins} in head-to-head stats!`
+    };
+  } else {
+    return {
+      winner: 0,
+      summary: `🤝 **It's a tie!** Both players are evenly matched (${p1Wins}-${p2Wins})`
+    };
   }
 }
 
@@ -1502,6 +1683,26 @@ module.exports = {
           } else {
             await showUserMatches(message, registration);
           }
+        }
+
+        // !valcompare command - Head-to-head comparison - ULTIMATE TIER REQUIRED
+        if (command === "!valcompare") {
+          // Check subscription tier (guild-based)
+          const subCheck = await checkSubscription(
+            message.guild.id,
+            TIERS.ULTIMATE,
+            message.guild.ownerId
+          );
+          if (!subCheck.hasAccess) {
+            const upgradeEmbed = createUpgradeEmbed(
+              "Valorant Head-to-Head",
+              TIERS.ULTIMATE,
+              subCheck.guildTier
+            );
+            return message.channel.send({ embeds: [upgradeEmbed] });
+          }
+
+          await handleValCompare(message);
         }
 
         // !valreset command (admin only)

@@ -14,7 +14,8 @@
       "Bash(npx convex deploy:*)",
       "Bash(find:*)",
       "Bash(npm install:*)",
-      "Bash(npx convex dev:*)"
+      "Bash(npx convex dev:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }
