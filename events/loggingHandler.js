@@ -87,6 +87,11 @@ module.exports = (client, fallbackLoggingChannelId) => {
           return;
         }
 
+        // Skip bot messages
+        if (message.author.bot) {
+          return;
+        }
+
         // Only log in guilds
         if (!message.guild) return;
 
@@ -129,6 +134,11 @@ module.exports = (client, fallbackLoggingChannelId) => {
 
         // Check if messages have authors (webhook messages may not)
         if (!oldMessage.author || !newMessage.author) {
+          return;
+        }
+
+        // Skip bot messages
+        if (oldMessage.author.bot) {
           return;
         }
 
