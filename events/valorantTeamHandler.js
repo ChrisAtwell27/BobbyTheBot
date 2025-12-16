@@ -60,7 +60,7 @@ const MAX_WAITLIST_SIZE = 5;
 const MIN_CLOSE_TEAM_SIZE = 2;
 
 // Timer intervals (milliseconds)
-const RESEND_INTERVAL = 10 * 60 * 1000; // 10 minutes
+const RESEND_INTERVAL = 3 * 60 * 1000; // 3 minutes
 const AUTO_DISBAND_WARNING = 25 * 60 * 1000; // 25 minutes
 const AUTO_DISBAND_FINAL = 30 * 60 * 1000; // 30 minutes (5 minutes after warning)
 const AUTO_CLEANUP_DELAY = 10 * 60 * 1000; // 10 minutes
