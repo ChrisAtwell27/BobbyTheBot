@@ -682,6 +682,56 @@ function detectIntent(message) {
   return "help";
 }
 
+// Rude message detection - checks if user is being rude to Bobby
+const RUDE_WORDS = [
+  'fuck', 'fucking', 'fuckin', 'fck', 'fuk',
+  'shit', 'shitty', 'bullshit',
+  'ass', 'asshole', 'dumbass',
+  'bitch', 'bitches',
+  'dick', 'dicks', 'dickhead',
+  'stupid', 'dumb', 'idiot', 'moron', 'retard', 'retarded',
+  'useless', 'worthless', 'trash', 'garbage',
+  'hate', 'suck', 'sucks', 'worst',
+  'stfu', 'shut up', 'shutup',
+  'kys', 'kill yourself',
+  'pathetic', 'loser'
+];
+
+const RUDE_RESPONSES = [
+  'you asshole',
+  'you dick'
+];
+
+function isRudeMessage(message) {
+  const lower = message.toLowerCase();
+  return RUDE_WORDS.some(word => {
+    // Match whole words or word at start/end of string
+    const regex = new RegExp(`\\b${word}\\b`, 'i');
+    return regex.test(lower);
+  });
+}
+
+function getRandomRudeResponse() {
+  return RUDE_RESPONSES[Math.floor(Math.random() * RUDE_RESPONSES.length)];
+}
+
+// Send a quick rude response that deletes itself after 1 second
+async function sendQuickRudeResponse(channel) {
+  try {
+    const rudeMsg = await channel.send(getRandomRudeResponse());
+    setTimeout(async () => {
+      try {
+        await rudeMsg.delete();
+      } catch (deleteError) {
+        // Message may already be deleted or bot lacks permissions
+        console.log('[Bobby] Could not delete rude response:', deleteError.message);
+      }
+    }, 1000);
+  } catch (error) {
+    console.log('[Bobby] Could not send rude response:', error.message);
+  }
+}
+
 module.exports = (client) => {
   console.log("🤖 Bobby Conversation Handler (OpenAI GPT-4 Mini) initialized");
 
@@ -909,6 +959,9 @@ module.exports = (client) => {
         return message.channel.send(getFallbackResponse(intent));
       }
 
+      // Check if user is being rude to Bobby
+      const wasRude = isRudeMessage(userMessage);
+
       // Get AI-generated response
       const response = await getBobbyResponse(
         message.author.id,
@@ -929,11 +982,18 @@ module.exports = (client) => {
           .setFooter({ text: "Powered by AI • Type !help for commands" })
           .setTimestamp();
 
-        return message.channel.send({ embeds: [embed] });
+        await message.channel.send({ embeds: [embed] });
       } else {
         // For shorter responses, just send normally without replying
-        return message.channel.send(response);
+        await message.channel.send(response);
       }
+
+      // If user was rude, send a quick insult that deletes itself
+      if (wasRude) {
+        await sendQuickRudeResponse(message.channel);
+      }
+
+      return;
     } catch (error) {
       console.error("Error generating Bobby response:", error);
 

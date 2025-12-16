@@ -417,11 +417,18 @@ function getAgentStatsFromMatches(registration, matchData) {
 
         if (!player || !agentNameRaw) continue;
 
-        const agentName = agentNameRaw.toLowerCase();
+        // Ensure agentNameRaw is a string (could be an object with name property)
+        const agentNameStr = typeof agentNameRaw === 'string'
+            ? agentNameRaw
+            : (agentNameRaw?.name || agentNameRaw?.displayName || String(agentNameRaw));
+
+        if (!agentNameStr || typeof agentNameStr !== 'string') continue;
+
+        const agentName = agentNameStr.toLowerCase();
 
         if (!agentStats[agentName]) {
             agentStats[agentName] = {
-                name: agentNameRaw, // Use the raw name (preserves capitalization)
+                name: agentNameStr, // Use the string name (preserves capitalization)
                 games: 0,
                 wins: 0,
                 kills: 0,
