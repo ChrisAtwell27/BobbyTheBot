@@ -496,17 +496,18 @@ async function handleValCompare(message) {
 
 // Fetch all data needed for comparison
 async function fetchPlayerCompareData(registration, discordUser) {
-  const [accountData, mmrData, matchData] = await Promise.all([
+  const [accountData, mmrData, storedMatchData] = await Promise.all([
     getAccountData(registration.name, registration.tag).catch(() => null),
     getMMRData(registration.region, registration.name, registration.tag).catch(() => null),
-    getMatches(registration.region, registration.name, registration.tag, "competitive", 10).catch(() => null)
+    getStoredMatches(registration.region, registration.name, registration.tag).catch(() => null)
   ]);
 
   // Get match stats
   const matchStats = await getPlayerMatchStats(registration, false).catch(() => ({}));
 
-  // Get best agent
-  const { bestAgent } = getAgentStatsFromMatches(registration, matchData?.data || []);
+  // Get best agent from stored matches (up to 30 competitive matches)
+  const agentMatchData = storedMatchData?.data || [];
+  const { bestAgent } = getAgentStatsFromMatches(registration, agentMatchData);
 
   return {
     account: accountData?.data || { name: registration.name, tag: registration.tag },
@@ -621,11 +622,13 @@ async function showUserStats(message, registration) {
     ]);
 
     await updateProgress(3);
-    const matchData = await getMatches(
-      registration.region,
-      registration.name,
-      registration.tag
-    );
+    // Fetch both regular matches (for display) and stored matches (for agent stats)
+    // Regular matches: shows 8 most recent for match history display
+    // Stored matches: up to 30 competitive matches for comprehensive agent stats
+    const [matchData, storedMatchData] = await Promise.all([
+      getMatches(registration.region, registration.name, registration.tag),
+      getStoredMatches(registration.region, registration.name, registration.tag)
+    ]);
 
     if (accountData.status !== 200) {
       throw new Error(
@@ -647,8 +650,12 @@ async function showUserStats(message, registration) {
       size: 256,
     });
 
-    // Calculate best agent and all agent stats from match data
-    const { bestAgent, sortedAgents } = getAgentStatsFromMatches(registration, matchData.data || []);
+    // Calculate best agent and all agent stats from stored matches (30 competitive matches)
+    // Use stored matches for comprehensive agent stats, fall back to regular matches if unavailable
+    const agentMatchData = (storedMatchData?.status === 200 && storedMatchData?.data?.length > 0)
+      ? storedMatchData.data
+      : matchData.data || [];
+    const { bestAgent, sortedAgents } = getAgentStatsFromMatches(registration, agentMatchData);
 
     // Create enhanced visualization with v3 MMR data, best agent, and all agents
     const statsCanvas = await createStatsVisualization(

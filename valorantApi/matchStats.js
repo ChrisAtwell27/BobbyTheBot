@@ -230,7 +230,7 @@ async function getPlayerMatchStatsLegacy(registration, forceRefresh = false) {
         const competitiveMatches = matchData.data.filter(match =>
             match.metadata && match.metadata.queue.name &&
             match.metadata.queue.name.toLowerCase() === 'competitive'
-        ).slice(0, 20); // Last 20 competitive matches
+        ).slice(0, 30); // Last 30 competitive matches
 
         if (competitiveMatches.length === 0) {
             return {
