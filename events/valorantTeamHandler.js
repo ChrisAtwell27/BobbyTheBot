@@ -300,14 +300,30 @@ async function createTeamVisualization(team) {
         ctx.textAlign = "center";
         ctx.fillText("RESERVED", x + SLOT_WIDTH / 2, y + 20);
 
-        // Placeholder icon
-        ctx.fillStyle = "rgba(255, 170, 0, 0.3)";
-        ctx.beginPath();
-        ctx.arc(x + SLOT_WIDTH / 2, y + 50, AVATAR_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#ffaa00";
-        ctx.font = "30px Arial";
-        ctx.fillText("👤", x + SLOT_WIDTH / 2, y + 60);
+        // Draw actual user avatar if we have it (semi-transparent)
+        if (avatar) {
+          ctx.save();
+          ctx.globalAlpha = 0.5;
+          ctx.beginPath();
+          ctx.arc(x + SLOT_WIDTH / 2, y + 50, AVATAR_RADIUS, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(avatar, x + SLOT_WIDTH / 2 - AVATAR_RADIUS, y + 20, AVATAR_FALLBACK_SIZE, AVATAR_FALLBACK_SIZE);
+          ctx.restore();
+          // Add hourglass overlay
+          ctx.font = "20px Arial";
+          ctx.fillStyle = "#ffaa00";
+          ctx.textAlign = "center";
+          ctx.fillText("⏳", x + SLOT_WIDTH / 2, y + 55);
+        } else {
+          // Fallback placeholder icon
+          ctx.fillStyle = "rgba(255, 170, 0, 0.3)";
+          ctx.beginPath();
+          ctx.arc(x + SLOT_WIDTH / 2, y + 50, AVATAR_RADIUS, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#ffaa00";
+          ctx.font = "30px Arial";
+          ctx.fillText("👤", x + SLOT_WIDTH / 2, y + 60);
+        }
 
         // Display placeholder name
         ctx.font = "bold 12px Arial";
@@ -319,10 +335,10 @@ async function createTeamVisualization(team) {
           : placeholderName;
         ctx.fillText(truncatedName, x + SLOT_WIDTH / 2, y + 90);
 
-        // "Click Join" hint
+        // "Waiting..." hint
         ctx.font = "9px Arial";
         ctx.fillStyle = "#888";
-        ctx.fillText("Click Join", x + SLOT_WIDTH / 2, y + 105);
+        ctx.fillText("Waiting...", x + SLOT_WIDTH / 2, y + 105);
       } else {
         // Regular member rendering
 
@@ -504,7 +520,7 @@ async function createTeamEmbed(team) {
         `**Avg Rank:** ${avgRank}`,
         `**Status:** ${statusText}`,
         placeholders.length > 0
-          ? `**Reserved for:** ${placeholders.map(p => p.displayName).join(", ")}`
+          ? `**Reserved for:** ${placeholders.map(p => p.reservedForId ? `<@${p.reservedForId}>` : p.displayName).join(", ")}`
           : "",
         team.targetTime
           ? `**Event Time:** <t:${Math.floor(team.targetTime / 1000)}:R>`
@@ -614,23 +630,23 @@ function createTeamButtons(teamId, isFull, team = null) {
   // Row 3: Filler controls (leader only)
   const row3 = new ActionRowBuilder();
 
-  // Add Filler button - only show if team has space
+  // Reserve Spot button - only show if team has space
   if (team && !isFull) {
     row3.addComponents(
       new ButtonBuilder()
         .setCustomId(`valorant_addfiller_${messageId}`)
-        .setLabel("Add Filler")
+        .setLabel("Reserve Spot")
         .setStyle(ButtonStyle.Secondary)
         .setEmoji("👤")
     );
   }
 
-  // Remove Filler button - only show if team has placeholders
+  // Cancel Reservation button - only show if team has placeholders
   if (team && hasPlaceholders(team)) {
     row3.addComponents(
       new ButtonBuilder()
         .setCustomId(`valorant_removefiller_${messageId}`)
-        .setLabel("Remove Filler")
+        .setLabel("Cancel Reservation")
         .setStyle(ButtonStyle.Secondary)
         .setEmoji("❌")
     );
@@ -1170,12 +1186,12 @@ module.exports = (client) => {
         return;
       }
 
-      // Handle Filler Modal Submit
+      // Handle Add Filler User Select
       if (
-        interaction.isModalSubmit() &&
-        interaction.customId.startsWith("valorant_filler_modal_")
+        interaction.isUserSelectMenu() &&
+        interaction.customId.startsWith("valorant_addfiller_select_")
       ) {
-        const teamId = interaction.customId.replace("valorant_filler_modal_", "");
+        const teamId = interaction.customId.replace("valorant_addfiller_select_", "");
         const fullTeamId = `valorant_team_${teamId}`;
         const team = activeTeams.get(fullTeamId);
 
@@ -1186,30 +1202,72 @@ module.exports = (client) => {
           });
         }
 
-        const fillerName = interaction.fields.getTextInputValue("fillerNameInput").trim();
+        const selectedUser = interaction.users.first();
+        if (!selectedUser) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ No user selected.",
+            ephemeral: true,
+          });
+        }
 
-        // Create placeholder member
+        // Check if user is a bot
+        if (selectedUser.bot) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ You can't reserve a spot for a bot!",
+            ephemeral: true,
+          });
+        }
+
+        // Check if user is already in the team (as leader or member)
+        if (team.leader.id === selectedUser.id) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: `❌ **${selectedUser.displayName}** is already the team leader!`,
+            ephemeral: true,
+          });
+        }
+
+        if (team.members.some(m => m.id === selectedUser.id)) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: `❌ **${selectedUser.displayName}** is already in the team!`,
+            ephemeral: true,
+          });
+        }
+
+        // Check if there's already a reservation for this user
+        if (team.members.some(m => m.type === 'placeholder' && m.reservedForId === selectedUser.id)) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: `❌ There's already a spot reserved for **${selectedUser.displayName}**!`,
+            ephemeral: true,
+          });
+        }
+
+        // Create placeholder member with actual user info
         const placeholder = {
-          id: `placeholder_${Date.now()}`,
-          displayName: fillerName,
+          id: `placeholder_${selectedUser.id}_${Date.now()}`,
+          reservedForId: selectedUser.id, // The actual Discord user ID
+          displayName: selectedUser.displayName || selectedUser.username,
+          username: selectedUser.username,
+          avatarURL: selectedUser.displayAvatarURL({ extension: "png", size: 128 }),
           type: 'placeholder',
           addedBy: interaction.user.id,
           createdAt: Date.now()
         };
 
         team.members.push(placeholder);
-        console.log(`[Team] Added placeholder "${fillerName}" to team ${fullTeamId}`);
+        console.log(`[Team] Reserved spot for ${selectedUser.username} (${selectedUser.id}) in team ${fullTeamId}`);
 
         try {
+          await interaction.deferUpdate();
+
           const isFull = getTotalSlotsFilled(team) >= TEAM_SIZE;
           const updatedEmbed = await createTeamEmbed(team);
           const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
 
           const channel = await client.channels.fetch(team.channelId).catch(() => null);
           if (!channel) {
-            console.error("[Team] Channel not found for filler modal:", team.channelId);
+            console.error("[Team] Channel not found for filler:", team.channelId);
             activeTeams.delete(fullTeamId);
-            return safeInteractionResponse(interaction, "reply", {
+            return interaction.followUp({
               content: "❌ Team channel not found.",
               ephemeral: true,
             });
@@ -1217,9 +1275,9 @@ module.exports = (client) => {
 
           const message = await channel.messages.fetch(team.messageId).catch(() => null);
           if (!message) {
-            console.error("[Team] Message not found for filler modal:", team.messageId);
+            console.error("[Team] Message not found for filler:", team.messageId);
             activeTeams.delete(fullTeamId);
-            return safeInteractionResponse(interaction, "reply", {
+            return interaction.followUp({
               content: "❌ Team message not found.",
               ephemeral: true,
             });
@@ -1231,18 +1289,23 @@ module.exports = (client) => {
             components: updatedComponents,
           });
 
-          await safeInteractionResponse(interaction, "reply", {
-            content: `✅ Added filler spot for **${fillerName}**!\n💡 When they're ready, they can click Join to replace this spot.`,
+          // Ping the user in the channel to let them know
+          await channel.send({
+            content: `👤 <@${selectedUser.id}>, a spot has been reserved for you! Click **Join** above to claim it.`,
+          }).catch(() => {});
+
+          await interaction.followUp({
+            content: `✅ Reserved spot for **${selectedUser.displayName}**!\nThey've been pinged and can click Join to claim their spot.`,
             ephemeral: true,
           });
         } catch (error) {
           console.error("[Team] Add filler error:", error.message);
           // Remove the placeholder we just added since update failed
           team.members = team.members.filter(m => m.id !== placeholder.id);
-          await safeInteractionResponse(interaction, "reply", {
-            content: "❌ Failed to add filler spot.",
+          await interaction.followUp({
+            content: "❌ Failed to reserve spot.",
             ephemeral: true,
-          });
+          }).catch(() => {});
         }
         return;
       }
@@ -1310,87 +1373,6 @@ module.exports = (client) => {
         return;
       }
 
-      // Handle Replace Filler Select Menu (when joining and team has placeholders)
-      if (
-        interaction.isStringSelectMenu() &&
-        interaction.customId.startsWith("valorant_replacefiller_select_")
-      ) {
-        const teamId = interaction.customId.replace("valorant_replacefiller_select_", "");
-        const fullTeamId = `valorant_team_${teamId}`;
-        const team = activeTeams.get(fullTeamId);
-
-        if (!team) {
-          return safeInteractionResponse(interaction, "reply", {
-            content: "❌ Team no longer exists.",
-            ephemeral: true,
-          });
-        }
-
-        const userId = interaction.user.id;
-
-        // Check if user is already in the team
-        if (team.leader.id === userId || team.members.some(m => m.id === userId)) {
-          return safeInteractionResponse(interaction, "reply", {
-            content: "❌ You're already on this team!",
-            ephemeral: true,
-          });
-        }
-
-        const placeholderId = interaction.values[0];
-        const placeholderIndex = team.members.findIndex(m => m.id === placeholderId);
-
-        if (placeholderIndex === -1) {
-          return safeInteractionResponse(interaction, "reply", {
-            content: "❌ That filler spot no longer exists.",
-            ephemeral: true,
-          });
-        }
-
-        const replacedName = team.members[placeholderIndex].displayName;
-
-        // Replace placeholder with real member
-        team.members[placeholderIndex] = {
-          id: userId,
-          username: interaction.user.username,
-          displayName: interaction.user.displayName || interaction.user.username,
-          avatarURL: interaction.user.displayAvatarURL({ extension: "png", size: 128 }),
-          type: 'real'
-        };
-
-        console.log(`[Team] ${interaction.user.username} replaced placeholder "${replacedName}" in team ${fullTeamId}`);
-
-        try {
-          await interaction.deferUpdate();
-
-          const isFull = getTotalSlotsFilled(team) >= TEAM_SIZE;
-          const updatedEmbed = await createTeamEmbed(team);
-          const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
-
-          const channel = await client.channels.fetch(team.channelId).catch(() => null);
-          if (channel) {
-            const message = await channel.messages.fetch(team.messageId).catch(() => null);
-            if (message) {
-              await message.edit({
-                embeds: [updatedEmbed.embed],
-                files: updatedEmbed.files,
-                components: updatedComponents,
-              });
-            }
-          }
-
-          await interaction.followUp({
-            content: `✅ You replaced the spot reserved for **${replacedName}**!`,
-            ephemeral: true,
-          });
-        } catch (error) {
-          console.error("[Team] Replace filler error:", error.message);
-          await interaction.followUp({
-            content: "❌ Failed to join the team.",
-            ephemeral: true,
-          }).catch(() => {});
-        }
-        return;
-      }
 
       // Handle leader selection menu
       if (
@@ -1507,7 +1489,7 @@ module.exports = (client) => {
       if (action === "join") {
         if (
           userId === team.leader.id ||
-          team.members.some((m) => m.id === userId)
+          team.members.some((m) => m.id === userId && m.type !== 'placeholder')
         ) {
           return safeInteractionResponse(interaction, "reply", {
             content: "❌ You're already in this team!",
@@ -1515,32 +1497,29 @@ module.exports = (client) => {
           });
         }
 
-        // Check if team has space (empty slots)
-        if (hasEmptySlots(team)) {
-          // Defer immediately to prevent timeout (canvas generation can take >3s)
+        // Check if there's a spot specifically reserved for this user
+        const reservedSpotIndex = team.members.findIndex(
+          m => m.type === 'placeholder' && m.reservedForId === userId
+        );
+
+        if (reservedSpotIndex !== -1) {
+          // User has a reserved spot - automatically claim it
+          await interaction.deferUpdate().catch(() => {});
+
+          team.members[reservedSpotIndex] = { ...userInfo, type: 'real' };
+          console.log(`[Team] ${userInfo.username} claimed their reserved spot in team ${fullTeamId}`);
+        } else if (hasEmptySlots(team)) {
+          // Team has empty slots - join normally
           await interaction.deferUpdate().catch(() => {});
 
           team.members.push({ ...userInfo, type: 'real' });
         } else if (hasPlaceholders(team)) {
-          // Team is full but has placeholders - show selection menu
+          // Team is full but has placeholders for OTHER people
+          // Only the leader can replace other people's reserved spots
           const placeholders = getPlaceholders(team);
 
-          const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`valorant_replacefiller_select_${teamId}`)
-            .setPlaceholder("Select spot to take")
-            .addOptions(
-              placeholders.map(p => ({
-                label: `Replace ${p.displayName}`,
-                value: p.id,
-                description: `Reserved spot for ${p.displayName}`
-              }))
-            );
-
-          const row = new ActionRowBuilder().addComponents(selectMenu);
-
           return safeInteractionResponse(interaction, "reply", {
-            content: `Team is full, but there are **${placeholders.length}** reserved spot(s).\nSelect which spot you're replacing:`,
-            components: [row],
+            content: `❌ Team is full! There are **${placeholders.length}** reserved spot(s) for:\n${placeholders.map(p => `• **${p.displayName}**`).join('\n')}\n\nAsk the leader to reserve a spot for you, or wait for an opening.`,
             ephemeral: true,
           });
         } else {
@@ -1726,9 +1705,12 @@ module.exports = (client) => {
           });
         }
 
-        if (team.members.length === 0) {
+        // Filter out placeholders - can only transfer to real members
+        const realMembers = team.members.filter(m => m.type !== 'placeholder');
+
+        if (realMembers.length === 0) {
           return safeInteractionResponse(interaction, "reply", {
-            content: "❌ No members to transfer to!",
+            content: "❌ No members to transfer to! Reserved spots don't count.",
             ephemeral: true,
           });
         }
@@ -1737,7 +1719,7 @@ module.exports = (client) => {
           .setCustomId(`valorant_selectleader_${teamId}`)
           .setPlaceholder("Select new leader")
           .addOptions(
-            team.members.map((m) => ({
+            realMembers.map((m) => ({
               label: m.displayName || m.username,
               value: m.id,
             }))
@@ -1835,23 +1817,22 @@ module.exports = (client) => {
           });
         }
 
-        const modal = new ModalBuilder()
-          .setCustomId(`valorant_filler_modal_${teamId}`)
-          .setTitle("Add Filler Spot");
+        // Use UserSelectMenuBuilder to pick a real Discord user
+        const { UserSelectMenuBuilder } = require("discord.js");
 
-        const fillerInput = new TextInputBuilder()
-          .setCustomId("fillerNameInput")
-          .setLabel("Who is this spot for?")
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder("e.g., John, Mike's friend")
-          .setMaxLength(20)
-          .setMinLength(1)
-          .setRequired(true);
+        const userSelect = new UserSelectMenuBuilder()
+          .setCustomId(`valorant_addfiller_select_${teamId}`)
+          .setPlaceholder("Select user to reserve spot for")
+          .setMinValues(1)
+          .setMaxValues(1);
 
-        const firstActionRow = new ActionRowBuilder().addComponents(fillerInput);
-        modal.addComponents(firstActionRow);
+        const row = new ActionRowBuilder().addComponents(userSelect);
 
-        await interaction.showModal(modal);
+        return safeInteractionResponse(interaction, "reply", {
+          content: "👤 **Reserve a Spot**\nSelect who this spot is for. They'll be pinged and can click Join to claim it.",
+          components: [row],
+          ephemeral: true,
+        });
       }
 
       // REMOVE FILLER
