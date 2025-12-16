@@ -129,22 +129,24 @@ module.exports = (client) => {
     }
 
     // Send results with role ping
-    await channel.send({
+    const resultsMessage = await channel.send({
       content: rolePing ? `${rolePing} 🎰 **Weekly Lottery Draw!**` : null,
       embeds: [resultsEmbed],
     });
 
-    // Clear old entries
+    // Clear old entries from database
     await convex.mutation(api.lottery.clearWeekEntries, {
       guildId,
       weekNumber: result.weekNumber,
     });
 
-    // Purge channel messages (keep last 10 for context)
+    // Purge old channel messages EXCEPT the results message we just sent
     try {
       const messages = await channel.messages.fetch({ limit: 100 });
       const toDelete = messages.filter(
-        (msg) => Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000 // Within 14 days
+        (msg) =>
+          msg.id !== resultsMessage.id && // Don't delete the results!
+          Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000 // Within 14 days
       );
       if (toDelete.size > 0) {
         await channel.bulkDelete(toDelete, true);
@@ -153,7 +155,7 @@ module.exports = (client) => {
       console.log("Could not purge lottery channel:", error.message);
     }
 
-    // Post new lottery embed
+    // Post new lottery embed for next week
     await postLotteryEmbed(channel, guildId);
   }
 
