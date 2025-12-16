@@ -17,25 +17,32 @@ const { getAgentById, ROLE_EMOJIS } = require('./agentUtils');
  * @param {Object} registration - User registration data
  * @param {Object} mmrDataV3 - MMR data from v3 API (optional, for enhanced display)
  * @param {Object} bestAgent - Best agent stats (optional)
+ * @param {Array} sortedAgents - All agents sorted by games played (optional)
  * @returns {Promise<Canvas>} - The created canvas
  */
-async function createStatsVisualization(accountData, mmrData, matchData, userAvatar, registration, mmrDataV3 = null, bestAgent = null) {
-    const canvas = createCanvas(1000, 1050);
+async function createStatsVisualization(accountData, mmrData, matchData, userAvatar, registration, mmrDataV3 = null, bestAgent = null, sortedAgents = null) {
+    // Calculate canvas height based on content
+    const hasAgents = sortedAgents && sortedAgents.length > 0;
+    const agentCount = hasAgents ? Math.min(sortedAgents.length, 5) : 0; // Show top 5 agents
+    const agentSectionHeight = hasAgents ? 40 + (agentCount * 35) : 0;
+    const canvasHeight = 1050 + agentSectionHeight;
+
+    const canvas = createCanvas(1000, canvasHeight);
     const ctx = canvas.getContext('2d');
 
     // Enhanced background with pattern
-    const gradient = ctx.createLinearGradient(0, 0, 1000, 1050);
+    const gradient = ctx.createLinearGradient(0, 0, 1000, canvasHeight);
     gradient.addColorStop(0, '#0a0e13');
     gradient.addColorStop(0.3, '#1e2328');
     gradient.addColorStop(0.7, '#2c3e50');
     gradient.addColorStop(1, '#0a0e13');
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 1000, 1050);
+    ctx.fillRect(0, 0, 1000, canvasHeight);
 
     // Add subtle pattern overlay
     ctx.fillStyle = 'rgba(255, 70, 84, 0.03)';
     for (let i = 0; i < 1000; i += 50) {
-        for (let j = 0; j < 1050; j += 50) {
+        for (let j = 0; j < canvasHeight; j += 50) {
             if ((i + j) % 100 === 0) {
                 ctx.fillRect(i, j, 25, 25);
             }
@@ -49,9 +56,9 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     accentGradient.addColorStop(1, '#ff4654');
     ctx.fillStyle = accentGradient;
     ctx.fillRect(0, 0, 1000, 8);
-    ctx.fillRect(0, 1042, 1000, 8);
-    ctx.fillRect(0, 0, 8, 1050);
-    ctx.fillRect(992, 0, 8, 1050);
+    ctx.fillRect(0, canvasHeight - 8, 1000, 8);
+    ctx.fillRect(0, 0, 8, canvasHeight);
+    ctx.fillRect(992, 0, 8, canvasHeight);
 
     // Enhanced header section
     ctx.fillStyle = '#ffffff';
@@ -482,11 +489,103 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
         }
     }
 
+    // My Agents section - show all played agents with stats
+    if (sortedAgents && sortedAgents.length > 0) {
+        const agentsSectionY = matchSectionY + 530; // Position after matches section
+        const topAgents = sortedAgents.slice(0, 5); // Show top 5 agents
+
+        // Section header
+        const agentsHeaderGradient = ctx.createLinearGradient(50, agentsSectionY, 950, agentsSectionY + 30);
+        agentsHeaderGradient.addColorStop(0, 'rgba(88, 101, 242, 0.2)');
+        agentsHeaderGradient.addColorStop(1, 'rgba(114, 137, 218, 0.2)');
+        ctx.fillStyle = agentsHeaderGradient;
+        ctx.fillRect(50, agentsSectionY, 900, 30);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 22px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('MY AGENTS', 80, agentsSectionY + 22);
+
+        // Column headers
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font = 'bold 12px Arial';
+        ctx.fillText('AGENT', 80, agentsSectionY + 50);
+        ctx.fillText('GAMES', 250, agentsSectionY + 50);
+        ctx.fillText('K/D/A', 340, agentsSectionY + 50);
+        ctx.fillText('KDA', 460, agentsSectionY + 50);
+        ctx.fillText('ACS', 540, agentsSectionY + 50);
+        ctx.fillText('HS%', 620, agentsSectionY + 50);
+        ctx.fillText('AVG KILLS', 700, agentsSectionY + 50);
+        ctx.fillText('W/L', 800, agentsSectionY + 50);
+        ctx.fillText('WIN%', 880, agentsSectionY + 50);
+
+        // Draw each agent row
+        topAgents.forEach((agent, index) => {
+            const y = agentsSectionY + 75 + index * 35;
+
+            // Alternating row background
+            if (index % 2 === 0) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+                ctx.fillRect(50, y - 12, 900, 30);
+            }
+
+            // Get agent info
+            const agentInfo = getAgentById(agent.name?.toLowerCase() || agent.id);
+            const agentRole = agentInfo ? agentInfo.role : 'Agent';
+            const roleEmoji = ROLE_EMOJIS[agentRole] || '';
+
+            // Agent name
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText(agent.name || agent.id, 80, y + 5);
+
+            // Role indicator (small text)
+            ctx.fillStyle = '#888888';
+            ctx.font = '10px Arial';
+            ctx.fillText(agentRole, 80, y + 18);
+
+            // Games
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '14px Arial';
+            ctx.fillText(`${agent.games}`, 250, y + 5);
+
+            // K/D/A
+            ctx.fillText(`${agent.kills}/${agent.deaths}/${agent.assists}`, 340, y + 5);
+
+            // KDA with color
+            const kdaColor = agent.kda >= 1.5 ? '#00ff88' : agent.kda >= 1.0 ? '#ffff00' : '#ff4444';
+            ctx.fillStyle = kdaColor;
+            ctx.fillText(`${agent.kda.toFixed(2)}`, 460, y + 5);
+
+            // ACS with color
+            const acsColor = agent.avgACS >= 250 ? '#00ff88' : agent.avgACS >= 200 ? '#ffff00' : '#ff8800';
+            ctx.fillStyle = acsColor;
+            ctx.fillText(`${Math.round(agent.avgACS)}`, 540, y + 5);
+
+            // HS% with color
+            const hsColor = agent.hsPercent >= 25 ? '#00ff88' : agent.hsPercent >= 18 ? '#ffff00' : '#ff8800';
+            ctx.fillStyle = hsColor;
+            ctx.fillText(`${agent.hsPercent.toFixed(1)}%`, 620, y + 5);
+
+            // Avg Kills
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(`${agent.avgKills?.toFixed(1) || (agent.kills / agent.games).toFixed(1)}`, 700, y + 5);
+
+            // W/L
+            ctx.fillText(`${agent.wins}/${agent.games - agent.wins}`, 800, y + 5);
+
+            // Win rate with color
+            const winColor = agent.winRate >= 55 ? '#00ff88' : agent.winRate >= 45 ? '#ffff00' : '#ff4444';
+            ctx.fillStyle = winColor;
+            ctx.fillText(`${agent.winRate.toFixed(0)}%`, 880, y + 5);
+        });
+    }
+
     // Enhanced footer with version info
     ctx.fillStyle = '#666666';
     ctx.font = '12px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('Powered by HenrikDev Valorant API • Enhanced Stats v4.0 • MMR + ELO + Seasonal Data', 500, 1030);
+    ctx.fillText('Powered by HenrikDev Valorant API • Enhanced Stats v4.0 • MMR + ELO + Seasonal Data', 500, canvasHeight - 20);
 
     return canvas;
 }

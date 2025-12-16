@@ -647,10 +647,10 @@ async function showUserStats(message, registration) {
       size: 256,
     });
 
-    // Calculate best agent from match data
-    const { bestAgent } = getAgentStatsFromMatches(registration, matchData.data || []);
+    // Calculate best agent and all agent stats from match data
+    const { bestAgent, sortedAgents } = getAgentStatsFromMatches(registration, matchData.data || []);
 
-    // Create enhanced visualization with v3 MMR data and best agent
+    // Create enhanced visualization with v3 MMR data, best agent, and all agents
     const statsCanvas = await createStatsVisualization(
       accountData.data,
       mmrData.data,
@@ -658,7 +658,8 @@ async function showUserStats(message, registration) {
       userAvatar,
       registration,
       mmrDataV3.data, // Pass v3 MMR data for enhanced display
-      bestAgent // Pass best agent stats
+      bestAgent, // Pass best agent stats
+      sortedAgents // Pass all agents sorted by games played
     );
 
     const attachment = new AttachmentBuilder(statsCanvas.toBuffer(), {

@@ -18,7 +18,8 @@
       "Bash(grep:*)",
       "Bash(findstr:*)",
       "Bash(cat:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(del \"d:\\TestDCBot\\BobbyTheBot\\events\\setupReminderHandler.js\")"
     ],
     "deny": []
   }

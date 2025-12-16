@@ -44,6 +44,9 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Guild join handler - monitors guildCreate/guildDelete for guild registration
     require('./guildJoinHandler')(client);
 
+    // Setup reminder handler - periodically DMs owners of unconfigured servers
+    require('./setupReminderHandler')(client);
+
     // Lottery handler - weekly lottery system with scheduled draws
     require('./lotteryHandler')(client);
 

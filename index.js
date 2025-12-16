@@ -534,6 +534,7 @@ function gracefulShutdown(signal) {
     global.bountyHandlerIntervals,
     global.mafiaHandlerIntervals,
     global.registrationManagerIntervals,
+    global.setupReminderIntervals,
   ];
 
   let clearedCount = 0;

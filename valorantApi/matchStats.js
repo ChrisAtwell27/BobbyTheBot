@@ -423,24 +423,29 @@ function getAgentStatsFromMatches(registration, matchData) {
             ? (stats.kills + stats.assists) / stats.deaths
             : stats.kills + stats.assists;
 
-        // Calculate win rate
+        // Calculate win rate (for display only, not used in scoring)
         stats.winRate = stats.games > 0 ? (stats.wins / stats.games) * 100 : 0;
 
         // Calculate average ACS
         stats.avgACS = stats.games > 0 ? stats.totalScore / stats.games : 0;
 
+        // Calculate average kills per game
+        stats.avgKills = stats.games > 0 ? stats.kills / stats.games : 0;
+
         // Calculate headshot percentage
         const totalShots = stats.headshots + stats.bodyshots + stats.legshots;
         stats.hsPercent = totalShots > 0 ? (stats.headshots / totalShots) * 100 : 0;
 
-        // Score agents by: games played (weight 0.3) + win rate (weight 0.4) + KDA (weight 0.3)
+        // Score agents purely by YOUR performance stats (not wins/losses)
+        // Weight: games played (20%), ACS (35%), KDA (30%), HS% (15%)
         // Minimum 3 games to be considered "best"
         if (stats.games >= 3) {
-            const gamesScore = Math.min(stats.games / 20, 1) * 30; // Max 30 points for games
-            const winRateScore = stats.winRate * 0.4; // Max 40 points for win rate
-            const kdaScore = Math.min(stats.kda, 3) * 10; // Max 30 points for KDA
+            const gamesScore = Math.min(stats.games / 20, 1) * 20; // Max 20 points for games
+            const acsScore = Math.min(stats.avgACS / 300, 1) * 35; // Max 35 points for ACS (300+ = max)
+            const kdaScore = Math.min(stats.kda / 2.5, 1) * 30; // Max 30 points for KDA (2.5+ = max)
+            const hsScore = Math.min(stats.hsPercent / 30, 1) * 15; // Max 15 points for HS% (30%+ = max)
 
-            const totalScore = gamesScore + winRateScore + kdaScore;
+            const totalScore = gamesScore + acsScore + kdaScore + hsScore;
 
             if (totalScore > bestScore) {
                 bestScore = totalScore;
@@ -452,12 +457,12 @@ function getAgentStatsFromMatches(registration, matchData) {
         }
     }
 
-    // If no agent has 3+ games, just pick the most played
+    // If no agent has 3+ games, pick the one with best ACS
     if (!bestAgent) {
-        let mostGames = 0;
+        let bestACS = 0;
         for (const [agentId, stats] of Object.entries(agentStats)) {
-            if (stats.games > mostGames) {
-                mostGames = stats.games;
+            if (stats.avgACS > bestACS || (stats.avgACS === bestACS && stats.games > (bestAgent?.games || 0))) {
+                bestACS = stats.avgACS;
                 bestAgent = {
                     id: agentId,
                     ...stats
@@ -466,7 +471,12 @@ function getAgentStatsFromMatches(registration, matchData) {
         }
     }
 
-    return { bestAgent, agentStats };
+    // Sort agents by games played for the "My Agents" list
+    const sortedAgents = Object.entries(agentStats)
+        .map(([id, stats]) => ({ id, ...stats }))
+        .sort((a, b) => b.games - a.games);
+
+    return { bestAgent, agentStats, sortedAgents };
 }
 
 module.exports = {
