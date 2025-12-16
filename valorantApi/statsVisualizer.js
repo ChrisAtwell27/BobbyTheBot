@@ -122,7 +122,7 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     // Subtitle
     ctx.font = '16px Arial';
     ctx.fillStyle = '#cccccc';
-    ctx.fillText('Powered by HenrikDev API • Enhanced Visualization v3.0 • KDA + Stored Matches', 500, 75);
+    ctx.fillText('Enhanced Visualization v3.0 • KDA + Stored Matches', 500, 75);
 
     // User info section with enhanced styling
     const infoBoxGradient = ctx.createLinearGradient(50, 100, 950, 200);
@@ -186,7 +186,11 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     ctx.font = '16px Arial';
     ctx.fillStyle = '#e0e0e0';
     ctx.fillText(`Level ${accountData.account_level} • Region: ${accountData.region.toUpperCase()}`, 220, 160);
-    ctx.fillText(`Last Updated: ${new Date(accountData.updated_at).toLocaleDateString()}`, 220, 180);
+    // Format last updated date - handle missing or invalid dates
+    const lastUpdated = accountData.updated_at
+        ? new Date(accountData.updated_at).toLocaleDateString()
+        : 'Recently';
+    ctx.fillText(`Last Updated: ${lastUpdated !== 'Invalid Date' ? lastUpdated : 'Recently'}`, 220, 180);
 
     // Enhanced current rank section - use v3 data if available, fallback to v2
     const hasV3Data = mmrDataV3 && mmrDataV3.current;
@@ -430,19 +434,13 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
         ctx.font = 'bold 20px Arial';
         ctx.fillText(`${Math.round(bestAgent.avgACS)}`, statsStartX + 310, agentBoxY + 45);
 
-        // HS%
+        // K/D/A totals (moved to where HS% was since stored matches don't have headshot data)
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 14px Arial';
-        ctx.fillText('HS%', statsStartX + 420, agentBoxY + 20);
-        const hsColor = bestAgent.hsPercent >= 25 ? '#00ff88' : bestAgent.hsPercent >= 18 ? '#ffff00' : '#ff8800';
-        ctx.fillStyle = hsColor;
+        ctx.fillText('K/D/A', statsStartX + 420, agentBoxY + 20);
+        ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 20px Arial';
-        ctx.fillText(`${bestAgent.hsPercent.toFixed(1)}%`, statsStartX + 420, agentBoxY + 45);
-
-        // K/D/A totals
-        ctx.fillStyle = '#aaaaaa';
-        ctx.font = '12px Arial';
-        ctx.fillText(`${bestAgent.kills}/${bestAgent.deaths}/${bestAgent.assists}`, statsStartX + 520, agentBoxY + 45);
+        ctx.fillText(`${bestAgent.kills}/${bestAgent.deaths}/${bestAgent.assists}`, statsStartX + 420, agentBoxY + 45);
     }
 
     // Adjust match section Y position based on whether best agent is shown
@@ -784,7 +782,7 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     ctx.fillStyle = '#666666';
     ctx.font = '12px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('Powered by HenrikDev Valorant API • Enhanced Stats v4.0 • MMR + ELO + Seasonal Data', 500, canvasHeight - 20);
+    ctx.fillText('Enhanced Stats v4.0 • MMR + ELO + Seasonal Data', 500, canvasHeight - 20);
 
     return canvas;
 }

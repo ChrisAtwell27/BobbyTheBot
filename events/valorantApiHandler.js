@@ -138,7 +138,7 @@ async function showRegistrationPrompt(message) {
       {
         name: "🔒 Privacy",
         value:
-          "• Only public Riot data\n• No account access\n• Data from HenrikDev API",
+          "• Only public Riot data\n• No account access\n• Secure & private",
         inline: true,
       },
       {
@@ -254,7 +254,7 @@ async function handleRegistrationSubmission(interaction) {
         }
       )
       .setTimestamp()
-      .setFooter({ text: "Powered by HenrikDev Valorant API" });
+      .setFooter({ text: "Valorant Stats Tracker" });
 
     await safeInteractionResponse(interaction, "reply", {
       embeds: [successEmbed],
@@ -695,7 +695,7 @@ async function showUserStats(message, registration) {
         "Comprehensive statistics with match history and performance metrics"
       )
       .setTimestamp()
-      .setFooter({ text: "Powered by HenrikDev API • Enhanced Stats v4.0" });
+      .setFooter({ text: "Enhanced Stats v4.0" });
 
     const refreshButton = new ButtonBuilder()
       .setCustomId(`valstats_refresh_${message.author.id}`)
@@ -794,7 +794,7 @@ async function showMMRHistory(message, registration) {
       .setTitle(`📈 MMR History - ${registration.name}#${registration.tag}`)
       .setColor("#ff4654")
       .setTimestamp()
-      .setFooter({ text: "Powered by HenrikDev API • MMR Tracking v4.0" });
+      .setFooter({ text: "MMR Tracking v4.0" });
 
     // Current rank info from v3
     if (mmrDataV3.status === 200 && mmrDataV3.data) {
@@ -1002,7 +1002,7 @@ async function showAgentSelection(interaction, registration) {
       "Use the dropdowns below to select agents by role:"
     )
     .setTimestamp()
-    .setFooter({ text: "Powered by HenrikDev API • Agent Selection" });
+    .setFooter({ text: "Agent Selection" });
 
   // Show current selection
   if (currentAgents.length > 0) {
@@ -2117,7 +2117,7 @@ module.exports = {
                   : "Showing all upcoming Valorant esports matches"
               )
               .setTimestamp()
-              .setFooter({ text: "Powered by HenrikDev Valorant API" });
+              .setFooter({ text: "Esports Schedule v1.0" });
 
             // Add upcoming matches
             if (upcomingMatches.length > 0) {

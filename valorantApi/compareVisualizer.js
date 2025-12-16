@@ -87,7 +87,7 @@ async function createCompareVisualization(player1, player2) {
     ctx.fillStyle = '#666666';
     ctx.font = '12px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('Powered by HenrikDev Valorant API • Head-to-Head Comparison', 500, 680);
+    ctx.fillText('Head-to-Head Comparison', 500, 680);
 
     return canvas.toBuffer();
 }
