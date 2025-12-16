@@ -626,9 +626,16 @@ async function showUserStats(message, registration) {
     // Fetch both regular matches (for display) and stored matches (for agent stats)
     // Regular matches: shows 8 most recent for match history display
     // Stored matches: up to 30 competitive matches for comprehensive agent stats
+    // Use .catch() to gracefully handle slow/failing endpoints
     const [matchData, storedMatchData] = await Promise.all([
-      getMatches(registration.region, registration.name, registration.tag),
-      getStoredMatches(registration.region, registration.name, registration.tag)
+      getMatches(registration.region, registration.name, registration.tag).catch(err => {
+        console.warn("v3 matches endpoint failed:", err.message);
+        return { status: 0, data: [], error: err.message };
+      }),
+      getStoredMatches(registration.region, registration.name, registration.tag).catch(err => {
+        console.warn("Stored matches endpoint failed:", err.message);
+        return { status: 0, data: [], error: err.message };
+      })
     ]);
 
     if (accountData.status !== 200) {

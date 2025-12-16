@@ -3,10 +3,55 @@
 // ===============================================
 // Creates visual canvas-based stats displays for Valorant profiles
 
-const { createCanvas } = require('canvas');
+const { createCanvas, loadImage } = require('canvas');
+const path = require('path');
+const fs = require('fs');
 const { loadImageFromURL } = require('./apiClient');
 const { RANK_MAPPING, loadRankImage, createFallbackRankIcon } = require('./rankUtils');
-const { getAgentById, ROLE_EMOJIS } = require('./agentUtils');
+const { getAgentById } = require('./agentUtils');
+
+// Path to agent icons
+const AGENT_ICONS_PATH = path.join(__dirname, '..', 'images');
+
+// Agent name to filename mapping (handles special cases)
+const AGENT_FILENAME_MAP = {
+    'kay/o': 'kayo',
+    'kayo': 'kayo',
+    'phoenix': 'pheonix', // File is misspelled as pheonix.png
+};
+
+/**
+ * Load agent icon from local images folder
+ * @param {string} agentName - Agent name (e.g., 'Jett', 'KAY/O')
+ * @returns {Promise<Image|null>} - Loaded image or null if not found
+ */
+async function loadAgentIcon(agentName) {
+    if (!agentName) return null;
+
+    try {
+        // Normalize agent name to lowercase for filename
+        let filename = agentName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        // Check for special mappings
+        const lowerName = agentName.toLowerCase();
+        if (AGENT_FILENAME_MAP[lowerName]) {
+            filename = AGENT_FILENAME_MAP[lowerName];
+        }
+
+        const iconPath = path.join(AGENT_ICONS_PATH, `${filename}.png`);
+
+        // Check if file exists
+        if (fs.existsSync(iconPath)) {
+            return await loadImage(iconPath);
+        }
+
+        console.log(`[StatsViz] Agent icon not found: ${iconPath}`);
+        return null;
+    } catch (error) {
+        console.error(`[StatsViz] Error loading agent icon for ${agentName}:`, error.message);
+        return null;
+    }
+}
 
 /**
  * Creates a comprehensive stats visualization for a player
@@ -23,9 +68,11 @@ const { getAgentById, ROLE_EMOJIS } = require('./agentUtils');
  */
 async function createStatsVisualization(accountData, mmrData, matchData, userAvatar, registration, mmrDataV3 = null, bestAgent = null, sortedAgents = null, teammateData = null) {
     // Calculate canvas height based on content
-    const hasAgents = sortedAgents && sortedAgents.length > 0;
-    const agentCount = hasAgents ? Math.min(sortedAgents.length, 5) : 0; // Show top 5 agents
-    const agentSectionHeight = hasAgents ? 40 + (agentCount * 35) : 0;
+    // Show preferred agents (max 3) from registration instead of all played agents
+    const preferredAgents = registration?.preferredAgents || [];
+    const hasPreferredAgents = preferredAgents.length > 0 && sortedAgents && sortedAgents.length > 0;
+    const agentCount = hasPreferredAgents ? Math.min(preferredAgents.length, 3) : 0;
+    const agentSectionHeight = hasPreferredAgents ? 40 + (agentCount * 32) : 0; // Reduced row height
 
     // Calculate teammate section height
     const hasTeammates = teammateData?.bestTeammate || teammateData?.worstTeammate;
@@ -309,26 +356,46 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
         // Get agent info from our data
         const agentInfo = getAgentById(bestAgent.name.toLowerCase());
         const agentRole = agentInfo ? agentInfo.role : 'Agent';
-        const roleEmoji = ROLE_EMOJIS[agentRole] || '🎮';
+
+        // Load and draw agent icon
+        const agentIcon = await loadAgentIcon(bestAgent.name);
+        const iconOffset = agentIcon ? 60 : 0; // Offset text if icon is present
+
+        if (agentIcon) {
+            // Draw agent icon with circular clip
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(105, agentBoxY + 30, 22, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(agentIcon, 83, agentBoxY + 8, 44, 44);
+            ctx.restore();
+
+            // Icon border
+            ctx.strokeStyle = '#5865f2';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(105, agentBoxY + 30, 22, 0, Math.PI * 2);
+            ctx.stroke();
+        }
 
         // Best Agent label
         ctx.fillStyle = '#5865f2';
         ctx.font = 'bold 14px Arial';
         ctx.textAlign = 'left';
-        ctx.fillText('BEST AGENT', 80, agentBoxY + 20);
+        ctx.fillText('BEST AGENT', 80 + iconOffset, agentBoxY + 20);
 
         // Agent name with role
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 22px Arial';
-        ctx.fillText(`${bestAgent.name}`, 80, agentBoxY + 45);
+        ctx.fillText(`${bestAgent.name}`, 80 + iconOffset, agentBoxY + 45);
 
-        // Role indicator
+        // Role indicator (text only, no emoji)
         ctx.fillStyle = '#aaaaaa';
         ctx.font = '14px Arial';
-        ctx.fillText(`${roleEmoji} ${agentRole}`, 200, agentBoxY + 45);
+        ctx.fillText(`[${agentRole}]`, 200 + iconOffset, agentBoxY + 45);
 
         // Stats display
-        const statsStartX = 350;
+        const statsStartX = 350 + (iconOffset > 0 ? 20 : 0);
 
         // Games played
         ctx.fillStyle = '#ffffff';
@@ -495,96 +562,121 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
         }
     }
 
-    // My Agents section - show all played agents with stats
-    if (sortedAgents && sortedAgents.length > 0) {
+    // My Agents section - show only the user's preferred agents (selected in My Agents tab)
+    if (hasPreferredAgents) {
         const agentsSectionY = matchSectionY + 530; // Position after matches section
-        const topAgents = sortedAgents.slice(0, 5); // Show top 5 agents
 
-        // Section header
-        const agentsHeaderGradient = ctx.createLinearGradient(50, agentsSectionY, 950, agentsSectionY + 30);
-        agentsHeaderGradient.addColorStop(0, 'rgba(88, 101, 242, 0.2)');
-        agentsHeaderGradient.addColorStop(1, 'rgba(114, 137, 218, 0.2)');
-        ctx.fillStyle = agentsHeaderGradient;
-        ctx.fillRect(50, agentsSectionY, 900, 30);
+        // Get stats for preferred agents only (match by name, case-insensitive)
+        const preferredAgentStats = preferredAgents
+            .map(prefAgentId => {
+                // Find matching agent in sortedAgents by ID or name
+                return sortedAgents.find(a =>
+                    a.id?.toLowerCase() === prefAgentId.toLowerCase() ||
+                    a.name?.toLowerCase() === prefAgentId.toLowerCase()
+                );
+            })
+            .filter(Boolean) // Remove nulls (agents with no match data)
+            .slice(0, 3); // Max 3 agents
 
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 22px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillText('MY AGENTS', 80, agentsSectionY + 22);
+        if (preferredAgentStats.length > 0) {
+            // Section header
+            const agentsHeaderGradient = ctx.createLinearGradient(50, agentsSectionY, 950, agentsSectionY + 30);
+            agentsHeaderGradient.addColorStop(0, 'rgba(88, 101, 242, 0.2)');
+            agentsHeaderGradient.addColorStop(1, 'rgba(114, 137, 218, 0.2)');
+            ctx.fillStyle = agentsHeaderGradient;
+            ctx.fillRect(50, agentsSectionY, 900, 30);
 
-        // Column headers
-        ctx.fillStyle = '#aaaaaa';
-        ctx.font = 'bold 12px Arial';
-        ctx.fillText('AGENT', 80, agentsSectionY + 50);
-        ctx.fillText('GAMES', 250, agentsSectionY + 50);
-        ctx.fillText('K/D/A', 340, agentsSectionY + 50);
-        ctx.fillText('KDA', 460, agentsSectionY + 50);
-        ctx.fillText('ACS', 540, agentsSectionY + 50);
-        ctx.fillText('HS%', 620, agentsSectionY + 50);
-        ctx.fillText('AVG KILLS', 700, agentsSectionY + 50);
-        ctx.fillText('W/L', 800, agentsSectionY + 50);
-        ctx.fillText('WIN%', 880, agentsSectionY + 50);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 22px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('MY AGENTS', 80, agentsSectionY + 22);
 
-        // Draw each agent row
-        topAgents.forEach((agent, index) => {
-            const y = agentsSectionY + 75 + index * 35;
+            // Column headers (adjusted for icon column)
+            ctx.fillStyle = '#aaaaaa';
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText('AGENT', 110, agentsSectionY + 50);
+            ctx.fillText('GAMES', 250, agentsSectionY + 50);
+            ctx.fillText('K/D/A', 330, agentsSectionY + 50);
+            ctx.fillText('KDA', 460, agentsSectionY + 50);
+            ctx.fillText('ACS', 540, agentsSectionY + 50);
+            ctx.fillText('AVG K', 620, agentsSectionY + 50);
+            ctx.fillText('W/L', 710, agentsSectionY + 50);
+            ctx.fillText('WIN%', 810, agentsSectionY + 50);
 
-            // Alternating row background
-            if (index % 2 === 0) {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
-                ctx.fillRect(50, y - 12, 900, 30);
+            // Draw each agent row (using for...of to allow async icon loading)
+            for (let index = 0; index < preferredAgentStats.length; index++) {
+                const agent = preferredAgentStats[index];
+                const y = agentsSectionY + 72 + index * 32;
+
+                // Alternating row background
+                if (index % 2 === 0) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+                    ctx.fillRect(50, y - 10, 900, 28);
+                }
+
+                // Load and draw agent icon
+                const agentIcon = await loadAgentIcon(agent.name || agent.id);
+                if (agentIcon) {
+                    // Draw small circular agent icon
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(80, y + 4, 12, 0, Math.PI * 2);
+                    ctx.clip();
+                    ctx.drawImage(agentIcon, 68, y - 8, 24, 24);
+                    ctx.restore();
+
+                    // Icon border
+                    ctx.strokeStyle = '#5865f2';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(80, y + 4, 12, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                // Get agent info for role
+                const agentInfo = getAgentById(agent.name?.toLowerCase() || agent.id);
+                const agentRole = agentInfo ? agentInfo.role : 'Agent';
+
+                // Agent name with role in brackets (offset for icon)
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 14px Arial';
+                ctx.fillText(`${agent.name || agent.id}`, 110, y + 5);
+
+                ctx.fillStyle = '#666666';
+                ctx.font = '11px Arial';
+                ctx.fillText(`[${agentRole}]`, 110, y + 18);
+
+                // Games
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '14px Arial';
+                ctx.fillText(`${agent.games}`, 250, y + 5);
+
+                // K/D/A
+                ctx.fillText(`${agent.kills}/${agent.deaths}/${agent.assists}`, 330, y + 5);
+
+                // KDA with color
+                const kdaColor = agent.kda >= 1.5 ? '#00ff88' : agent.kda >= 1.0 ? '#ffff00' : '#ff4444';
+                ctx.fillStyle = kdaColor;
+                ctx.fillText(`${agent.kda.toFixed(2)}`, 460, y + 5);
+
+                // ACS with color
+                const acsColor = agent.avgACS >= 250 ? '#00ff88' : agent.avgACS >= 200 ? '#ffff00' : '#ff8800';
+                ctx.fillStyle = acsColor;
+                ctx.fillText(`${Math.round(agent.avgACS)}`, 540, y + 5);
+
+                // Avg Kills
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(`${agent.avgKills?.toFixed(1) || (agent.kills / agent.games).toFixed(1)}`, 620, y + 5);
+
+                // W/L
+                ctx.fillText(`${agent.wins}/${agent.games - agent.wins}`, 710, y + 5);
+
+                // Win rate with color
+                const winColor = agent.winRate >= 55 ? '#00ff88' : agent.winRate >= 45 ? '#ffff00' : '#ff4444';
+                ctx.fillStyle = winColor;
+                ctx.fillText(`${agent.winRate.toFixed(0)}%`, 810, y + 5);
             }
-
-            // Get agent info
-            const agentInfo = getAgentById(agent.name?.toLowerCase() || agent.id);
-            const agentRole = agentInfo ? agentInfo.role : 'Agent';
-            const roleEmoji = ROLE_EMOJIS[agentRole] || '';
-
-            // Agent name
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 14px Arial';
-            ctx.fillText(agent.name || agent.id, 80, y + 5);
-
-            // Role indicator (small text)
-            ctx.fillStyle = '#888888';
-            ctx.font = '10px Arial';
-            ctx.fillText(agentRole, 80, y + 18);
-
-            // Games
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '14px Arial';
-            ctx.fillText(`${agent.games}`, 250, y + 5);
-
-            // K/D/A
-            ctx.fillText(`${agent.kills}/${agent.deaths}/${agent.assists}`, 340, y + 5);
-
-            // KDA with color
-            const kdaColor = agent.kda >= 1.5 ? '#00ff88' : agent.kda >= 1.0 ? '#ffff00' : '#ff4444';
-            ctx.fillStyle = kdaColor;
-            ctx.fillText(`${agent.kda.toFixed(2)}`, 460, y + 5);
-
-            // ACS with color
-            const acsColor = agent.avgACS >= 250 ? '#00ff88' : agent.avgACS >= 200 ? '#ffff00' : '#ff8800';
-            ctx.fillStyle = acsColor;
-            ctx.fillText(`${Math.round(agent.avgACS)}`, 540, y + 5);
-
-            // HS% with color
-            const hsColor = agent.hsPercent >= 25 ? '#00ff88' : agent.hsPercent >= 18 ? '#ffff00' : '#ff8800';
-            ctx.fillStyle = hsColor;
-            ctx.fillText(`${agent.hsPercent.toFixed(1)}%`, 620, y + 5);
-
-            // Avg Kills
-            ctx.fillStyle = '#ffffff';
-            ctx.fillText(`${agent.avgKills?.toFixed(1) || (agent.kills / agent.games).toFixed(1)}`, 700, y + 5);
-
-            // W/L
-            ctx.fillText(`${agent.wins}/${agent.games - agent.wins}`, 800, y + 5);
-
-            // Win rate with color
-            const winColor = agent.winRate >= 55 ? '#00ff88' : agent.winRate >= 45 ? '#ffff00' : '#ff4444';
-            ctx.fillStyle = winColor;
-            ctx.fillText(`${agent.winRate.toFixed(0)}%`, 880, y + 5);
-        });
+        }
     }
 
     // Teammate section - show best and worst teammates
@@ -616,11 +708,11 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
             ctx.lineWidth = 2;
             ctx.strokeRect(cardX, cardY, 420, 65);
 
-            // "BEST" label
+            // "BEST" label (no emoji - canvas doesn't render them properly)
             ctx.fillStyle = '#00ff88';
             ctx.font = 'bold 11px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText('🏆 BEST TEAMMATE', cardX + 10, cardY + 15);
+            ctx.fillText('* BEST TEAMMATE *', cardX + 10, cardY + 15);
 
             // Name
             ctx.fillStyle = '#ffffff';
@@ -658,11 +750,11 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
             ctx.lineWidth = 2;
             ctx.strokeRect(cardX, cardY, 420, 65);
 
-            // "WORST" label
+            // "WORST" label (no emoji - canvas doesn't render them properly)
             ctx.fillStyle = '#ff4444';
             ctx.font = 'bold 11px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText('💀 UNLUCKY TEAMMATE', cardX + 10, cardY + 15);
+            ctx.fillText('x UNLUCKY TEAMMATE x', cardX + 10, cardY + 15);
 
             // Name
             ctx.fillStyle = '#ffffff';

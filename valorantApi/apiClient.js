@@ -35,7 +35,7 @@ async function makeAPIRequest(endpoint) {
                 'Accept': '*/*',
                 'User-Agent': 'DiscordBot/1.0'
             },
-            timeout: 10000 // 10 second timeout
+            timeout: 30000 // 30 second timeout (v3 endpoints can be slow)
         };
 
         const req = https.request(options, (res) => {

@@ -39,6 +39,7 @@ const AGENT_DATA = {
     deadlock: { name: 'Deadlock', role: 'Sentinel', color: '#7F8C8D', emoji: '🔒' },
     killjoy: { name: 'Killjoy', role: 'Sentinel', color: '#F1C40F', emoji: '🤖' },
     sage: { name: 'Sage', role: 'Sentinel', color: '#1ABC9C', emoji: '💚' },
+    veto: { name: 'Veto', role: 'Sentinel', color: '#5D6D7E', emoji: '🛡️' },
     waylay: { name: 'Waylay', role: 'Sentinel', color: '#9B59B6', emoji: '🎭' },
 };
 
