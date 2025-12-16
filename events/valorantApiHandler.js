@@ -77,6 +77,7 @@ const {
 const {
   getPlayerMatchStats,
   getAgentStatsFromMatches,
+  getTeammateStatsFromMatches,
   COMPETITIVE_MODES,
 } = require("../valorantApi/matchStats");
 const { createStatsVisualization } = require("../valorantApi/statsVisualizer");
@@ -657,7 +658,10 @@ async function showUserStats(message, registration) {
       : matchData.data || [];
     const { bestAgent, sortedAgents } = getAgentStatsFromMatches(registration, agentMatchData);
 
-    // Create enhanced visualization with v3 MMR data, best agent, and all agents
+    // Calculate teammate stats from v3 match data (has all players info)
+    const teammateData = getTeammateStatsFromMatches(registration, matchData.data || []);
+
+    // Create enhanced visualization with v3 MMR data, best agent, all agents, and teammates
     const statsCanvas = await createStatsVisualization(
       accountData.data,
       mmrData.data,
@@ -666,7 +670,8 @@ async function showUserStats(message, registration) {
       registration,
       mmrDataV3.data, // Pass v3 MMR data for enhanced display
       bestAgent, // Pass best agent stats
-      sortedAgents // Pass all agents sorted by games played
+      sortedAgents, // Pass all agents sorted by games played
+      teammateData // Pass teammate statistics
     );
 
     const attachment = new AttachmentBuilder(statsCanvas.toBuffer(), {

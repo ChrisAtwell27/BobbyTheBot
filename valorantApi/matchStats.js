@@ -337,54 +337,87 @@ function calculateAverageACS(totalScore, totalMatches) {
 }
 
 /**
- * Gets agent statistics from match data (v4 endpoint)
+ * Gets agent statistics from match data (supports v1 stored-matches, v3, and v4 formats)
  * @param {Object} registration - User registration data
- * @param {Array} matchData - Match data array from v4 API
+ * @param {Array} matchData - Match data array from API
  * @returns {Object} - Agent statistics with best agent info
  */
 function getAgentStatsFromMatches(registration, matchData) {
     if (!matchData || !Array.isArray(matchData) || matchData.length === 0) {
-        return { bestAgent: null, agentStats: {} };
+        console.log('[Agent Stats] No match data provided or empty array');
+        return { bestAgent: null, agentStats: {}, sortedAgents: [] };
     }
+
+    // Debug: Check what format we're receiving
+    const sampleMatch = matchData[0];
+    const format = sampleMatch?.meta ? 'v1-stored' : (sampleMatch?.metadata ? 'v3/v4' : 'unknown');
+    console.log(`[Agent Stats] Processing ${matchData.length} matches in ${format} format for ${registration.name}`);
 
     const agentStats = {};
 
-    // Filter for competitive matches - handle both v3 and v4 formats
+    // Filter for competitive matches - handle v1 stored-matches, v3, and v4 formats
     const competitiveMatches = matchData.filter(match => {
-        if (!match.metadata) return false;
+        // v1 stored-matches format: meta.mode
+        if (match.meta?.mode && COMPETITIVE_MODES.includes(match.meta.mode.toLowerCase())) return true;
         // v3 format: metadata.mode
-        if (match.metadata.mode && match.metadata.mode.toLowerCase() === 'competitive') return true;
+        if (match.metadata?.mode && match.metadata.mode.toLowerCase() === 'competitive') return true;
         // v4 format: metadata.queue.name
-        if (match.metadata.queue?.name?.toLowerCase() === 'competitive') return true;
+        if (match.metadata?.queue?.name?.toLowerCase() === 'competitive') return true;
         return false;
-    });
+    }).slice(0, 30); // Limit to 30 matches
+
+    console.log(`[Agent Stats] Found ${competitiveMatches.length} competitive matches`);
 
     for (const match of competitiveMatches) {
-        if (!match.players) continue;
+        let player = null;
+        let agentNameRaw = null;
+        let won = false;
 
-        // Handle both v3 (players.all_players) and v4 (players array) formats
-        const playersArray = match.players?.all_players || match.players || [];
-        const player = playersArray.find(p =>
-            p.name && p.name.toLowerCase() === registration.name.toLowerCase()
-        );
+        // v1 stored-matches format: stats directly on match object
+        if (match.meta && match.stats) {
+            // In stored-matches, stats is the player's stats directly
+            player = match.stats;
+            agentNameRaw = player.character;
 
-        // Get agent name - handle both v3 (character) and v4 (agent.name) formats
-        const agentNameRaw = player?.character || player?.agent?.name;
+            // Determine win based on team scores
+            if (match.teams) {
+                const redScore = match.teams.red || 0;
+                const blueScore = match.teams.blue || 0;
+                const playerTeam = player.team;
+                if (playerTeam === 'Red' && redScore > blueScore) won = true;
+                if (playerTeam === 'Blue' && blueScore > redScore) won = true;
+            }
+        }
+        // v3/v4 format: players array
+        else if (match.players) {
+            // Handle both v3 (players.all_players) and v4 (players array) formats
+            const playersArray = match.players?.all_players || match.players || [];
+            player = playersArray.find(p =>
+                p.name && p.name.toLowerCase() === registration.name.toLowerCase()
+            );
+
+            if (!player) continue;
+
+            // Get agent name - handle both v3 (character) and v4 (agent.name) formats
+            agentNameRaw = player.character || player.agent?.name;
+
+            // Determine win - handle both v3 and v4 formats
+            if (match.teams?.red && match.teams?.blue) {
+                // v3 format: teams.red/blue.has_won
+                const playerTeam = player.team?.toLowerCase();
+                if (playerTeam === 'red') won = match.teams.red.has_won;
+                else if (playerTeam === 'blue') won = match.teams.blue.has_won;
+            } else if (Array.isArray(match.teams)) {
+                // v4 format: teams[].won
+                won = player.team_id === (match.teams.find(t => t.won) || {}).team_id;
+            }
+        } else {
+            continue;
+        }
+
         if (!player || !agentNameRaw) continue;
 
         const agentName = agentNameRaw.toLowerCase();
-
-        // Determine win - handle both v3 and v4 formats
-        let won = false;
-        if (match.teams?.red && match.teams?.blue) {
-            // v3 format: teams.red/blue.has_won
-            const playerTeam = player.team?.toLowerCase();
-            if (playerTeam === 'red') won = match.teams.red.has_won;
-            else if (playerTeam === 'blue') won = match.teams.blue.has_won;
-        } else if (Array.isArray(match.teams)) {
-            // v4 format: teams[].won
-            won = player.team_id === (match.teams.find(t => t.won) || {}).team_id;
-        }
 
         if (!agentStats[agentName]) {
             agentStats[agentName] = {
@@ -404,13 +437,16 @@ function getAgentStatsFromMatches(registration, matchData) {
         const stats = agentStats[agentName];
         stats.games++;
         if (won) stats.wins++;
-        stats.kills += player.stats?.kills || 0;
-        stats.deaths += player.stats?.deaths || 0;
-        stats.assists += player.stats?.assists || 0;
-        stats.totalScore += player.stats?.score || 0;
-        stats.headshots += player.stats?.headshots || 0;
-        stats.bodyshots += player.stats?.bodyshots || 0;
-        stats.legshots += player.stats?.legshots || 0;
+
+        // Handle different stat locations (v1 has stats directly, v3/v4 has player.stats)
+        const playerStats = player.stats || player;
+        stats.kills += playerStats.kills || 0;
+        stats.deaths += playerStats.deaths || 0;
+        stats.assists += playerStats.assists || 0;
+        stats.totalScore += playerStats.score || 0;
+        stats.headshots += playerStats.headshots || 0;
+        stats.bodyshots += playerStats.bodyshots || 0;
+        stats.legshots += playerStats.legshots || 0;
     }
 
     // Calculate derived stats and find best agent
@@ -476,7 +512,181 @@ function getAgentStatsFromMatches(registration, matchData) {
         .map(([id, stats]) => ({ id, ...stats }))
         .sort((a, b) => b.games - a.games);
 
+    console.log(`[Agent Stats] Found ${sortedAgents.length} unique agents, best agent: ${bestAgent?.name || 'none'}`);
+
     return { bestAgent, agentStats, sortedAgents };
+}
+
+/**
+ * Gets teammate statistics from match data (v3 format required - has all players)
+ * Analyzes who you've played with the most and your win rate with them
+ * @param {Object} registration - User registration data
+ * @param {Array} matchData - Match data array from v3 API (needs players.all_players)
+ * @returns {Object} - Teammate statistics with best/worst teammates
+ */
+function getTeammateStatsFromMatches(registration, matchData) {
+    if (!matchData || !Array.isArray(matchData) || matchData.length === 0) {
+        console.log('[Teammate Stats] No match data provided');
+        return { teammates: [], bestTeammate: null, worstTeammate: null };
+    }
+
+    // Only v3 format has all players - check for players.all_players
+    const hasAllPlayers = matchData[0]?.players?.all_players;
+    if (!hasAllPlayers) {
+        console.log('[Teammate Stats] Match data missing all_players (need v3 format)');
+        return { teammates: [], bestTeammate: null, worstTeammate: null };
+    }
+
+    const teammateStats = {};
+    const playerNameLower = registration.name.toLowerCase();
+
+    // Filter for competitive matches
+    const competitiveMatches = matchData.filter(match => {
+        if (match.metadata?.mode?.toLowerCase() === 'competitive') return true;
+        if (match.metadata?.queue?.name?.toLowerCase() === 'competitive') return true;
+        return false;
+    }).slice(0, 30);
+
+    console.log(`[Teammate Stats] Analyzing ${competitiveMatches.length} competitive matches for ${registration.name}`);
+
+    for (const match of competitiveMatches) {
+        const allPlayers = match.players?.all_players || [];
+
+        // Find the user in this match
+        const user = allPlayers.find(p =>
+            p.name?.toLowerCase() === playerNameLower
+        );
+        if (!user) continue;
+
+        const userTeam = user.team?.toLowerCase();
+
+        // Determine if user won this match
+        let userWon = false;
+        if (match.teams?.red && match.teams?.blue) {
+            if (userTeam === 'red') userWon = match.teams.red.has_won;
+            else if (userTeam === 'blue') userWon = match.teams.blue.has_won;
+        }
+
+        // Find all teammates (same team, not the user)
+        const teammates = allPlayers.filter(p =>
+            p.team?.toLowerCase() === userTeam &&
+            p.name?.toLowerCase() !== playerNameLower
+        );
+
+        for (const teammate of teammates) {
+            const key = `${teammate.name?.toLowerCase()}#${teammate.tag?.toLowerCase()}`;
+
+            if (!teammateStats[key]) {
+                teammateStats[key] = {
+                    name: teammate.name,
+                    tag: teammate.tag,
+                    puuid: teammate.puuid,
+                    gamesPlayed: 0,
+                    wins: 0,
+                    losses: 0,
+                    // Track their performance when playing WITH you
+                    totalKills: 0,
+                    totalDeaths: 0,
+                    totalAssists: 0,
+                    totalScore: 0,
+                    agents: {},
+                    lastSeen: null,
+                    // Track YOUR performance when playing WITH them
+                    yourKills: 0,
+                    yourDeaths: 0,
+                    yourAssists: 0,
+                    yourScore: 0
+                };
+            }
+
+            const stats = teammateStats[key];
+            stats.gamesPlayed++;
+            if (userWon) stats.wins++;
+            else stats.losses++;
+
+            // Their stats
+            stats.totalKills += teammate.stats?.kills || 0;
+            stats.totalDeaths += teammate.stats?.deaths || 0;
+            stats.totalAssists += teammate.stats?.assists || 0;
+            stats.totalScore += teammate.stats?.score || 0;
+
+            // Track agent usage
+            const agentName = teammate.character || 'Unknown';
+            stats.agents[agentName] = (stats.agents[agentName] || 0) + 1;
+
+            // Your stats when playing with them
+            stats.yourKills += user.stats?.kills || 0;
+            stats.yourDeaths += user.stats?.deaths || 0;
+            stats.yourAssists += user.stats?.assists || 0;
+            stats.yourScore += user.stats?.score || 0;
+
+            // Track last seen
+            if (match.metadata?.game_start_patched) {
+                stats.lastSeen = match.metadata.game_start_patched;
+            }
+        }
+    }
+
+    // Calculate derived stats for each teammate
+    const teammateArray = Object.entries(teammateStats)
+        .map(([key, stats]) => {
+            const winRate = stats.gamesPlayed > 0 ? (stats.wins / stats.gamesPlayed) * 100 : 0;
+            const theirKDA = stats.totalDeaths > 0
+                ? (stats.totalKills + stats.totalAssists) / stats.totalDeaths
+                : stats.totalKills + stats.totalAssists;
+            const theirAvgACS = stats.gamesPlayed > 0 ? stats.totalScore / stats.gamesPlayed : 0;
+            const yourKDA = stats.yourDeaths > 0
+                ? (stats.yourKills + stats.yourAssists) / stats.yourDeaths
+                : stats.yourKills + stats.yourAssists;
+            const yourAvgACS = stats.gamesPlayed > 0 ? stats.yourScore / stats.gamesPlayed : 0;
+
+            // Find their most played agent
+            const favoriteAgent = Object.entries(stats.agents)
+                .sort((a, b) => b[1] - a[1])[0]?.[0] || 'Unknown';
+
+            return {
+                key,
+                name: stats.name,
+                tag: stats.tag,
+                puuid: stats.puuid,
+                gamesPlayed: stats.gamesPlayed,
+                wins: stats.wins,
+                losses: stats.losses,
+                winRate,
+                theirKDA,
+                theirAvgACS,
+                theirAvgKills: stats.gamesPlayed > 0 ? stats.totalKills / stats.gamesPlayed : 0,
+                yourKDA,
+                yourAvgACS,
+                favoriteAgent,
+                lastSeen: stats.lastSeen
+            };
+        })
+        .filter(t => t.gamesPlayed >= 2) // Only show teammates with 2+ games
+        .sort((a, b) => b.gamesPlayed - a.gamesPlayed);
+
+    // Find best teammate (highest win rate with at least 3 games)
+    const qualifiedTeammates = teammateArray.filter(t => t.gamesPlayed >= 3);
+    const bestTeammate = qualifiedTeammates.length > 0
+        ? qualifiedTeammates.reduce((best, curr) =>
+            curr.winRate > best.winRate ? curr : best
+          )
+        : teammateArray[0] || null;
+
+    // Find worst teammate (lowest win rate with at least 3 games)
+    const worstTeammate = qualifiedTeammates.length > 0
+        ? qualifiedTeammates.reduce((worst, curr) =>
+            curr.winRate < worst.winRate ? curr : worst
+          )
+        : null;
+
+    console.log(`[Teammate Stats] Found ${teammateArray.length} unique teammates (2+ games), best: ${bestTeammate?.name || 'none'}, worst: ${worstTeammate?.name || 'none'}`);
+
+    return {
+        teammates: teammateArray.slice(0, 10), // Top 10 most played with
+        bestTeammate,
+        worstTeammate
+    };
 }
 
 module.exports = {
@@ -486,6 +696,7 @@ module.exports = {
     calculateWinRate,
     calculateAverageACS,
     getAgentStatsFromMatches,
+    getTeammateStatsFromMatches,
     clearCachedStats,
     clearAllCachedStats,
     COMPETITIVE_MODES

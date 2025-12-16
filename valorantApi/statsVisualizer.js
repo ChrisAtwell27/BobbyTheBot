@@ -18,14 +18,20 @@ const { getAgentById, ROLE_EMOJIS } = require('./agentUtils');
  * @param {Object} mmrDataV3 - MMR data from v3 API (optional, for enhanced display)
  * @param {Object} bestAgent - Best agent stats (optional)
  * @param {Array} sortedAgents - All agents sorted by games played (optional)
+ * @param {Object} teammateData - Teammate statistics (optional, { teammates, bestTeammate, worstTeammate })
  * @returns {Promise<Canvas>} - The created canvas
  */
-async function createStatsVisualization(accountData, mmrData, matchData, userAvatar, registration, mmrDataV3 = null, bestAgent = null, sortedAgents = null) {
+async function createStatsVisualization(accountData, mmrData, matchData, userAvatar, registration, mmrDataV3 = null, bestAgent = null, sortedAgents = null, teammateData = null) {
     // Calculate canvas height based on content
     const hasAgents = sortedAgents && sortedAgents.length > 0;
     const agentCount = hasAgents ? Math.min(sortedAgents.length, 5) : 0; // Show top 5 agents
     const agentSectionHeight = hasAgents ? 40 + (agentCount * 35) : 0;
-    const canvasHeight = 1050 + agentSectionHeight;
+
+    // Calculate teammate section height
+    const hasTeammates = teammateData?.bestTeammate || teammateData?.worstTeammate;
+    const teammateSectionHeight = hasTeammates ? 120 : 0; // Best/worst teammate cards
+
+    const canvasHeight = 1050 + agentSectionHeight + teammateSectionHeight;
 
     const canvas = createCanvas(1000, canvasHeight);
     const ctx = canvas.getContext('2d');
@@ -579,6 +585,107 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
             ctx.fillStyle = winColor;
             ctx.fillText(`${agent.winRate.toFixed(0)}%`, 880, y + 5);
         });
+    }
+
+    // Teammate section - show best and worst teammates
+    if (hasTeammates) {
+        const teammateSectionY = matchSectionY + 530 + agentSectionHeight;
+
+        // Section header
+        const teammateHeaderGradient = ctx.createLinearGradient(50, teammateSectionY, 950, teammateSectionY + 30);
+        teammateHeaderGradient.addColorStop(0, 'rgba(255, 165, 0, 0.2)');
+        teammateHeaderGradient.addColorStop(1, 'rgba(255, 100, 0, 0.2)');
+        ctx.fillStyle = teammateHeaderGradient;
+        ctx.fillRect(50, teammateSectionY, 900, 30);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 22px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('FREQUENT TEAMMATES', 80, teammateSectionY + 22);
+
+        // Best teammate card (left side)
+        if (teammateData.bestTeammate) {
+            const best = teammateData.bestTeammate;
+            const cardX = 60;
+            const cardY = teammateSectionY + 45;
+
+            // Card background (green tint for best)
+            ctx.fillStyle = 'rgba(0, 255, 136, 0.1)';
+            ctx.fillRect(cardX, cardY, 420, 65);
+            ctx.strokeStyle = 'rgba(0, 255, 136, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(cardX, cardY, 420, 65);
+
+            // "BEST" label
+            ctx.fillStyle = '#00ff88';
+            ctx.font = 'bold 11px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('🏆 BEST TEAMMATE', cardX + 10, cardY + 15);
+
+            // Name
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText(`${best.name}#${best.tag}`, cardX + 10, cardY + 35);
+
+            // Stats
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#aaaaaa';
+            ctx.fillText(`${best.gamesPlayed} games`, cardX + 10, cardY + 52);
+
+            ctx.fillStyle = '#00ff88';
+            ctx.fillText(`${best.winRate.toFixed(0)}% WR`, cardX + 90, cardY + 52);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(`${best.wins}W-${best.losses}L`, cardX + 160, cardY + 52);
+
+            // Their performance
+            ctx.fillStyle = '#888888';
+            ctx.font = '11px Arial';
+            ctx.fillText(`Their avg: ${best.theirAvgACS.toFixed(0)} ACS • ${best.theirKDA.toFixed(2)} KDA`, cardX + 240, cardY + 35);
+            ctx.fillText(`Plays: ${best.favoriteAgent}`, cardX + 240, cardY + 52);
+        }
+
+        // Worst teammate card (right side)
+        if (teammateData.worstTeammate && teammateData.worstTeammate.key !== teammateData.bestTeammate?.key) {
+            const worst = teammateData.worstTeammate;
+            const cardX = 520;
+            const cardY = teammateSectionY + 45;
+
+            // Card background (red tint for worst)
+            ctx.fillStyle = 'rgba(255, 68, 68, 0.1)';
+            ctx.fillRect(cardX, cardY, 420, 65);
+            ctx.strokeStyle = 'rgba(255, 68, 68, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(cardX, cardY, 420, 65);
+
+            // "WORST" label
+            ctx.fillStyle = '#ff4444';
+            ctx.font = 'bold 11px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('💀 UNLUCKY TEAMMATE', cardX + 10, cardY + 15);
+
+            // Name
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText(`${worst.name}#${worst.tag}`, cardX + 10, cardY + 35);
+
+            // Stats
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#aaaaaa';
+            ctx.fillText(`${worst.gamesPlayed} games`, cardX + 10, cardY + 52);
+
+            ctx.fillStyle = '#ff4444';
+            ctx.fillText(`${worst.winRate.toFixed(0)}% WR`, cardX + 90, cardY + 52);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(`${worst.wins}W-${worst.losses}L`, cardX + 160, cardY + 52);
+
+            // Their performance
+            ctx.fillStyle = '#888888';
+            ctx.font = '11px Arial';
+            ctx.fillText(`Their avg: ${worst.theirAvgACS.toFixed(0)} ACS • ${worst.theirKDA.toFixed(2)} KDA`, cardX + 240, cardY + 35);
+            ctx.fillText(`Plays: ${worst.favoriteAgent}`, cardX + 240, cardY + 52);
+        }
     }
 
     // Enhanced footer with version info
