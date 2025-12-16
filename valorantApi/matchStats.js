@@ -127,7 +127,7 @@ async function getPlayerMatchStats(registration, forceRefresh = false) {
         let totalKills = 0;
         let totalDeaths = 0;
         let totalAssists = 0;
-        let totalScore = 0;
+        let totalACS = 0;
         let wins = 0;
         let validMatches = 0;
 
@@ -146,7 +146,8 @@ async function getPlayerMatchStats(registration, forceRefresh = false) {
             totalKills += playerStats.kills || 0;
             totalDeaths += playerStats.deaths || 0;
             totalAssists += playerStats.assists || 0;
-            totalScore += playerStats.score || 0;
+            // score field is already ACS (Average Combat Score per round)
+            totalACS += playerStats.score || 0;
 
             // Determine if won based on team scores
             const redScore = teams.red || 0;
@@ -164,7 +165,8 @@ async function getPlayerMatchStats(registration, forceRefresh = false) {
         // Calculate averages and ratios
         const avgKDA = totalDeaths > 0 ? (totalKills + totalAssists) / totalDeaths : totalKills + totalAssists;
         const winRate = validMatches > 0 ? (wins / validMatches) * 100 : 0;
-        const avgACS = validMatches > 0 ? totalScore / validMatches : 0;
+        // Average ACS across all matches
+        const avgACS = validMatches > 0 ? totalACS / validMatches : 0;
 
         console.log(`[Match Stats] Player ${registration.name}#${registration.tag} stats from ${validMatches} competitive matches:`);
         console.log(`  - KDA: ${totalKills}/${totalDeaths}/${totalAssists} (${avgKDA.toFixed(2)})`);

@@ -529,8 +529,8 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
                 const kdRatio = player.stats.deaths > 0 ? (player.stats.kills / player.stats.deaths).toFixed(2) : player.stats.kills.toFixed(2);
                 ctx.fillText(`${kda} (${kdRatio} K/D)`, 450, y);
 
-                // Score with color coding
-                const acs = player.stats.score;
+                // ACS (Average Combat Score) - score field from API is already ACS
+                const acs = player.stats.score || 0;
                 ctx.fillStyle = acs >= 250 ? '#00ff88' : acs >= 200 ? '#ffff00' : acs >= 150 ? '#ff8800' : '#ff4444';
                 ctx.fillText(`${acs} ACS`, 600, y);
 
