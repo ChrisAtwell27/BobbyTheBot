@@ -21,7 +21,7 @@ const AGENT_DATA = {
     phoenix: { name: 'Phoenix', role: 'Duelist', color: '#E74C3C', emoji: '🔥' },
     raze: { name: 'Raze', role: 'Duelist', color: '#E67E22', emoji: '💥' },
     reyna: { name: 'Reyna', role: 'Duelist', color: '#9B59B6', emoji: '👁️' },
-    vyse: { name: 'Vyse', role: 'Duelist', color: '#F39C12', emoji: '🔧' },
+    waylay: { name: 'Waylay', role: 'Duelist', color: '#9B59B6', emoji: '🎭' },
     yoru: { name: 'Yoru', role: 'Duelist', color: '#3498DB', emoji: '🌀' },
 
     // Initiators
@@ -40,7 +40,7 @@ const AGENT_DATA = {
     killjoy: { name: 'Killjoy', role: 'Sentinel', color: '#F1C40F', emoji: '🤖' },
     sage: { name: 'Sage', role: 'Sentinel', color: '#1ABC9C', emoji: '💚' },
     veto: { name: 'Veto', role: 'Sentinel', color: '#5D6D7E', emoji: '🛡️' },
-    waylay: { name: 'Waylay', role: 'Sentinel', color: '#9B59B6', emoji: '🎭' },
+    vyse: { name: 'Vyse', role: 'Sentinel', color: '#F39C12', emoji: '🔧' },
 };
 
 // Role colors for grouping
