@@ -535,6 +535,7 @@ function gracefulShutdown(signal) {
     global.mafiaHandlerIntervals,
     global.registrationManagerIntervals,
     global.setupReminderIntervals,
+    global.voteReminderIntervals,
   ];
 
   let clearedCount = 0;

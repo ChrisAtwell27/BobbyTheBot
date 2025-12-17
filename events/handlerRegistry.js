@@ -50,6 +50,9 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Lottery handler - weekly lottery system with scheduled draws
     require('./lotteryHandler')(client);
 
+    // Vote reminder handler - weekly reminders to vote on top.gg
+    require('./voteReminderHandler')(client);
+
     // Betting handler - custom betting pools with button/modal interactions
     const bettingHandler = require('./bettingHandler');
     const bettingWrapper = createHandlerWrapper(client, () => bettingHandler);

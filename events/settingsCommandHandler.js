@@ -33,7 +33,7 @@ module.exports = (client) => {
           },
           {
             name: '🔧 Available Settings',
-            value: '• Feature toggles (Trivia, Alerts, Gambling, etc.)\n• Audit log channel\n• Premium features\n• API configuration',
+            value: '• Feature toggles (Trivia, Alerts, Gambling, etc.)\n• Vote reminders (`!votereminder`)\n• Audit log channel\n• Premium features\n• API configuration',
             inline: false
           },
           {
