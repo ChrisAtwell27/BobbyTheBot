@@ -1,7 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { normalizeTier, TIERS } = require('../utils/subscriptionUtils');
-const { getConvexClient } = require('../utils/convexClient');
-const { api } = require('../convex/_generated/api');
+const { normalizeTier, TIERS, getSubscription } = require('../utils/subscriptionUtils');
 
 /**
  * Subscription Command Handler
@@ -62,11 +60,8 @@ module.exports = (client) => {
     try {
       const guildId = message.guild.id;
 
-      // Get Convex client and query THIS GUILD's tier from the servers table
-      const convex = getConvexClient();
-      const server = await convex.query(api.servers.getServer, {
-        guildId: guildId
-      });
+      // Get subscription from website API (single source of truth)
+      const subscription = await getSubscription(guildId);
 
       // Tier information
       const tierEmojis = {
@@ -93,9 +88,9 @@ module.exports = (client) => {
         [TIERS.ULTIMATE]: 'Everything in Plus + Valorant API Stats, 65+ Mafia Roles & Priority Support'
       };
 
-      // Get tier from the SERVERS table - each guild has its own tier
-      const currentTier = normalizeTier(server?.tier || 'free');
-      const status = 'active'; // Servers table doesn't track status
+      // Get tier from website API - the single source of truth
+      const currentTier = normalizeTier(subscription?.tier || 'free');
+      const status = subscription?.status || 'active';
 
       // Create embed
       const embedColor = tierColors[currentTier];

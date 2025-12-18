@@ -1,12 +1,14 @@
 // ===============================================
 // SUBSCRIPTION UTILITIES
 // ===============================================
-// Utilities for checking user subscription tiers and access control
-// Uses Convex as the source of truth for subscription data
+// Utilities for checking guild subscription tiers and access control
+// Uses the website API (crackedgames.co) as the single source of truth
 
-const { getConvexClient } = require('./convexClient');
-const { api } = require('../convex/_generated/api');
 const { EmbedBuilder } = require('discord.js');
+
+// Website API configuration
+const WEBSITE_URL = process.env.WEBSITE_URL || 'https://crackedgames.co';
+const API_SECRET = process.env.SUBSCRIPTION_API_SECRET;
 
 // Tier constants (hierarchical: free < plus < ultimate)
 const TIERS = {
@@ -29,7 +31,7 @@ const TIER_HIERARCHY = {
     [TIERS.ENTERPRISE]: 2  // Legacy: enterprise = ultimate
 };
 
-// Cache subscription data to reduce database queries
+// Cache subscription data to reduce API calls
 // Using a simple Map with 5-minute cache expiration
 const subscriptionCache = new Map();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
@@ -53,49 +55,66 @@ function normalizeTier(tier) {
 }
 
 /**
- * Get subscription data for a guild/server by owner ID (with caching)
- * @param {string} guildId - Discord guild (server) ID
- * @param {string} ownerId - Discord owner ID of the guild
- * @param {boolean} forceRefresh - Skip cache and force database query
- * @returns {Promise<Object|null>} - Subscription object or null if not found
+ * Fetch subscription from website API
+ * @param {string} guildId - Discord guild ID
+ * @returns {Promise<Object|null>} - Subscription data or null on error
  */
-async function getSubscriptionByOwner(ownerId, forceRefresh = false) {
-    const cacheKey = `owner_${ownerId}`;
-
-    // Check cache first (unless force refresh)
-    if (!forceRefresh) {
-        const cached = subscriptionCache.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-            return cached.data;
-        }
+async function fetchSubscriptionFromAPI(guildId) {
+    if (!API_SECRET) {
+        console.warn('[Subscription] SUBSCRIPTION_API_SECRET not set, defaulting to free tier');
+        return null;
     }
 
     try {
-        const convex = getConvexClient();
-        const subscription = await convex.query(api.subscriptions.getSubscription, {
-            discordId: ownerId
+        const response = await fetch(`${WEBSITE_URL}/api/subscription/guild/${guildId}`, {
+            method: 'GET',
+            headers: {
+                'X-API-Key': API_SECRET,
+                'Content-Type': 'application/json'
+            }
         });
 
-        // Cache the result (including null results to prevent repeated queries)
-        subscriptionCache.set(cacheKey, {
-            data: subscription,
-            timestamp: Date.now()
-        });
+        if (!response.ok) {
+            if (response.status === 404) {
+                // Guild not found in website database - return free tier
+                return {
+                    tier: 'free',
+                    status: 'active',
+                    features: [],
+                    guildId
+                };
+            }
+            console.error(`[Subscription] API error for guild ${guildId}: ${response.status}`);
+            return null;
+        }
 
-        return subscription;
+        const data = await response.json();
+
+        if (data.success && data.subscription) {
+            return {
+                tier: data.subscription.tier || 'free',
+                status: data.subscription.status || 'active',
+                features: data.subscription.features || [],
+                guildId: data.subscription.guildId || guildId,
+                guildName: data.subscription.guildName,
+                expiresAt: data.subscription.expiresAt
+            };
+        }
+
+        return null;
     } catch (error) {
-        console.error(`[Subscription] Error fetching subscription for owner ${ownerId}:`, error);
+        console.error(`[Subscription] Failed to fetch from API for guild ${guildId}:`, error.message);
         return null;
     }
 }
 
 /**
  * Get subscription data for a specific guild (with caching)
- * Uses the SERVERS table as source of truth - each guild has its own tier
+ * Fetches from website API - the single source of truth
  * @param {string} guildId - Discord guild (server) ID
- * @param {string} ownerId - Discord owner ID (not used anymore, kept for backward compatibility)
- * @param {boolean} forceRefresh - Skip cache and force database query
- * @returns {Promise<Object|null>} - Guild subscription object with tier/status or null
+ * @param {string} ownerId - Discord owner ID (kept for backward compatibility, not used)
+ * @param {boolean} forceRefresh - Skip cache and force API call
+ * @returns {Promise<Object>} - Guild subscription object with tier/status
  */
 async function getSubscription(guildId, ownerId = null, forceRefresh = false) {
     // Check guild cache first
@@ -106,64 +125,59 @@ async function getSubscription(guildId, ownerId = null, forceRefresh = false) {
         }
     }
 
-    try {
-        const convex = getConvexClient();
+    // Fetch from website API
+    const subscription = await fetchSubscriptionFromAPI(guildId);
 
-        // Query the SERVERS table directly - this is the source of truth for guild tiers
-        const server = await convex.query(api.servers.getServer, {
-            guildId: guildId
-        });
-
-        if (server) {
-            // Return guild-specific subscription data from servers table
-            const guildSubData = {
-                // Guild's tier from the servers table (THIS IS THE SOURCE OF TRUTH)
-                tier: server.tier || 'free',
-                status: 'active', // Servers table doesn't track status, assume active
-                guildId: guildId,
-            };
-
-            // Cache the guild-specific result
-            subscriptionCache.set(guildId, {
-                data: guildSubData,
-                timestamp: Date.now()
-            });
-
-            return guildSubData;
-        }
-
-        // Server not found - return free tier (new server)
-        const defaultData = {
-            tier: 'free',
-            status: 'active',
-            guildId: guildId,
-        };
-
+    if (subscription) {
+        // Cache the result
         subscriptionCache.set(guildId, {
-            data: defaultData,
+            data: subscription,
             timestamp: Date.now()
         });
-
-        return defaultData;
-    } catch (error) {
-        console.error(`[Subscription] Error fetching subscription for guild ${guildId}:`, error);
-        return null;
+        return subscription;
     }
+
+    // API failed or returned null - return free tier as fallback
+    const defaultData = {
+        tier: 'free',
+        status: 'active',
+        features: [],
+        guildId: guildId,
+    };
+
+    subscriptionCache.set(guildId, {
+        data: defaultData,
+        timestamp: Date.now()
+    });
+
+    return defaultData;
+}
+
+/**
+ * Get subscription data for a guild/server by owner ID
+ * @deprecated Use getSubscription(guildId) instead - website is now source of truth
+ * @param {string} ownerId - Discord owner ID
+ * @param {boolean} forceRefresh - Skip cache
+ * @returns {Promise<Object|null>} - Subscription object or null
+ */
+async function getSubscriptionByOwner(ownerId, forceRefresh = false) {
+    console.warn('[Subscription] getSubscriptionByOwner is deprecated. Use getSubscription(guildId) instead.');
+    // Return null as we no longer track by owner
+    return null;
 }
 
 /**
  * Check if a guild/server has access to a specific tier (or higher)
- * Each guild has its OWN subscription tier - not shared with other guilds
  * @param {string} guildId - Discord guild (server) ID
  * @param {string} requiredTier - Required tier level (TIERS.FREE, TIERS.PLUS, or TIERS.ULTIMATE)
- * @param {string} ownerId - Discord owner ID of the guild (required for Convex lookup)
+ * @param {string} ownerId - Discord owner ID (not used, kept for backward compatibility)
  * @returns {Promise<Object>} - { hasAccess: boolean, guildTier: string, subscription: Object|null }
  */
 async function checkSubscription(guildId, requiredTier = TIERS.FREE, ownerId = null) {
     // Normalize the required tier
     const normalizedRequired = normalizeTier(requiredTier);
 
-    // Get guild's specific subscription (each guild has its own tier!)
+    // Get guild's subscription from website API
     const subscription = await getSubscription(guildId, ownerId);
 
     // If no subscription found, default to free tier
@@ -176,7 +190,7 @@ async function checkSubscription(guildId, requiredTier = TIERS.FREE, ownerId = n
         };
     }
 
-    // Use this guild's specific tier (NOT the owner's main tier)
+    // Use this guild's specific tier
     const guildTier = normalizeTier(subscription.tier);
 
     // Check if subscription is active and valid
@@ -204,6 +218,17 @@ async function checkSubscription(guildId, requiredTier = TIERS.FREE, ownerId = n
         guildTier,
         subscription
     };
+}
+
+/**
+ * Check if a subscription has a specific feature
+ * Uses the features array from the website API
+ * @param {Object} subscription - Subscription object from getSubscription
+ * @param {string} featureName - Feature name to check
+ * @returns {boolean} - Whether the subscription has the feature
+ */
+function hasFeature(subscription, featureName) {
+    return subscription?.features?.includes(featureName) ?? false;
 }
 
 /**
@@ -259,12 +284,12 @@ function clearSubscriptionCache(guildId) {
 }
 
 /**
- * Clear cached subscription for an owner (useful after subscription updates)
+ * Clear cached subscription for an owner
+ * @deprecated No longer used - subscriptions are per-guild from website
  * @param {string} ownerId - Discord owner ID
  */
 function clearOwnerSubscriptionCache(ownerId) {
-    subscriptionCache.delete(`owner_${ownerId}`);
-    console.log(`[Subscription] Cache cleared for owner ${ownerId}`);
+    console.warn('[Subscription] clearOwnerSubscriptionCache is deprecated. Use clearSubscriptionCache(guildId) instead.');
 }
 
 /**
@@ -321,16 +346,17 @@ module.exports = {
 
     // Core functions
     getSubscription,
-    getSubscriptionByOwner,
+    getSubscriptionByOwner, // Deprecated
     checkSubscription,
     normalizeTier,
+    hasFeature,
 
     // UI helpers
     createUpgradeEmbed,
 
     // Cache management
     clearSubscriptionCache,
-    clearOwnerSubscriptionCache,
+    clearOwnerSubscriptionCache, // Deprecated
     clearAllSubscriptionCache,
 
     // Middleware
