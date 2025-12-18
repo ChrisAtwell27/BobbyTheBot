@@ -89,7 +89,9 @@ async function fetchSubscriptionFromAPI(guildId) {
         }
 
         const data = await response.json();
+        console.log(`[Subscription] API response for guild ${guildId}:`, JSON.stringify(data));
 
+        // Handle nested subscription object
         if (data.success && data.subscription) {
             return {
                 tier: data.subscription.tier || 'free',
@@ -101,6 +103,31 @@ async function fetchSubscriptionFromAPI(guildId) {
             };
         }
 
+        // Handle flat response (tier at root level)
+        if (data.success && data.tier) {
+            return {
+                tier: data.tier || 'free',
+                status: data.status || 'active',
+                features: data.features || [],
+                guildId: data.guildId || guildId,
+                guildName: data.guildName,
+                expiresAt: data.expiresAt
+            };
+        }
+
+        // Handle case where success is not present but tier is
+        if (data.tier) {
+            return {
+                tier: data.tier || 'free',
+                status: data.status || 'active',
+                features: data.features || [],
+                guildId: data.guildId || guildId,
+                guildName: data.guildName,
+                expiresAt: data.expiresAt
+            };
+        }
+
+        console.warn(`[Subscription] Unexpected API response format for guild ${guildId}:`, data);
         return null;
     } catch (error) {
         console.error(`[Subscription] Failed to fetch from API for guild ${guildId}:`, error.message);
