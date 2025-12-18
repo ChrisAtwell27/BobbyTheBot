@@ -472,7 +472,8 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
             ctx.fillText('RECENT COMPETITIVE MATCHES', 80, matchSectionY + 22);
 
             const recentMatches = competitiveMatches.slice(0, 8); // Show up to 8 recent matches
-            recentMatches.forEach((match, index) => {
+            for (let index = 0; index < recentMatches.length; index++) {
+                const match = recentMatches[index];
                 const y = matchSectionY + 55 + index * 60;
 
                 // Handle both v3 (players.all_players) and v4 (players array) formats
@@ -520,9 +521,34 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
                 const mapName = typeof match.metadata.map === 'string' ? match.metadata.map : match.metadata.map?.name || 'Unknown';
                 ctx.fillText(mapName, 160, y);
 
-                // Agent name - handle both v3 (character) and v4 (agent.name) formats
+                // Agent icon - handle both v3 (character) and v4 (agent.name) formats
                 const agentName = player.character || player.agent?.name || 'Unknown';
-                ctx.fillText(agentName, 320, y);
+                const matchAgentIcon = await loadAgentIcon(agentName);
+                const agentIconSize = 32;
+                const agentIconX = 310;
+                const agentIconY = y - 20;
+
+                if (matchAgentIcon) {
+                    // Draw circular agent icon
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(agentIconX + agentIconSize/2, agentIconY + agentIconSize/2, agentIconSize/2, 0, Math.PI * 2);
+                    ctx.clip();
+                    ctx.drawImage(matchAgentIcon, agentIconX, agentIconY, agentIconSize, agentIconSize);
+                    ctx.restore();
+
+                    // Add subtle border around icon
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(agentIconX + agentIconSize/2, agentIconY + agentIconSize/2, agentIconSize/2, 0, Math.PI * 2);
+                    ctx.stroke();
+                } else {
+                    // Fallback to text if icon not found
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 14px Arial';
+                    ctx.fillText(agentName, 320, y);
+                }
 
                 // Enhanced KDA display
                 const kda = `${player.stats.kills}/${player.stats.deaths}/${player.stats.assists}`;
@@ -546,7 +572,7 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
                 const hsPercent = totalShots > 0 ? Math.round((player.stats.headshots / totalShots) * 100) : 0;
                 ctx.fillStyle = hsPercent >= 30 ? '#00ff88' : hsPercent >= 20 ? '#ffff00' : '#ff8800';
                 ctx.fillText(`HS: ${hsPercent}%`, 820, y);
-            });
+            }
         } else {
             // No competitive matches found
             ctx.fillStyle = '#ffffff';
