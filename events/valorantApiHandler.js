@@ -88,6 +88,73 @@ const {
 } = require("../valorantApi/teamBalancer");
 
 // ===============================================
+// VALSTATS DATA CACHE
+// ===============================================
+// Caches API data from initial !valstats call to reuse when buttons are clicked
+// This avoids re-fetching data for "Detailed Matches", "MMR History", etc.
+// Cache key format: `${guildId}_${userId}` -> { data, timestamp }
+const valstatsCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL
+
+/**
+ * Get cached valstats data for a user
+ * @param {string} guildId - Discord guild ID
+ * @param {string} userId - Discord user ID
+ * @returns {Object|null} - Cached data or null if expired/missing
+ */
+function getCachedValstatsData(guildId, userId) {
+  const key = `${guildId}_${userId}`;
+  const cached = valstatsCache.get(key);
+
+  if (!cached) return null;
+
+  // Check if cache has expired
+  if (Date.now() - cached.timestamp > CACHE_TTL) {
+    valstatsCache.delete(key);
+    return null;
+  }
+
+  console.log(`[ValStats Cache] Using cached data for ${userId}`);
+  return cached.data;
+}
+
+/**
+ * Store valstats data in cache
+ * @param {string} guildId - Discord guild ID
+ * @param {string} userId - Discord user ID
+ * @param {Object} data - Data to cache (accountData, mmrData, matchData, etc.)
+ */
+function setCachedValstatsData(guildId, userId, data) {
+  const key = `${guildId}_${userId}`;
+  valstatsCache.set(key, {
+    data,
+    timestamp: Date.now()
+  });
+  console.log(`[ValStats Cache] Cached data for ${userId}`);
+
+  // Clean up old entries periodically (keep cache size reasonable)
+  if (valstatsCache.size > 500) {
+    const now = Date.now();
+    for (const [k, v] of valstatsCache) {
+      if (now - v.timestamp > CACHE_TTL) {
+        valstatsCache.delete(k);
+      }
+    }
+  }
+}
+
+/**
+ * Clear cached data for a user (e.g., after refresh button)
+ * @param {string} guildId - Discord guild ID
+ * @param {string} userId - Discord user ID
+ */
+function clearCachedValstatsData(guildId, userId) {
+  const key = `${guildId}_${userId}`;
+  valstatsCache.delete(key);
+  console.log(`[ValStats Cache] Cleared cache for ${userId}`);
+}
+
+// ===============================================
 // UNIQUE HANDLER FUNCTIONS
 // ===============================================
 // These functions are specific to this handler and handle command logic
@@ -668,6 +735,18 @@ async function showUserStats(message, registration) {
     // Calculate teammate stats from v3 match data (has all players info)
     const teammateData = getTeammateStatsFromMatches(registration, matchData.data || []);
 
+    // Cache all the fetched data for reuse when buttons are clicked
+    // This avoids re-fetching when user clicks "Detailed Matches" or "MMR History"
+    setCachedValstatsData(message.guild?.id || 'dm', message.author.id, {
+      accountData: accountData.data,
+      mmrData: mmrData.data,
+      mmrDataV3: mmrDataV3.data,
+      matchData: matchData.data || [],
+      storedMatchData: storedMatchData.data || [],
+      registration,
+      userAvatar
+    });
+
     // Create enhanced visualization with v3 MMR data, best agent, all agents, and teammates
     const statsCanvas = await createStatsVisualization(
       accountData.data,
@@ -770,7 +849,7 @@ async function showMMRHistory(message, registration) {
   const loadingEmbed = new EmbedBuilder()
     .setTitle("🔄 Loading MMR History...")
     .setColor("#ff4654")
-    .setDescription("Fetching your ranked progression history with visual analysis...")
+    .setDescription("Loading your ranked progression history...")
     .setTimestamp();
 
   const loadingMessage = await message.channel.send({ embeds: [loadingEmbed] });
@@ -780,27 +859,54 @@ async function showMMRHistory(message, registration) {
       `Fetching MMR history for: ${registration.name}#${registration.tag}`
     );
 
-    // Fetch account data, MMR v3, and MMR history in parallel
-    const [accountData, mmrDataV3, mmrHistory] = await Promise.all([
-      getAccountData(registration.name, registration.tag),
-      getMMRDataV3(registration.region, registration.name, registration.tag),
-      getMMRHistory(registration.region, registration.name, registration.tag),
-    ]);
+    // Try to use cached data first (from initial !valstats call)
+    const cachedData = getCachedValstatsData(message.guild?.id || 'dm', message.author.id);
 
-    if (mmrDataV3.status !== 200 && mmrHistory.status !== 200) {
+    let accountData, mmrDataV3, mmrHistory;
+
+    if (cachedData && cachedData.mmrDataV3) {
+      // Use cached account and MMR data, only fetch MMR history (not cached)
+      console.log('[MMR History] Using cached data from !valstats');
+      accountData = cachedData.accountData;
+      mmrDataV3 = cachedData.mmrDataV3;
+
+      // MMR History isn't cached - fetch it fresh
+      mmrHistory = await getMMRHistory(registration.region, registration.name, registration.tag)
+        .catch(err => {
+          console.warn("MMR history endpoint failed:", err.message);
+          return { status: 0, data: null, error: err.message };
+        });
+    } else {
+      // No cache - fetch all data fresh
+      console.log('[MMR History] No cache available, fetching fresh data');
+
+      const [accountResult, mmrV3Result, mmrHistoryResult] = await Promise.all([
+        getAccountData(registration.name, registration.tag),
+        getMMRDataV3(registration.region, registration.name, registration.tag),
+        getMMRHistory(registration.region, registration.name, registration.tag),
+      ]);
+
+      accountData = accountResult?.data || { name: registration.name, tag: registration.tag };
+      mmrDataV3 = mmrV3Result?.data || null;
+      mmrHistory = mmrHistoryResult;
+    }
+
+    // Check if we have at least some MMR data
+    const hasMMRData = mmrDataV3 || (mmrHistory?.status === 200 && mmrHistory?.data);
+    if (!hasMMRData) {
       throw new Error("Could not fetch MMR data. Player may not have competitive history.");
     }
 
     // Get user avatar
-    const userAvatar = message.author.displayAvatarURL({
+    const userAvatar = cachedData?.userAvatar || message.author.displayAvatarURL({
       extension: "png",
       size: 256,
     });
 
     // Create MMR history canvas
     const mmrCanvas = await createMMRHistoryCanvas(
-      accountData?.data || { name: registration.name, tag: registration.tag },
-      mmrDataV3?.data || null,
+      accountData || { name: registration.name, tag: registration.tag },
+      mmrDataV3 || null,
       mmrHistory?.data || null,
       registration,
       userAvatar
@@ -1002,7 +1108,7 @@ async function showUserMatches(message, registration) {
   const loadingEmbed = new EmbedBuilder()
     .setTitle("🔄 Loading Detailed Match History...")
     .setColor("#ff4654")
-    .setDescription("Fetching your recent competitive matches with detailed analysis...")
+    .setDescription("Loading your recent competitive matches...")
     .setTimestamp();
 
   const loadingMessage = await message.channel.send({ embeds: [loadingEmbed] });
@@ -1012,23 +1118,44 @@ async function showUserMatches(message, registration) {
       `Fetching detailed matches for: ${registration.name}#${registration.tag}`
     );
 
-    // Fetch account data and matches
-    const [accountData, matchData, storedMatchData] = await Promise.all([
-      getAccountData(registration.name, registration.tag),
-      getMatches(registration.region, registration.name, registration.tag).catch(err => {
-        console.warn("v3 matches endpoint failed:", err.message);
-        return { status: 0, data: [], error: err.message };
-      }),
-      getStoredMatches(registration.region, registration.name, registration.tag).catch(err => {
-        console.warn("Stored matches endpoint failed:", err.message);
-        return { status: 0, data: [], error: err.message };
-      })
-    ]);
+    // Try to use cached data first (from initial !valstats call)
+    const cachedData = getCachedValstatsData(message.guild?.id || 'dm', message.author.id);
 
-    // Use stored matches if available (more comprehensive), fallback to regular matches
-    const matches = (storedMatchData?.status === 200 && storedMatchData?.data?.length > 0)
-      ? storedMatchData.data
-      : matchData.data || [];
+    let accountData, matches, alreadyFiltered;
+
+    if (cachedData && cachedData.matchData) {
+      // Use cached data - no need to re-fetch!
+      console.log('[Match History] Using cached data from !valstats');
+      accountData = cachedData.accountData;
+
+      // Prefer v3 matchData (already filtered for competitive by the API)
+      if (cachedData.matchData && cachedData.matchData.length > 0) {
+        matches = cachedData.matchData;
+        alreadyFiltered = true; // v3 data is already filtered for competitive
+      } else if (cachedData.storedMatchData && cachedData.storedMatchData.length > 0) {
+        matches = cachedData.storedMatchData;
+        alreadyFiltered = false; // stored data includes all game modes
+      } else {
+        matches = [];
+        alreadyFiltered = true;
+      }
+    } else {
+      // No cache - fetch fresh data
+      console.log('[Match History] No cache available, fetching fresh data');
+
+      // Fetch account data and v3 matches (already filtered for competitive)
+      const [accountResult, matchResult] = await Promise.all([
+        getAccountData(registration.name, registration.tag),
+        getMatches(registration.region, registration.name, registration.tag).catch(err => {
+          console.warn("v3 matches endpoint failed:", err.message);
+          return { status: 0, data: [], error: err.message };
+        })
+      ]);
+
+      accountData = accountResult?.data || { name: registration.name, tag: registration.tag };
+      matches = matchResult.data || [];
+      alreadyFiltered = true; // v3 data is already filtered for competitive
+    }
 
     if (matches.length === 0) {
       const noMatchesEmbed = new EmbedBuilder()
@@ -1048,17 +1175,19 @@ async function showUserMatches(message, registration) {
     }
 
     // Get user avatar
-    const userAvatar = message.author.displayAvatarURL({
+    const userAvatar = cachedData?.userAvatar || message.author.displayAvatarURL({
       extension: "png",
       size: 256,
     });
 
     // Create detailed match history canvas
+    // Pass alreadyFiltered=true for v3 data (API pre-filters), false for stored matches
     const matchCanvas = await createMatchHistoryCanvas(
-      accountData?.data || { name: registration.name, tag: registration.tag },
+      accountData,
       matches,
       registration,
-      userAvatar
+      userAvatar,
+      alreadyFiltered
     );
 
     const attachment = new AttachmentBuilder(matchCanvas.toBuffer(), {
@@ -2114,11 +2243,15 @@ module.exports = {
                 });
               }
 
+              // Clear cache on explicit refresh to fetch fresh data
+              clearCachedValstatsData(interaction.guild?.id || 'dm', userId);
+
               await safeInteractionResponse(interaction, "defer");
               await showUserStats(
                 {
                   channel: interaction.channel,
                   author: interaction.user,
+                  guild: interaction.guild,
                 },
                 registration
               );

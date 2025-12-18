@@ -820,16 +820,35 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
  * @param {Array} matchData - Match data from API (competitive matches)
  * @param {Object} registration - User registration data
  * @param {string} userAvatar - User's Discord avatar URL
+ * @param {boolean} alreadyFiltered - If true, data is already filtered for competitive (e.g., from v3 API)
  * @returns {Promise<Canvas>} - The created canvas
  */
-async function createMatchHistoryCanvas(accountData, matchData, registration, userAvatar) {
-    // Filter for competitive matches
-    const competitiveMatches = (matchData || []).filter(match => {
-        if (!match.metadata) return false;
-        if (match.metadata.mode && match.metadata.mode.toLowerCase() === 'competitive') return true;
-        if (match.metadata.queue?.name?.toLowerCase() === 'competitive') return true;
-        return false;
-    }).slice(0, 15); // Show up to 15 matches
+async function createMatchHistoryCanvas(accountData, matchData, registration, userAvatar, alreadyFiltered = false) {
+    // Filter for competitive matches (skip filtering if data is already filtered from v3 API)
+    let competitiveMatches;
+
+    if (alreadyFiltered) {
+        // Data came from v3 endpoint with mode=competitive, already filtered
+        competitiveMatches = (matchData || []).slice(0, 15);
+    } else {
+        // Need to filter stored matches for competitive mode
+        competitiveMatches = (matchData || []).filter(match => {
+            if (!match.metadata) return false;
+            // Check multiple possible field locations for game mode
+            const mode = match.metadata.mode?.toLowerCase() || '';
+            const queueName = match.metadata.queue?.name?.toLowerCase() || '';
+            const queueId = match.metadata.queue?.id?.toLowerCase() || '';
+            const modeName = match.metadata.modeName?.toLowerCase() || '';
+
+            // Check if any field indicates competitive
+            return mode === 'competitive' ||
+                   queueName === 'competitive' ||
+                   queueId === 'competitive' ||
+                   modeName === 'competitive';
+        }).slice(0, 15);
+    }
+
+    console.log(`[Match Canvas] Processing ${competitiveMatches.length} matches (alreadyFiltered: ${alreadyFiltered})`);
 
     // Calculate canvas height based on matches
     const matchRowHeight = 80;
