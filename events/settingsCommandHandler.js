@@ -13,8 +13,9 @@ module.exports = (client) => {
     if (!message.guild) return;
 
     // Check if message is !settings command
+    // Note: !setup and !setupbobby are handled by subscriptionCommandHandler
     const content = message.content.toLowerCase();
-    if (!content.startsWith('!settings') && !content.startsWith('!config') && !content.startsWith('!setup')) {
+    if (!content.startsWith('!settings') && !content.startsWith('!config')) {
       return;
     }
 

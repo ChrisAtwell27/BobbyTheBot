@@ -226,21 +226,26 @@ async function checkAllGuilds(client) {
 }
 
 module.exports = (client) => {
-  console.log('[Setup Reminder] Handler initialized');
+  console.log('[Setup Reminder] Handler initialized (DISABLED - no automatic DMs)');
 
-  // Run initial check after startup delay
-  setTimeout(() => {
-    checkAllGuilds(client);
-  }, STARTUP_DELAY);
+  // DISABLED: Setup reminders were spamming users on every bot restart
+  // The in-memory cache gets cleared on restart, causing duplicate DMs
+  //
+  // To re-enable with proper persistence:
+  // 1. Store lastReminderSent timestamp in Convex servers table
+  // 2. Query that timestamp instead of using in-memory ownerDmCache
+  // 3. Uncomment the code below
 
-  // Run periodic checks every 24 hours
-  const intervalId = setInterval(() => {
-    checkAllGuilds(client);
-  }, CHECK_INTERVAL);
+  // setTimeout(() => {
+  //   checkAllGuilds(client);
+  // }, STARTUP_DELAY);
 
-  // Store interval for cleanup
-  if (!global.setupReminderIntervals) {
-    global.setupReminderIntervals = [];
-  }
-  global.setupReminderIntervals.push(intervalId);
+  // const intervalId = setInterval(() => {
+  //   checkAllGuilds(client);
+  // }, CHECK_INTERVAL);
+
+  // if (!global.setupReminderIntervals) {
+  //   global.setupReminderIntervals = [];
+  // }
+  // global.setupReminderIntervals.push(intervalId);
 };

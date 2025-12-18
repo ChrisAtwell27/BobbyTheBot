@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { normalizeTier, TIERS, getSubscription } = require('../utils/subscriptionUtils');
+const { normalizeTier, TIERS, getSubscription, clearSubscriptionCache } = require('../utils/subscriptionUtils');
 
 /**
  * Subscription Command Handler
@@ -59,9 +59,16 @@ module.exports = (client) => {
 
     try {
       const guildId = message.guild.id;
+      const args = content.split(/\s+/).slice(1);
+
+      // Check for refresh argument to clear cache
+      const forceRefresh = args[0] === 'refresh' || args[0] === 'reload';
+      if (forceRefresh) {
+        clearSubscriptionCache(guildId);
+      }
 
       // Get subscription from website API (single source of truth)
-      const subscription = await getSubscription(guildId);
+      const subscription = await getSubscription(guildId, null, forceRefresh);
 
       // Tier information
       const tierEmojis = {
@@ -128,7 +135,9 @@ module.exports = (client) => {
 
       // Add footer
       embed.setFooter({
-        text: 'Use !settings for bot configuration | Subscriptions help keep Bobby running!'
+        text: forceRefresh
+          ? '🔄 Refreshed from server | Use !settings for bot configuration'
+          : 'Use !subscription refresh to update | !settings for bot configuration'
       });
       embed.setTimestamp();
 
