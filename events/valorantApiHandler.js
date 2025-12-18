@@ -80,7 +80,7 @@ const {
   getTeammateStatsFromMatches,
   COMPETITIVE_MODES,
 } = require("../valorantApi/matchStats");
-const { createStatsVisualization } = require("../valorantApi/statsVisualizer");
+const { createStatsVisualization, createMatchHistoryCanvas, createMMRHistoryCanvas } = require("../valorantApi/statsVisualizer");
 const { createCompareVisualization } = require("../valorantApi/compareVisualizer");
 const {
   calculateEnhancedSkillScore,
@@ -765,12 +765,12 @@ async function showUserStats(message, registration) {
   }
 }
 
-// Show MMR history for a user
+// Show MMR history for a user with canvas visualization
 async function showMMRHistory(message, registration) {
   const loadingEmbed = new EmbedBuilder()
     .setTitle("🔄 Loading MMR History...")
     .setColor("#ff4654")
-    .setDescription("Fetching your ranked progression history...")
+    .setDescription("Fetching your ranked progression history with visual analysis...")
     .setTimestamp();
 
   const loadingMessage = await message.channel.send({ embeds: [loadingEmbed] });
@@ -780,8 +780,9 @@ async function showMMRHistory(message, registration) {
       `Fetching MMR history for: ${registration.name}#${registration.tag}`
     );
 
-    // Fetch both MMR v3 (current/peak/seasonal) and MMR history
-    const [mmrDataV3, mmrHistory] = await Promise.all([
+    // Fetch account data, MMR v3, and MMR history in parallel
+    const [accountData, mmrDataV3, mmrHistory] = await Promise.all([
+      getAccountData(registration.name, registration.tag),
       getMMRDataV3(registration.region, registration.name, registration.tag),
       getMMRHistory(registration.region, registration.name, registration.tag),
     ]);
@@ -790,157 +791,32 @@ async function showMMRHistory(message, registration) {
       throw new Error("Could not fetch MMR data. Player may not have competitive history.");
     }
 
-    const embed = new EmbedBuilder()
-      .setTitle(`📈 MMR History - ${registration.name}#${registration.tag}`)
+    // Get user avatar
+    const userAvatar = message.author.displayAvatarURL({
+      extension: "png",
+      size: 256,
+    });
+
+    // Create MMR history canvas
+    const mmrCanvas = await createMMRHistoryCanvas(
+      accountData?.data || { name: registration.name, tag: registration.tag },
+      mmrDataV3?.data || null,
+      mmrHistory?.data || null,
+      registration,
+      userAvatar
+    );
+
+    const attachment = new AttachmentBuilder(mmrCanvas.toBuffer(), {
+      name: "mmr-history.png",
+    });
+
+    const statsEmbed = new EmbedBuilder()
+      .setTitle(`📈 ${registration.name}#${registration.tag} - MMR History`)
       .setColor("#ff4654")
+      .setImage("attachment://mmr-history.png")
+      .setDescription("Ranked progression, seasonal performance, and RR tracking")
       .setTimestamp()
-      .setFooter({ text: "MMR Tracking v4.0" });
-
-    // Current rank info from v3
-    if (mmrDataV3.status === 200 && mmrDataV3.data) {
-      const v3Data = mmrDataV3.data;
-
-      // Current rank section
-      if (v3Data.current) {
-        const current = v3Data.current;
-        const rankName = current.tier?.name || "Unranked";
-        const rr = current.rr || 0;
-        const lastChange = current.last_change || 0;
-        const elo = current.elo || 0;
-        const gamesNeeded = current.games_needed_for_rating || 0;
-
-        let currentValue = `**${rankName}** • ${rr} RR`;
-        if (lastChange !== 0) {
-          currentValue += `\nLast Game: ${lastChange > 0 ? "+" : ""}${lastChange} RR`;
-        }
-        if (elo > 0) {
-          currentValue += `\nTotal ELO: ${elo}`;
-        }
-        if (gamesNeeded > 0) {
-          currentValue += `\n⚠️ ${gamesNeeded} more games needed for rating`;
-        }
-
-        // Leaderboard placement for high ranks
-        if (current.leaderboard_placement && current.leaderboard_placement.rank) {
-          currentValue += `\n🏆 **Leaderboard: #${current.leaderboard_placement.rank}**`;
-        }
-
-        embed.addFields({
-          name: "🎯 Current Rank",
-          value: currentValue,
-          inline: true,
-        });
-      }
-
-      // Peak rank section
-      if (v3Data.peak) {
-        const peak = v3Data.peak;
-        const peakRankName = peak.tier?.name || "Unknown";
-        const peakSeason = peak.season?.short || "Unknown";
-
-        embed.addFields({
-          name: "⭐ Peak Rank",
-          value: `**${peakRankName}**\nAchieved in: ${peakSeason}`,
-          inline: true,
-        });
-      }
-
-      // Seasonal stats
-      if (v3Data.seasonal && v3Data.seasonal.length > 0) {
-        // Get the last 3 seasons (reverse since API returns oldest first)
-        const recentSeasons = [...v3Data.seasonal].reverse().slice(0, 3);
-        const seasonalText = recentSeasons.map(season => {
-          const seasonName = season.season?.short || "Unknown";
-          const wins = season.wins || 0;
-          const games = season.games || 0;
-          const endRank = season.end_tier?.name || "Unrated";
-          const winRate = games > 0 ? ((wins / games) * 100).toFixed(1) : 0;
-
-          let text = `**${seasonName}**: ${endRank}`;
-          if (games > 0) {
-            text += `\n${wins}W/${games - wins}L (${winRate}% WR)`;
-          }
-
-          // Show act wins (triangle badges)
-          if (season.act_wins && season.act_wins.length > 0) {
-            const topWins = season.act_wins.slice(0, 3).map(w => w.name).join(", ");
-            text += `\n🔺 ${topWins}`;
-          }
-
-          return text;
-        }).join("\n\n");
-
-        embed.addFields({
-          name: "📅 Recent Seasons",
-          value: seasonalText || "No seasonal data",
-          inline: false,
-        });
-      }
-    }
-
-    // MMR History (recent matches)
-    if (mmrHistory.status === 200 && mmrHistory.data && mmrHistory.data.history) {
-      const history = mmrHistory.data.history.slice(0, 10); // Last 10 matches
-
-      if (history.length > 0) {
-        const historyText = history.map((match) => {
-          const rankName = match.tier?.name || "Unknown";
-          const mapName = match.map?.name || "Unknown";
-          const rrChange = match.last_change || 0;
-          const currentRR = match.rr || 0;
-          const date = match.date ? new Date(match.date).toLocaleDateString() : "";
-
-          const changeIcon = rrChange > 0 ? "🟢" : rrChange < 0 ? "🔴" : "⚪";
-          const changeText = rrChange > 0 ? `+${rrChange}` : `${rrChange}`;
-
-          return `${changeIcon} **${changeText}** RR → ${currentRR} RR | ${mapName} | ${rankName}${date ? ` • ${date}` : ""}`;
-        }).join("\n");
-
-        // Calculate net RR change
-        const totalChange = history.reduce((sum, m) => sum + (m.last_change || 0), 0);
-        const netText = totalChange > 0 ? `+${totalChange}` : `${totalChange}`;
-
-        embed.addFields({
-          name: `📊 Recent RR Changes (Net: ${netText} RR)`,
-          value: historyText,
-          inline: false,
-        });
-
-        // Calculate streak
-        let streak = 0;
-        let streakType = null;
-        for (const match of history) {
-          const change = match.last_change || 0;
-          if (streakType === null) {
-            streakType = change > 0 ? "win" : change < 0 ? "loss" : null;
-            streak = streakType ? 1 : 0;
-          } else if (
-            (streakType === "win" && change > 0) ||
-            (streakType === "loss" && change < 0)
-          ) {
-            streak++;
-          } else {
-            break;
-          }
-        }
-
-        if (streak >= 2) {
-          const streakEmoji = streakType === "win" ? "🔥" : "❄️";
-          const streakText = streakType === "win" ? "Win Streak" : "Loss Streak";
-          embed.addFields({
-            name: `${streakEmoji} Current ${streakText}`,
-            value: `**${streak} games**`,
-            inline: true,
-          });
-        }
-      }
-    } else {
-      embed.addFields({
-        name: "📊 Match History",
-        value: "No recent competitive matches found",
-        inline: false,
-      });
-    }
+      .setFooter({ text: "MMR History v1.0" });
 
     const refreshButton = new ButtonBuilder()
       .setCustomId(`valmmr_history_${message.author.id}`)
@@ -956,7 +832,7 @@ async function showMMRHistory(message, registration) {
 
     const row = new ActionRowBuilder().addComponents(refreshButton, backButton);
 
-    await loadingMessage.edit({ embeds: [embed], components: [row] });
+    await loadingMessage.edit({ embeds: [statsEmbed], files: [attachment], components: [row] });
   } catch (error) {
     console.error("Error displaying MMR history:", error);
 
@@ -1121,24 +997,40 @@ async function handleAgentSelection(interaction, selectedAgents) {
   }, 1500);
 }
 
-// Show detailed match history
+// Show detailed match history with canvas visualization
 async function showUserMatches(message, registration) {
   const loadingEmbed = new EmbedBuilder()
-    .setTitle("🔄 Loading Match History...")
+    .setTitle("🔄 Loading Detailed Match History...")
     .setColor("#ff4654")
-    .setDescription("Fetching your recent competitive matches...")
+    .setDescription("Fetching your recent competitive matches with detailed analysis...")
     .setTimestamp();
 
   const loadingMessage = await message.channel.send({ embeds: [loadingEmbed] });
 
   try {
     console.log(
-      `Fetching matches for: ${registration.name}#${registration.tag}`
+      `Fetching detailed matches for: ${registration.name}#${registration.tag}`
     );
 
-    const matchStats = await getPlayerMatchStats(registration);
+    // Fetch account data and matches
+    const [accountData, matchData, storedMatchData] = await Promise.all([
+      getAccountData(registration.name, registration.tag),
+      getMatches(registration.region, registration.name, registration.tag).catch(err => {
+        console.warn("v3 matches endpoint failed:", err.message);
+        return { status: 0, data: [], error: err.message };
+      }),
+      getStoredMatches(registration.region, registration.name, registration.tag).catch(err => {
+        console.warn("Stored matches endpoint failed:", err.message);
+        return { status: 0, data: [], error: err.message };
+      })
+    ]);
 
-    if (matchStats.totalMatches === 0) {
+    // Use stored matches if available (more comprehensive), fallback to regular matches
+    const matches = (storedMatchData?.status === 200 && storedMatchData?.data?.length > 0)
+      ? storedMatchData.data
+      : matchData.data || [];
+
+    if (matches.length === 0) {
       const noMatchesEmbed = new EmbedBuilder()
         .setTitle("📊 No Competitive Matches Found")
         .setColor("#ffaa00")
@@ -1155,54 +1047,31 @@ async function showUserMatches(message, registration) {
       return await loadingMessage.edit({ embeds: [noMatchesEmbed] });
     }
 
-    const embed = new EmbedBuilder()
-      .setTitle(
-        `📊 Competitive Match Stats - ${registration.name}#${registration.tag}`
-      )
+    // Get user avatar
+    const userAvatar = message.author.displayAvatarURL({
+      extension: "png",
+      size: 256,
+    });
+
+    // Create detailed match history canvas
+    const matchCanvas = await createMatchHistoryCanvas(
+      accountData?.data || { name: registration.name, tag: registration.tag },
+      matches,
+      registration,
+      userAvatar
+    );
+
+    const attachment = new AttachmentBuilder(matchCanvas.toBuffer(), {
+      name: "match-history.png",
+    });
+
+    const statsEmbed = new EmbedBuilder()
+      .setTitle(`📊 ${registration.name}#${registration.tag} - Match History`)
       .setColor("#ff4654")
-      .setDescription(
-        `Statistics from **${matchStats.totalMatches}** recent competitive matches`
-      )
-      .addFields(
-        {
-          name: "⚔️ KDA",
-          value: `**${matchStats.totalKills}** / ${matchStats.totalDeaths} / ${
-            matchStats.totalAssists
-          }\n**${matchStats.avgKDA.toFixed(2)}** K/D Ratio`,
-          inline: true,
-        },
-        {
-          name: "🏆 Win Rate",
-          value: `**${matchStats.wins}W** - ${
-            matchStats.totalMatches - matchStats.wins
-          }L\n**${matchStats.winRate.toFixed(1)}%** Win Rate`,
-          inline: true,
-        },
-        {
-          name: "📈 Average ACS",
-          value: `**${Math.round(matchStats.avgACS)}** ACS\nPer Match`,
-          inline: true,
-        },
-        {
-          name: "📊 Performance Analysis",
-          value: [
-            `• **Kills per Match:** ${(
-              matchStats.totalKills / matchStats.totalMatches
-            ).toFixed(1)}`,
-            `• **Deaths per Match:** ${(
-              matchStats.totalDeaths / matchStats.totalMatches
-            ).toFixed(1)}`,
-            `• **Assists per Match:** ${(
-              matchStats.totalAssists / matchStats.totalMatches
-            ).toFixed(1)}`,
-          ].join("\n"),
-          inline: false,
-        }
-      )
+      .setImage("attachment://match-history.png")
+      .setDescription("Detailed competitive match history with performance metrics")
       .setTimestamp()
-      .setFooter({
-        text: `Based on last ${matchStats.totalMatches} competitive matches`,
-      });
+      .setFooter({ text: "Match History v1.0" });
 
     const refreshButton = new ButtonBuilder()
       .setCustomId(`valmatches_refresh_${message.author.id}`)
@@ -1210,9 +1079,15 @@ async function showUserMatches(message, registration) {
       .setEmoji("🔄")
       .setStyle(ButtonStyle.Primary);
 
-    const row = new ActionRowBuilder().addComponents(refreshButton);
+    const backButton = new ButtonBuilder()
+      .setCustomId(`valstats_refresh_${message.author.id}`)
+      .setLabel("Back to Stats")
+      .setEmoji("◀️")
+      .setStyle(ButtonStyle.Secondary);
 
-    await loadingMessage.edit({ embeds: [embed], components: [row] });
+    const row = new ActionRowBuilder().addComponents(refreshButton, backButton);
+
+    await loadingMessage.edit({ embeds: [statsEmbed], files: [attachment], components: [row] });
   } catch (error) {
     console.error("Error displaying matches:", error);
 

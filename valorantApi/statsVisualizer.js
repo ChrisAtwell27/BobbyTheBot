@@ -813,6 +813,826 @@ async function createStatsVisualization(accountData, mmrData, matchData, userAva
     return canvas;
 }
 
+/**
+ * Creates a detailed match history visualization canvas
+ * Shows comprehensive match-by-match statistics with visual indicators
+ * @param {Object} accountData - Account data from API
+ * @param {Array} matchData - Match data from API (competitive matches)
+ * @param {Object} registration - User registration data
+ * @param {string} userAvatar - User's Discord avatar URL
+ * @returns {Promise<Canvas>} - The created canvas
+ */
+async function createMatchHistoryCanvas(accountData, matchData, registration, userAvatar) {
+    // Filter for competitive matches
+    const competitiveMatches = (matchData || []).filter(match => {
+        if (!match.metadata) return false;
+        if (match.metadata.mode && match.metadata.mode.toLowerCase() === 'competitive') return true;
+        if (match.metadata.queue?.name?.toLowerCase() === 'competitive') return true;
+        return false;
+    }).slice(0, 15); // Show up to 15 matches
+
+    // Calculate canvas height based on matches
+    const matchRowHeight = 80;
+    const headerHeight = 180;
+    const footerHeight = 50;
+    const canvasHeight = headerHeight + (competitiveMatches.length * matchRowHeight) + footerHeight + 40;
+
+    const canvas = createCanvas(1100, Math.max(canvasHeight, 400));
+    const ctx = canvas.getContext('2d');
+
+    // Background gradient
+    const gradient = ctx.createLinearGradient(0, 0, 1100, canvasHeight);
+    gradient.addColorStop(0, '#0a0e13');
+    gradient.addColorStop(0.3, '#1e2328');
+    gradient.addColorStop(0.7, '#2c3e50');
+    gradient.addColorStop(1, '#0a0e13');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 1100, canvasHeight);
+
+    // Subtle pattern overlay
+    ctx.fillStyle = 'rgba(255, 70, 84, 0.03)';
+    for (let i = 0; i < 1100; i += 50) {
+        for (let j = 0; j < canvasHeight; j += 50) {
+            if ((i + j) % 100 === 0) {
+                ctx.fillRect(i, j, 25, 25);
+            }
+        }
+    }
+
+    // Accent borders
+    const accentGradient = ctx.createLinearGradient(0, 0, 1100, 0);
+    accentGradient.addColorStop(0, '#ff4654');
+    accentGradient.addColorStop(0.5, '#ff6b7a');
+    accentGradient.addColorStop(1, '#ff4654');
+    ctx.fillStyle = accentGradient;
+    ctx.fillRect(0, 0, 1100, 6);
+    ctx.fillRect(0, canvasHeight - 6, 1100, 6);
+
+    // Header section
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('DETAILED MATCH HISTORY', 550, 45);
+
+    // Player info
+    ctx.font = '18px Arial';
+    ctx.fillStyle = '#ff4654';
+    ctx.fillText(`${accountData?.name || registration.name}#${accountData?.tag || registration.tag}`, 550, 75);
+
+    // Stats summary box
+    if (competitiveMatches.length > 0) {
+        const summaryBoxY = 95;
+        ctx.fillStyle = 'rgba(255, 70, 84, 0.1)';
+        ctx.fillRect(50, summaryBoxY, 1000, 60);
+        ctx.strokeStyle = '#ff4654';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(50, summaryBoxY, 1000, 60);
+
+        // Calculate summary stats
+        let totalWins = 0;
+        let totalKills = 0, totalDeaths = 0, totalAssists = 0;
+        let totalACS = 0;
+
+        competitiveMatches.forEach(match => {
+            const playersArray = match.players?.all_players || match.players || [];
+            const player = playersArray.find(p => p.name?.toLowerCase() === (accountData?.name || registration.name).toLowerCase());
+            if (player) {
+                const playerTeam = player.team?.toLowerCase();
+                let won = false;
+                if (match.teams?.red && match.teams?.blue) {
+                    if (playerTeam === 'red') won = match.teams.red.has_won;
+                    else if (playerTeam === 'blue') won = match.teams.blue.has_won;
+                }
+                if (won) totalWins++;
+                totalKills += player.stats.kills || 0;
+                totalDeaths += player.stats.deaths || 0;
+                totalAssists += player.stats.assists || 0;
+                totalACS += player.stats.score || 0;
+            }
+        });
+
+        const winRate = (totalWins / competitiveMatches.length * 100).toFixed(1);
+        const avgKDA = totalDeaths > 0 ? ((totalKills + totalAssists * 0.5) / totalDeaths).toFixed(2) : totalKills.toFixed(2);
+        const avgACS = Math.round(totalACS / competitiveMatches.length);
+
+        // Summary stats
+        ctx.textAlign = 'left';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('SUMMARY', 80, summaryBoxY + 22);
+
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#aaaaaa';
+        ctx.fillText(`${competitiveMatches.length} matches analyzed`, 80, summaryBoxY + 42);
+
+        // Win/Loss
+        ctx.font = 'bold 16px Arial';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('W/L', 280, summaryBoxY + 22);
+        ctx.fillStyle = totalWins > (competitiveMatches.length - totalWins) ? '#00ff88' : '#ff4444';
+        ctx.fillText(`${totalWins}/${competitiveMatches.length - totalWins}`, 280, summaryBoxY + 44);
+
+        // Win Rate
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('Win Rate', 400, summaryBoxY + 22);
+        ctx.fillStyle = parseFloat(winRate) >= 50 ? '#00ff88' : '#ff4444';
+        ctx.fillText(`${winRate}%`, 400, summaryBoxY + 44);
+
+        // KDA
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('Avg KDA', 520, summaryBoxY + 22);
+        ctx.fillStyle = parseFloat(avgKDA) >= 1.5 ? '#00ff88' : parseFloat(avgKDA) >= 1.0 ? '#ffff00' : '#ff4444';
+        ctx.fillText(avgKDA, 520, summaryBoxY + 44);
+
+        // Total K/D/A
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('Total K/D/A', 640, summaryBoxY + 22);
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillText(`${totalKills}/${totalDeaths}/${totalAssists}`, 640, summaryBoxY + 44);
+
+        // Avg ACS
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('Avg ACS', 800, summaryBoxY + 22);
+        ctx.fillStyle = avgACS >= 250 ? '#00ff88' : avgACS >= 200 ? '#ffff00' : '#ff8800';
+        ctx.fillText(`${avgACS}`, 800, summaryBoxY + 44);
+
+        // Avg Kills
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('Avg Kills', 920, summaryBoxY + 22);
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillText((totalKills / competitiveMatches.length).toFixed(1), 920, summaryBoxY + 44);
+    }
+
+    // Column headers
+    const headersY = 175;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.fillRect(50, headersY, 1000, 25);
+
+    ctx.fillStyle = '#888888';
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('RESULT', 70, headersY + 17);
+    ctx.fillText('MAP', 150, headersY + 17);
+    ctx.fillText('SCORE', 260, headersY + 17);
+    ctx.fillText('AGENT', 340, headersY + 17);
+    ctx.fillText('K/D/A', 450, headersY + 17);
+    ctx.fillText('KDA', 550, headersY + 17);
+    ctx.fillText('ACS', 620, headersY + 17);
+    ctx.fillText('HS%', 690, headersY + 17);
+    ctx.fillText('FIRST BLOODS', 760, headersY + 17);
+    ctx.fillText('DATE', 880, headersY + 17);
+    ctx.fillText('DURATION', 980, headersY + 17);
+
+    // Draw each match row
+    for (let index = 0; index < competitiveMatches.length; index++) {
+        const match = competitiveMatches[index];
+        const y = headersY + 45 + (index * matchRowHeight);
+
+        const playersArray = match.players?.all_players || match.players || [];
+        const player = playersArray.find(p => p.name?.toLowerCase() === (accountData?.name || registration.name).toLowerCase());
+
+        if (!player) continue;
+
+        // Determine win/loss
+        let won = false;
+        let teamScore = 0, enemyScore = 0;
+        const playerTeam = player.team?.toLowerCase();
+
+        if (match.teams?.red && match.teams?.blue) {
+            if (playerTeam === 'red') {
+                won = match.teams.red.has_won;
+                teamScore = match.teams.red.rounds_won || 0;
+                enemyScore = match.teams.blue.rounds_won || 0;
+            } else if (playerTeam === 'blue') {
+                won = match.teams.blue.has_won;
+                teamScore = match.teams.blue.rounds_won || 0;
+                enemyScore = match.teams.red.rounds_won || 0;
+            }
+        }
+
+        // Row background
+        const rowGradient = ctx.createLinearGradient(50, y, 1050, y + matchRowHeight - 10);
+        if (won) {
+            rowGradient.addColorStop(0, 'rgba(0, 255, 136, 0.12)');
+            rowGradient.addColorStop(1, 'rgba(0, 180, 100, 0.08)');
+        } else {
+            rowGradient.addColorStop(0, 'rgba(255, 68, 68, 0.12)');
+            rowGradient.addColorStop(1, 'rgba(180, 50, 50, 0.08)');
+        }
+        ctx.fillStyle = rowGradient;
+        ctx.fillRect(50, y, 1000, matchRowHeight - 10);
+
+        // Left accent bar
+        ctx.fillStyle = won ? '#00ff88' : '#ff4444';
+        ctx.fillRect(50, y, 4, matchRowHeight - 10);
+
+        // Result
+        ctx.fillStyle = won ? '#00ff88' : '#ff4444';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(won ? 'WIN' : 'LOSS', 70, y + 25);
+
+        // RR change indicator (if available from MMR data)
+        ctx.font = '11px Arial';
+        ctx.fillStyle = '#888888';
+
+        // Map name
+        const mapName = typeof match.metadata.map === 'string' ? match.metadata.map : match.metadata.map?.name || 'Unknown';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText(mapName, 150, y + 25);
+
+        // Map mode indicator
+        ctx.font = '10px Arial';
+        ctx.fillStyle = '#888888';
+        ctx.fillText('Competitive', 150, y + 40);
+
+        // Score
+        ctx.font = 'bold 18px Arial';
+        ctx.fillStyle = won ? '#00ff88' : '#ff4444';
+        ctx.fillText(`${teamScore}`, 260, y + 28);
+        ctx.fillStyle = '#666666';
+        ctx.fillText('-', 285, y + 28);
+        ctx.fillStyle = won ? '#888888' : '#ff4444';
+        ctx.fillText(`${enemyScore}`, 300, y + 28);
+
+        // Agent with icon
+        const agentName = player.character || player.agent?.name || 'Unknown';
+        const agentIcon = await loadAgentIcon(agentName);
+
+        if (agentIcon) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(355, y + 25, 18, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(agentIcon, 337, y + 7, 36, 36);
+            ctx.restore();
+
+            ctx.strokeStyle = '#5865f2';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(355, y + 25, 18, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '12px Arial';
+        ctx.fillText(agentName, 380, y + 29);
+
+        // K/D/A
+        const kills = player.stats.kills || 0;
+        const deaths = player.stats.deaths || 0;
+        const assists = player.stats.assists || 0;
+
+        ctx.font = 'bold 14px Arial';
+        ctx.fillStyle = '#00ff88';
+        ctx.fillText(`${kills}`, 450, y + 28);
+        ctx.fillStyle = '#888888';
+        ctx.fillText('/', 475, y + 28);
+        ctx.fillStyle = '#ff4444';
+        ctx.fillText(`${deaths}`, 485, y + 28);
+        ctx.fillStyle = '#888888';
+        ctx.fillText('/', 510, y + 28);
+        ctx.fillStyle = '#3498db';
+        ctx.fillText(`${assists}`, 520, y + 28);
+
+        // KDA Ratio
+        const kdRatio = deaths > 0 ? ((kills + assists * 0.5) / deaths).toFixed(2) : kills.toFixed(2);
+        ctx.fillStyle = parseFloat(kdRatio) >= 1.5 ? '#00ff88' : parseFloat(kdRatio) >= 1.0 ? '#ffff00' : '#ff4444';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText(kdRatio, 550, y + 28);
+
+        // ACS
+        const acs = player.stats.score || 0;
+        ctx.fillStyle = acs >= 250 ? '#00ff88' : acs >= 200 ? '#ffff00' : acs >= 150 ? '#ff8800' : '#ff4444';
+        ctx.fillText(`${acs}`, 620, y + 28);
+
+        // Headshot %
+        const totalShots = (player.stats.headshots || 0) + (player.stats.bodyshots || 0) + (player.stats.legshots || 0);
+        const hsPercent = totalShots > 0 ? Math.round((player.stats.headshots / totalShots) * 100) : 0;
+        ctx.fillStyle = hsPercent >= 30 ? '#00ff88' : hsPercent >= 20 ? '#ffff00' : '#ff8800';
+        ctx.fillText(`${hsPercent}%`, 690, y + 28);
+
+        // First Bloods (if available)
+        // Note: First blood data may not always be available in match data
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillText('-', 790, y + 28);
+
+        // Date
+        const matchDate = match.metadata.game_start
+            ? new Date(match.metadata.game_start * 1000)
+            : new Date(match.metadata.started_at);
+        ctx.fillStyle = '#cccccc';
+        ctx.font = '12px Arial';
+        ctx.fillText(matchDate.toLocaleDateString(), 880, y + 25);
+        ctx.fillStyle = '#888888';
+        ctx.font = '10px Arial';
+        ctx.fillText(matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 880, y + 40);
+
+        // Duration
+        const durationSecs = match.metadata.game_length || match.metadata.length || 0;
+        const minutes = Math.floor(durationSecs / 60);
+        const seconds = durationSecs % 60;
+        ctx.fillStyle = '#cccccc';
+        ctx.font = '12px Arial';
+        ctx.fillText(`${minutes}:${seconds.toString().padStart(2, '0')}`, 980, y + 28);
+
+        // Performance indicator bar at bottom of row
+        const perfScore = (acs / 300) * 100; // Normalize ACS to percentage (300 being excellent)
+        const barWidth = Math.min(perfScore, 100) * 9.9; // Scale to max 990px
+        ctx.fillStyle = acs >= 250 ? 'rgba(0, 255, 136, 0.3)' : acs >= 200 ? 'rgba(255, 255, 0, 0.3)' : 'rgba(255, 136, 0, 0.3)';
+        ctx.fillRect(55, y + matchRowHeight - 14, barWidth, 3);
+    }
+
+    // No matches message
+    if (competitiveMatches.length === 0) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('NO COMPETITIVE MATCHES FOUND', 550, 300);
+        ctx.font = '16px Arial';
+        ctx.fillStyle = '#888888';
+        ctx.fillText('Play some competitive matches to see detailed history!', 550, 330);
+    }
+
+    // Footer
+    ctx.fillStyle = '#666666';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Detailed Match History v1.0 • Performance bar shows relative ACS', 550, canvasHeight - 18);
+
+    return canvas;
+}
+
+/**
+ * Creates an MMR history visualization canvas
+ * Shows rank progression over time with visual graph
+ * @param {Object} accountData - Account data from API
+ * @param {Object} mmrDataV3 - MMR v3 data (current/peak/seasonal)
+ * @param {Object} mmrHistory - MMR history data (match-by-match RR changes)
+ * @param {Object} registration - User registration data
+ * @param {string} userAvatar - User's Discord avatar URL
+ * @returns {Promise<Canvas>} - The created canvas
+ */
+async function createMMRHistoryCanvas(accountData, mmrDataV3, mmrHistory, registration, userAvatar) {
+    const canvasWidth = 1100;
+    const canvasHeight = 850;
+
+    const canvas = createCanvas(canvasWidth, canvasHeight);
+    const ctx = canvas.getContext('2d');
+
+    // Background gradient
+    const gradient = ctx.createLinearGradient(0, 0, canvasWidth, canvasHeight);
+    gradient.addColorStop(0, '#0a0e13');
+    gradient.addColorStop(0.3, '#1e2328');
+    gradient.addColorStop(0.7, '#2c3e50');
+    gradient.addColorStop(1, '#0a0e13');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // Subtle pattern
+    ctx.fillStyle = 'rgba(255, 70, 84, 0.03)';
+    for (let i = 0; i < canvasWidth; i += 50) {
+        for (let j = 0; j < canvasHeight; j += 50) {
+            if ((i + j) % 100 === 0) {
+                ctx.fillRect(i, j, 25, 25);
+            }
+        }
+    }
+
+    // Accent borders
+    const accentGradient = ctx.createLinearGradient(0, 0, canvasWidth, 0);
+    accentGradient.addColorStop(0, '#ff4654');
+    accentGradient.addColorStop(0.5, '#ff6b7a');
+    accentGradient.addColorStop(1, '#ff4654');
+    ctx.fillStyle = accentGradient;
+    ctx.fillRect(0, 0, canvasWidth, 6);
+    ctx.fillRect(0, canvasHeight - 6, canvasWidth, 6);
+
+    // Header
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('MMR HISTORY & PROGRESSION', canvasWidth / 2, 45);
+
+    // Player info
+    ctx.font = '18px Arial';
+    ctx.fillStyle = '#ff4654';
+    ctx.fillText(`${accountData?.name || registration.name}#${accountData?.tag || registration.tag}`, canvasWidth / 2, 75);
+
+    // Current rank section
+    const hasV3Data = mmrDataV3?.current;
+    let currentY = 100;
+
+    if (hasV3Data) {
+        // Current rank box
+        ctx.fillStyle = 'rgba(255, 70, 84, 0.15)';
+        ctx.fillRect(50, currentY, 480, 140);
+        ctx.strokeStyle = '#ff4654';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(50, currentY, 480, 140);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('CURRENT RANK', 70, currentY + 28);
+
+        const current = mmrDataV3.current;
+        const currentTier = current.tier?.id || 0;
+        const rankInfo = RANK_MAPPING[currentTier] || RANK_MAPPING[0];
+
+        // Rank icon
+        const rankImage = await loadRankImage(currentTier);
+        if (rankImage) {
+            ctx.drawImage(rankImage, 70, currentY + 40, 70, 70);
+        } else {
+            createFallbackRankIcon(ctx, 70, currentY + 40, 70, rankInfo);
+        }
+
+        // Rank name
+        ctx.fillStyle = rankInfo.color;
+        ctx.font = 'bold 28px Arial';
+        ctx.fillText(rankInfo.name, 160, currentY + 75);
+
+        // RR
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 18px Arial';
+        ctx.fillText(`${current.rr || 0} RR`, 160, currentY + 100);
+
+        // Last change
+        const lastChange = current.last_change || 0;
+        ctx.fillStyle = lastChange > 0 ? '#00ff88' : lastChange < 0 ? '#ff4444' : '#888888';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText(`Last: ${lastChange > 0 ? '+' : ''}${lastChange} RR`, 160, currentY + 122);
+
+        // ELO
+        if (current.elo) {
+            ctx.fillStyle = '#888888';
+            ctx.font = '12px Arial';
+            ctx.fillText(`Total ELO: ${current.elo}`, 280, currentY + 122);
+        }
+
+        // Leaderboard
+        if (current.leaderboard_placement?.rank) {
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText(`#${current.leaderboard_placement.rank} Leaderboard`, 380, currentY + 75);
+        }
+
+        // Peak rank box
+        if (mmrDataV3.peak) {
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.1)';
+            ctx.fillRect(570, currentY, 480, 140);
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(570, currentY, 480, 140);
+
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 18px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('PEAK RANK', 590, currentY + 28);
+
+            const peak = mmrDataV3.peak;
+            const peakTier = peak.tier?.id || 0;
+            const peakRankInfo = RANK_MAPPING[peakTier] || RANK_MAPPING[0];
+
+            // Peak rank icon
+            const peakRankImage = await loadRankImage(peakTier);
+            if (peakRankImage) {
+                ctx.drawImage(peakRankImage, 590, currentY + 40, 70, 70);
+            } else {
+                createFallbackRankIcon(ctx, 590, currentY + 40, 70, peakRankInfo);
+            }
+
+            // Peak rank name
+            ctx.fillStyle = peakRankInfo.color;
+            ctx.font = 'bold 28px Arial';
+            ctx.fillText(peakRankInfo.name, 680, currentY + 75);
+
+            // Peak season
+            if (peak.season?.short) {
+                ctx.fillStyle = '#aaaaaa';
+                ctx.font = '14px Arial';
+                ctx.fillText(`Achieved: ${peak.season.short}`, 680, currentY + 100);
+            }
+        }
+    }
+
+    currentY = 260;
+
+    // Seasonal Stats Section
+    if (mmrDataV3?.seasonal && mmrDataV3.seasonal.length > 0) {
+        ctx.fillStyle = 'rgba(88, 101, 242, 0.1)';
+        ctx.fillRect(50, currentY, 1000, 40);
+
+        ctx.fillStyle = '#5865f2';
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('SEASONAL PERFORMANCE', 70, currentY + 27);
+
+        currentY += 55;
+
+        // Get last 5 seasons (API returns oldest first, so reverse)
+        const recentSeasons = [...mmrDataV3.seasonal].reverse().slice(0, 5);
+
+        // Season cards
+        const cardWidth = 190;
+        const cardSpacing = 10;
+        const startX = 50;
+
+        for (let i = 0; i < recentSeasons.length; i++) {
+            const season = recentSeasons[i];
+            const cardX = startX + (i * (cardWidth + cardSpacing));
+
+            // Card background
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.fillRect(cardX, currentY, cardWidth, 120);
+            ctx.strokeStyle = '#444444';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(cardX, currentY, cardWidth, 120);
+
+            // Season name
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText(season.season?.short || `Season ${i + 1}`, cardX + 10, currentY + 22);
+
+            // End rank
+            const endTier = season.end_tier?.id || 0;
+            const endRankInfo = RANK_MAPPING[endTier] || RANK_MAPPING[0];
+
+            // Small rank icon
+            const seasonRankImage = await loadRankImage(endTier);
+            if (seasonRankImage) {
+                ctx.drawImage(seasonRankImage, cardX + 10, currentY + 32, 35, 35);
+            }
+
+            ctx.fillStyle = endRankInfo.color;
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText(endRankInfo.name, cardX + 50, currentY + 52);
+
+            // Stats
+            const wins = season.wins || 0;
+            const games = season.games || 0;
+            const losses = games - wins;
+            const winRate = games > 0 ? ((wins / games) * 100).toFixed(1) : 0;
+
+            ctx.fillStyle = '#aaaaaa';
+            ctx.font = '11px Arial';
+            ctx.fillText(`${games} games played`, cardX + 10, currentY + 82);
+
+            // W/L
+            ctx.fillStyle = wins > losses ? '#00ff88' : '#ff4444';
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText(`${wins}W - ${losses}L`, cardX + 10, currentY + 98);
+
+            // Win rate
+            ctx.fillStyle = parseFloat(winRate) >= 50 ? '#00ff88' : '#ff4444';
+            ctx.fillText(`${winRate}%`, cardX + 120, currentY + 98);
+
+            // Act wins indicator
+            if (season.act_wins && season.act_wins.length > 0) {
+                ctx.fillStyle = '#ffd700';
+                ctx.font = '10px Arial';
+                ctx.fillText(`🔺 ${season.act_wins.length} wins`, cardX + 10, currentY + 113);
+            }
+        }
+
+        currentY += 140;
+    }
+
+    // MMR History Graph Section
+    const historyData = mmrHistory?.history || [];
+    if (historyData.length > 0) {
+        ctx.fillStyle = 'rgba(0, 255, 136, 0.1)';
+        ctx.fillRect(50, currentY, 1000, 40);
+
+        ctx.fillStyle = '#00ff88';
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('RR PROGRESSION (RECENT MATCHES)', 70, currentY + 27);
+
+        currentY += 55;
+
+        // Graph area
+        const graphX = 80;
+        const graphY = currentY;
+        const graphWidth = 940;
+        const graphHeight = 200;
+
+        // Graph background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(graphX, graphY, graphWidth, graphHeight);
+        ctx.strokeStyle = '#333333';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(graphX, graphY, graphWidth, graphHeight);
+
+        // Get RR values for graph
+        const matches = historyData.slice(0, 20).reverse(); // Last 20 matches, oldest first
+        if (matches.length > 1) {
+            // Find min/max RR for scaling
+            const rrValues = matches.map(m => m.rr || 0);
+            const minRR = Math.min(...rrValues);
+            const maxRR = Math.max(...rrValues);
+            const rrRange = maxRR - minRR || 100;
+
+            // Draw horizontal grid lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 4; i++) {
+                const lineY = graphY + (i * graphHeight / 4);
+                ctx.beginPath();
+                ctx.moveTo(graphX, lineY);
+                ctx.lineTo(graphX + graphWidth, lineY);
+                ctx.stroke();
+
+                // RR labels
+                const rrLabel = Math.round(maxRR - (i * rrRange / 4));
+                ctx.fillStyle = '#666666';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(`${rrLabel}`, graphX - 5, lineY + 4);
+            }
+
+            // Draw the RR line
+            ctx.beginPath();
+            ctx.strokeStyle = '#ff4654';
+            ctx.lineWidth = 3;
+
+            for (let i = 0; i < matches.length; i++) {
+                const x = graphX + (i / (matches.length - 1)) * graphWidth;
+                const rr = matches[i].rr || 0;
+                const y = graphY + graphHeight - ((rr - minRR) / rrRange) * graphHeight;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+
+            // Draw points with color based on win/loss
+            for (let i = 0; i < matches.length; i++) {
+                const match = matches[i];
+                const x = graphX + (i / (matches.length - 1)) * graphWidth;
+                const rr = match.rr || 0;
+                const y = graphY + graphHeight - ((rr - minRR) / rrRange) * graphHeight;
+                const change = match.last_change || 0;
+
+                // Point color based on win/loss
+                ctx.fillStyle = change > 0 ? '#00ff88' : change < 0 ? '#ff4444' : '#888888';
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Border
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+
+            // Match labels at bottom
+            ctx.fillStyle = '#666666';
+            ctx.font = '9px Arial';
+            ctx.textAlign = 'center';
+            for (let i = 0; i < matches.length; i += Math.ceil(matches.length / 10)) {
+                const x = graphX + (i / (matches.length - 1)) * graphWidth;
+                ctx.fillText(`${i + 1}`, x, graphY + graphHeight + 15);
+            }
+        }
+
+        currentY += graphHeight + 30;
+
+        // Recent RR Changes list
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('RECENT RR CHANGES', 70, currentY);
+
+        currentY += 25;
+
+        // Calculate totals
+        const last10 = historyData.slice(0, 10);
+        const netChange = last10.reduce((sum, m) => sum + (m.last_change || 0), 0);
+        const wins = last10.filter(m => (m.last_change || 0) > 0).length;
+        const losses = last10.filter(m => (m.last_change || 0) < 0).length;
+
+        // Net change box
+        ctx.fillStyle = netChange >= 0 ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 68, 68, 0.1)';
+        ctx.fillRect(50, currentY, 200, 50);
+        ctx.strokeStyle = netChange >= 0 ? '#00ff88' : '#ff4444';
+        ctx.strokeRect(50, currentY, 200, 50);
+
+        ctx.fillStyle = '#888888';
+        ctx.font = '12px Arial';
+        ctx.fillText('Net RR (Last 10)', 60, currentY + 18);
+        ctx.fillStyle = netChange >= 0 ? '#00ff88' : '#ff4444';
+        ctx.font = 'bold 20px Arial';
+        ctx.fillText(`${netChange >= 0 ? '+' : ''}${netChange}`, 60, currentY + 40);
+
+        // W/L box
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.fillRect(270, currentY, 150, 50);
+
+        ctx.fillStyle = '#888888';
+        ctx.font = '12px Arial';
+        ctx.fillText('W/L (Last 10)', 280, currentY + 18);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 20px Arial';
+        ctx.fillText(`${wins}W - ${losses}L`, 280, currentY + 40);
+
+        // Streak detection
+        let streak = 0;
+        let streakType = null;
+        for (const match of last10) {
+            const change = match.last_change || 0;
+            if (streakType === null) {
+                streakType = change > 0 ? 'win' : change < 0 ? 'loss' : null;
+                streak = streakType ? 1 : 0;
+            } else if ((streakType === 'win' && change > 0) || (streakType === 'loss' && change < 0)) {
+                streak++;
+            } else {
+                break;
+            }
+        }
+
+        if (streak >= 2) {
+            ctx.fillStyle = streakType === 'win' ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 68, 68, 0.1)';
+            ctx.fillRect(440, currentY, 180, 50);
+            ctx.strokeStyle = streakType === 'win' ? '#00ff88' : '#ff4444';
+            ctx.strokeRect(440, currentY, 180, 50);
+
+            ctx.fillStyle = '#888888';
+            ctx.font = '12px Arial';
+            ctx.fillText('Current Streak', 450, currentY + 18);
+            ctx.fillStyle = streakType === 'win' ? '#00ff88' : '#ff4444';
+            ctx.font = 'bold 20px Arial';
+            ctx.fillText(`${streak} ${streakType === 'win' ? 'Wins' : 'Losses'}`, 450, currentY + 40);
+        }
+
+        currentY += 70;
+
+        // Individual match list
+        const listMatches = historyData.slice(0, 8);
+        for (let i = 0; i < listMatches.length; i++) {
+            const match = listMatches[i];
+            const rowY = currentY + (i * 28);
+
+            // Alternating background
+            if (i % 2 === 0) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+                ctx.fillRect(50, rowY, 1000, 26);
+            }
+
+            const change = match.last_change || 0;
+            const rr = match.rr || 0;
+            const mapName = match.map?.name || 'Unknown';
+            const rankName = match.tier?.name || 'Unknown';
+            const date = match.date ? new Date(match.date).toLocaleDateString() : '';
+
+            // Change indicator
+            ctx.fillStyle = change > 0 ? '#00ff88' : change < 0 ? '#ff4444' : '#888888';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(change > 0 ? '▲' : change < 0 ? '▼' : '●', 60, rowY + 18);
+            ctx.fillText(`${change > 0 ? '+' : ''}${change} RR`, 80, rowY + 18);
+
+            // Current RR after match
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '13px Arial';
+            ctx.fillText(`→ ${rr} RR`, 160, rowY + 18);
+
+            // Map
+            ctx.fillStyle = '#aaaaaa';
+            ctx.fillText(mapName, 250, rowY + 18);
+
+            // Rank at time
+            ctx.fillStyle = '#888888';
+            ctx.fillText(rankName, 380, rowY + 18);
+
+            // Date
+            ctx.fillStyle = '#666666';
+            ctx.fillText(date, 520, rowY + 18);
+        }
+    } else {
+        // No history
+        ctx.fillStyle = '#888888';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('No MMR history available. Play competitive matches to track progression!', canvasWidth / 2, currentY + 100);
+    }
+
+    // Footer
+    ctx.fillStyle = '#666666';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('MMR History v1.0 • Data from Riot Games API', canvasWidth / 2, canvasHeight - 18);
+
+    return canvas;
+}
+
 module.exports = {
-    createStatsVisualization
+    createStatsVisualization,
+    createMatchHistoryCanvas,
+    createMMRHistoryCanvas
 };
