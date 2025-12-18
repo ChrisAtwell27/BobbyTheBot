@@ -61,6 +61,39 @@ module.exports = (client) => {
       const guildId = message.guild.id;
       const args = content.split(/\s+/).slice(1);
 
+      // Debug command to test API connection
+      if (args[0] === 'debug') {
+        const apiSecret = process.env.SUBSCRIPTION_API_SECRET;
+        const websiteUrl = process.env.WEBSITE_URL || 'https://crackedgames.co';
+
+        let debugInfo = `**API Debug Info**\n`;
+        debugInfo += `API Secret Set: ${apiSecret ? '✅ Yes' : '❌ No'}\n`;
+        debugInfo += `Website URL: ${websiteUrl}\n`;
+        debugInfo += `Guild ID: ${guildId}\n\n`;
+
+        if (apiSecret) {
+          try {
+            const response = await fetch(`${websiteUrl}/api/subscription/guild/${guildId}`, {
+              method: 'GET',
+              headers: {
+                'X-API-Key': apiSecret,
+                'Content-Type': 'application/json'
+              }
+            });
+            debugInfo += `API Status: ${response.status} ${response.statusText}\n`;
+            const data = await response.json();
+            debugInfo += `Response: \`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``;
+          } catch (fetchError) {
+            debugInfo += `Fetch Error: ${fetchError.message}`;
+          }
+        } else {
+          debugInfo += `⚠️ Set SUBSCRIPTION_API_SECRET in your .env file`;
+        }
+
+        await message.reply(debugInfo);
+        return;
+      }
+
       // Check for refresh argument to clear cache
       const forceRefresh = args[0] === 'refresh' || args[0] === 'reload';
       if (forceRefresh) {

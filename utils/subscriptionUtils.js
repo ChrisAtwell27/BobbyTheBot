@@ -221,8 +221,13 @@ async function checkSubscription(guildId, requiredTier = TIERS.FREE, ownerId = n
     const guildTier = normalizeTier(subscription.tier);
 
     // Check if subscription is active and valid
+    // Parse expiresAt if it's a string (ISO date format)
+    let expiresAtTimestamp = subscription.expiresAt;
+    if (typeof expiresAtTimestamp === 'string') {
+        expiresAtTimestamp = new Date(expiresAtTimestamp).getTime();
+    }
     const isValid = subscription.status === 'active' &&
-                   (!subscription.expiresAt || Date.now() <= subscription.expiresAt);
+                   (!expiresAtTimestamp || Date.now() <= expiresAtTimestamp);
 
     // If subscription is invalid, treat as free tier
     if (!isValid) {
@@ -239,6 +244,15 @@ async function checkSubscription(guildId, requiredTier = TIERS.FREE, ownerId = n
     const guildTierLevel = TIER_HIERARCHY[guildTier] ?? 0;
     const requiredTierLevel = TIER_HIERARCHY[normalizedRequired] ?? 0;
     const hasAccess = guildTierLevel >= requiredTierLevel;
+
+    console.log(`[Subscription] Tier check for guild ${guildId}:`, {
+        rawTier: subscription.tier,
+        normalizedTier: guildTier,
+        guildTierLevel,
+        requiredTier: normalizedRequired,
+        requiredTierLevel,
+        hasAccess
+    });
 
     return {
         hasAccess,
