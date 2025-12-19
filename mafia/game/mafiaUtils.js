@@ -63,8 +63,10 @@ function getRoleDistribution(playerCount, randomMode = false, debugMode = false,
         waspCount = 2;
     } else if (playerCount === 6) {
         waspCount = 1;
-    } else if (playerCount >= 7 && playerCount <= 9) {
-        waspCount = 2;
+    } else if (playerCount >= 7 && playerCount <= 8) {
+        waspCount = 1; // 7-8 players: Only Wasp Queen (no Killer Wasp yet)
+    } else if (playerCount === 9) {
+        waspCount = 2; // 9 players: Wasp Queen + Killer Wasp
     } else if (playerCount >= 10 && playerCount <= 13) {
         waspCount = 3;
     } else if (playerCount >= 14 && playerCount <= 16) {
@@ -80,8 +82,8 @@ function getRoleDistribution(playerCount, randomMode = false, debugMode = false,
     // === WASP ROLES ===
     if (waspCount >= 1) distribution.push('WASP_QUEEN'); // Always have Queen
 
-    // Killer Wasp only appears with 7+ players
-    if (waspCount >= 2 && playerCount >= 7) {
+    // Killer Wasp only appears with 9+ players (2+ wasps needed)
+    if (waspCount >= 2 && playerCount >= 9) {
         distribution.push('KILLER_WASP');
     }
 
