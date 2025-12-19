@@ -245,6 +245,7 @@ module.exports = (client, commandRouter, interactionRouter) => {
     }
     if (dailyMafiaWrapper.interactionHandler) {
         interactionRouter.registerButton('dailymafia_', dailyMafiaWrapper.interactionHandler);
+        interactionRouter.registerSelectMenu('dailymafia_', dailyMafiaWrapper.interactionHandler);
     }
 
     // Start Daily Mafia phase checker cron
