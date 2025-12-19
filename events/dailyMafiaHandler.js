@@ -34,6 +34,8 @@ const ALIAS = '!dm';
  */
 async function handleMessage(client, message) {
   try {
+    console.log('[Daily Mafia Handler] handleMessage called for message:', message.content);
+
     // Ignore bots
     if (message.author.bot) return;
 
@@ -45,13 +47,19 @@ async function handleMessage(client, message) {
 
     // Check for command prefix
     const content = message.content.trim();
+    console.log('[Daily Mafia Handler] Checking prefix. Content:', content, '| Starts with PREFIX?', content.startsWith(PREFIX), '| Starts with ALIAS?', content.startsWith(ALIAS));
+
     if (!content.startsWith(PREFIX) && !content.startsWith(ALIAS)) {
       return;
     }
 
+    console.log('[Daily Mafia Handler] PREFIX/ALIAS matched! Parsing command...');
+
     // Parse command
     const args = content.slice(content.startsWith(PREFIX) ? PREFIX.length : ALIAS.length).trim().split(/\s+/);
     const command = args.shift().toLowerCase();
+
+    console.log('[Daily Mafia Handler] Parsed command:', command, '| Args:', args);
 
     // Route commands
     switch (command) {
@@ -133,9 +141,9 @@ async function handleStartCommand(client, message, args) {
     if (configuredChannelId && configuredChannelId !== message.channelId) {
       console.log('[Daily Mafia] Blocked - wrong channel');
       await message.reply(
-        `❌ **Daily Mafia games can only be started in <#${configuredChannelId}>**\n\n' +
-        'Your server admin has configured a specific channel for Daily Mafia games.\n' +
-        'To change this, use the settings dashboard: <https://crackedgames.co/bobby-the-bot/>'
+        `❌ **Daily Mafia games can only be started in <#${configuredChannelId}>**\n\n` +
+        `Your server admin has configured a specific channel for Daily Mafia games.\n` +
+        `To change this, use the settings dashboard: <https://crackedgames.co/bobby-the-bot/>`
       );
       return;
     }
@@ -600,7 +608,19 @@ async function handleRefreshButton(client, interaction, gameId) {
   await interaction.reply({ content: '✅ Status refreshed!', ephemeral: true });
 }
 
-module.exports = {
-  handleMessage,
-  handleButtonInteraction,
+// Export as initialization function (required by handlerRegistry wrapper)
+module.exports = (client) => {
+  console.log('[Daily Mafia Handler] Initializing handler...');
+
+  // Register message handler
+  client.on('messageCreate', (message) => handleMessage(client, message));
+
+  // Register interaction handler
+  client.on('interactionCreate', (interaction) => {
+    if (interaction.isButton()) {
+      handleButtonInteraction(client, interaction);
+    }
+  });
+
+  console.log('[Daily Mafia Handler] ✅ Registered message and interaction handlers');
 };
