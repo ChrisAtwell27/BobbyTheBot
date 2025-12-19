@@ -287,6 +287,7 @@ export const updatePlayer = mutation({
     gameId: v.string(),
     playerId: v.string(),
     updates: v.object({
+      role: v.optional(v.string()),
       alive: v.optional(v.boolean()),
       hasActedThisPhase: v.optional(v.boolean()),
       lastActionTime: v.optional(v.number()),
