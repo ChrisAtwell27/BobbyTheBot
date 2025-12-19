@@ -102,6 +102,11 @@ async function handleMessage(client, message) {
         await handleRestartPhaseCommand(client, message, args);
         break;
 
+      case "skip":
+      case "skipphase":
+        await handleSkipPhaseCommand(client, message);
+        break;
+
       default:
         await message.reply(
           `❌ Unknown command. Use \`${PREFIX} help\` for a list of commands.`
@@ -411,6 +416,7 @@ Asynchronous Mafia games that span real days/weeks!
 \`${PREFIX} start [debug]\` - Create a new game
 \`${PREFIX} join\` - Join pending game
 \`${PREFIX} cancel\` - Cancel game (organizer only)
+\`${PREFIX} skip\` - Skip to next phase (organizer/admin only)
 
 **Gameplay:**
 \`${PREFIX} vote @player\` - Cast your vote
@@ -491,6 +497,70 @@ async function handleRestartPhaseCommand(client, message, args) {
   } catch (error) {
     console.error("Error restarting phase:", error);
     await message.reply("❌ An error occurred while restarting the phase.");
+  }
+}
+
+/**
+ * Handle skip phase command - manually advance to next phase
+ * @param {Object} client - Discord client
+ * @param {Object} message - Discord message
+ * @returns {Promise<void>}
+ */
+async function handleSkipPhaseCommand(client, message) {
+  try {
+    const games = await gameState.getActiveGames(message.guildId);
+    const game = games.find((g) => g.channelId === message.channelId);
+
+    if (!game) {
+      await message.reply("❌ No active Daily Mafia game in this channel.");
+      return;
+    }
+
+    // Only organizer or admin can skip phase
+    if (
+      game.organizerId !== message.author.id &&
+      !message.member.permissions.has("ADMINISTRATOR")
+    ) {
+      await message.reply(
+        "❌ Only the organizer or admin can skip the phase."
+      );
+      return;
+    }
+
+    // Can't skip during setup or ended phase
+    if (game.status === "pending") {
+      await message.reply(
+        "❌ Cannot skip phase during game setup. Use the Start Game button to begin."
+      );
+      return;
+    }
+
+    if (game.status === "completed" || game.status === "cancelled") {
+      await message.reply("❌ This game has already ended.");
+      return;
+    }
+
+    // Get current phase info
+    const currentPhase = game.phase;
+    const phaseDisplay =
+      currentPhase === "night"
+        ? `Night ${game.nightNumber}`
+        : currentPhase === "day"
+        ? `Day ${game.dayNumber}`
+        : currentPhase === "voting"
+        ? `Voting (Day ${game.dayNumber})`
+        : currentPhase;
+
+    // End the current phase
+    const { endPhase } = require("../dailyMafia/core/dailyGameLoop");
+    await endPhase(client, game.gameId, false);
+
+    await message.reply(
+      `✅ **Phase skipped!**\n${phaseDisplay} has been ended early. The next phase is starting now.`
+    );
+  } catch (error) {
+    console.error("Error skipping phase:", error);
+    await message.reply("❌ An error occurred while skipping the phase.");
   }
 }
 
