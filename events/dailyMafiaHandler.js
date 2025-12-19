@@ -595,6 +595,55 @@ async function handleRefreshButton(client, interaction, gameId) {
   await interaction.reply({ content: '✅ Status refreshed!', ephemeral: true });
 }
 
+/**
+ * Update existing pending game messages to include Start/Cancel buttons
+ * Run on bot startup to fix any games created before button update
+ */
+async function updateExistingPendingGames(client) {
+  try {
+    console.log('[Daily Mafia] Checking for pending games to update...');
+
+    // Get all games across all guilds
+    const allGames = await gameState.getAllActiveGames();
+    const pendingGames = allGames.filter(g => g.status === 'pending');
+
+    if (pendingGames.length === 0) {
+      console.log('[Daily Mafia] No pending games found to update');
+      return;
+    }
+
+    console.log(`[Daily Mafia] Found ${pendingGames.length} pending game(s) - updating setup messages...`);
+
+    for (const game of pendingGames) {
+      try {
+        const channel = await client.channels.fetch(game.channelId);
+        if (!channel) continue;
+
+        const setupMessage = await channel.messages.fetch(game.statusMessageId);
+        if (!setupMessage) continue;
+
+        // Get current players and rebuild embed
+        const players = await gameState.getPlayers(game.gameId);
+        const embed = buildSetupEmbed(game.gameId, players, game.lobbyDeadline);
+
+        // Add both join AND start buttons
+        const joinButtons = buildJoinGameButton(game.gameId);
+        const startButtons = buildStartGameButtons(game.gameId);
+        const allButtons = [...joinButtons, ...startButtons];
+
+        await setupMessage.edit({ embeds: [embed], components: allButtons });
+        console.log(`[Daily Mafia] ✅ Updated setup message for game ${game.gameId}`);
+      } catch (error) {
+        console.error(`[Daily Mafia] Failed to update game ${game.gameId}:`, error.message);
+      }
+    }
+
+    console.log('[Daily Mafia] ✅ Finished updating pending games');
+  } catch (error) {
+    console.error('[Daily Mafia] Error updating existing pending games:', error);
+  }
+}
+
 // Export as initialization function (required by handlerRegistry wrapper)
 module.exports = (client) => {
   console.log('[Daily Mafia Handler] Initializing handler...');
@@ -607,6 +656,13 @@ module.exports = (client) => {
     if (interaction.isButton()) {
       handleButtonInteraction(client, interaction);
     }
+  });
+
+  // Update existing pending games on startup (after bot is ready)
+  client.once('ready', () => {
+    setTimeout(() => {
+      updateExistingPendingGames(client);
+    }, 5000); // Wait 5 seconds for bot to fully initialize
   });
 
   console.log('[Daily Mafia Handler] ✅ Registered message and interaction handlers');
