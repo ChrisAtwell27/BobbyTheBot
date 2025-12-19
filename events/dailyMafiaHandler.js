@@ -462,7 +462,6 @@ async function handleJoinButton(client, interaction, gameId) {
 
   // Update setup message
   const players = await gameState.getPlayers(gameId);
-  const game = await gameState.getGame(gameId);
   const embed = buildSetupEmbed(gameId, players, game?.lobbyDeadline);
   await interaction.message.edit({ embeds: [embed] });
 }
