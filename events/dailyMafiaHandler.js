@@ -34,8 +34,6 @@ const ALIAS = '!dm';
  */
 async function handleMessage(client, message) {
   try {
-    console.log('[Daily Mafia Handler] handleMessage called for message:', message.content);
-
     // Ignore bots
     if (message.author.bot) return;
 
@@ -47,19 +45,14 @@ async function handleMessage(client, message) {
 
     // Check for command prefix
     const content = message.content.trim();
-    console.log('[Daily Mafia Handler] Checking prefix. Content:', content, '| Starts with PREFIX?', content.startsWith(PREFIX), '| Starts with ALIAS?', content.startsWith(ALIAS));
 
     if (!content.startsWith(PREFIX) && !content.startsWith(ALIAS)) {
       return;
     }
 
-    console.log('[Daily Mafia Handler] PREFIX/ALIAS matched! Parsing command...');
-
     // Parse command
     const args = content.slice(content.startsWith(PREFIX) ? PREFIX.length : ALIAS.length).trim().split(/\s+/);
     const command = args.shift().toLowerCase();
-
-    console.log('[Daily Mafia Handler] Parsed command:', command, '| Args:', args);
 
     // Route commands
     switch (command) {
@@ -117,14 +110,10 @@ async function handleMessage(client, message) {
  */
 async function handleStartCommand(client, message, args) {
   try {
-    console.log('[Daily Mafia] START command called by', message.author.username, 'in channel', message.channelId);
-
     // Check tier - Daily Mafia requires Plus tier or higher
     const tier = await getServerTier(message.guildId) || 'free';
-    console.log('[Daily Mafia] Server tier:', tier);
 
     if (tier === 'free') {
-      console.log('[Daily Mafia] Blocked - free tier');
       await message.reply(
         '❌ **Daily Mafia requires Plus tier or higher!**\n\n' +
         'This feature allows games to span multiple days with persistent storage.\n' +
@@ -136,10 +125,8 @@ async function handleStartCommand(client, message, args) {
 
     // Check if Daily Mafia channel is configured
     const configuredChannelId = await getSetting(message.guildId, 'channels.dailymafia');
-    console.log('[Daily Mafia] Configured channel:', configuredChannelId, '| Current channel:', message.channelId);
 
     if (configuredChannelId && configuredChannelId !== message.channelId) {
-      console.log('[Daily Mafia] Blocked - wrong channel');
       await message.reply(
         `❌ **Daily Mafia games can only be started in <#${configuredChannelId}>**\n\n` +
         `Your server admin has configured a specific channel for Daily Mafia games.\n` +
@@ -149,13 +136,10 @@ async function handleStartCommand(client, message, args) {
     }
 
     // Check if there's already an active game in this channel
-    console.log('[Daily Mafia] Checking for existing games...');
     const activeGames = await gameState.getActiveGames(message.guildId);
-    console.log('[Daily Mafia] Found', activeGames.length, 'active games');
     const existingGame = activeGames.find(g => g.channelId === message.channelId);
 
     if (existingGame) {
-      console.log('[Daily Mafia] Blocked - existing game in channel');
       await message.reply('❌ There is already an active Daily Mafia game in this channel.');
       return;
     }
@@ -163,10 +147,8 @@ async function handleStartCommand(client, message, args) {
     // Parse options
     const debugMode = args.includes('debug');
     const revealRoles = !args.includes('noreveal');
-    console.log('[Daily Mafia] Creating game with debugMode:', debugMode, 'revealRoles:', revealRoles);
 
     // Create game
-    console.log('[Daily Mafia] Calling gameState.createGame...');
     const gameId = await gameState.createGame({
       guildId: message.guildId,
       channelId: message.channelId,
@@ -175,10 +157,8 @@ async function handleStartCommand(client, message, args) {
       revealRoles,
       tier,
     });
-    console.log('[Daily Mafia] Game created with ID:', gameId);
 
     // Add organizer as first player
-    console.log('[Daily Mafia] Adding organizer as first player...');
     await gameState.addPlayer({
       gameId,
       playerId: message.author.id,
@@ -187,21 +167,22 @@ async function handleStartCommand(client, message, args) {
     });
 
     // Create setup embed
-    console.log('[Daily Mafia] Building setup embed...');
     const players = await gameState.getPlayers(gameId);
     const game = await gameState.getGame(gameId);
     const embed = buildSetupEmbed(gameId, players, game?.lobbyDeadline);
-    const buttons = buildJoinGameButton(gameId);
 
-    console.log('[Daily Mafia] Sending setup message...');
+    // Combine join/leave buttons AND start/cancel buttons
+    const joinButtons = buildJoinGameButton(gameId);
+    const startButtons = buildStartGameButtons(gameId);
+    const allButtons = [...joinButtons, ...startButtons];
+
     const setupMessage = await message.channel.send({
-      content: `🐝 **Daily Mafia Game Created!**\n\nOrganizer: ${message.author}\n\nPlayers can join using the button below. When ready, use \`${PREFIX} begin\` to start the game.`,
+      content: `🐝 **Daily Mafia Game Created!**\n\nOrganizer: ${message.author}\n\nPlayers can join using the buttons below. **Organizer:** Click "Start Game" when ready (need 8+ players).`,
       embeds: [embed],
-      components: buttons,
+      components: allButtons,
     });
 
     // Update game with setup message ID (for later updates)
-    console.log('[Daily Mafia] Updating game with setup message ID...');
     await gameState.updateGame(gameId, {
       statusMessageId: setupMessage.id,
     });
@@ -256,13 +237,16 @@ async function handleJoinCommand(client, message) {
 
     await message.reply(`✅ You have joined the game! (Game #${game.gameId.substring(6, 12)})`);
 
-    // Update setup message
+    // Update setup message with both join AND start buttons
     const players = await gameState.getPlayers(game.gameId);
     const embed = buildSetupEmbed(game.gameId, players, game.lobbyDeadline);
 
     try {
       const setupMessage = await message.channel.messages.fetch(game.statusMessageId);
-      await setupMessage.edit({ embeds: [embed] });
+      const joinButtons = buildJoinGameButton(game.gameId);
+      const startButtons = buildStartGameButtons(game.gameId);
+      const allButtons = [...joinButtons, ...startButtons];
+      await setupMessage.edit({ embeds: [embed], components: allButtons });
     } catch (error) {
       console.error('Could not update setup message:', error);
     }
@@ -484,10 +468,13 @@ async function handleJoinButton(client, interaction, gameId) {
 
   await interaction.reply({ content: '✅ You have joined the game!', ephemeral: true });
 
-  // Update setup message
+  // Update setup message with both join AND start buttons
   const players = await gameState.getPlayers(gameId);
   const embed = buildSetupEmbed(gameId, players, game?.lobbyDeadline);
-  await interaction.message.edit({ embeds: [embed] });
+  const joinButtons = buildJoinGameButton(gameId);
+  const startButtons = buildStartGameButtons(gameId);
+  const allButtons = [...joinButtons, ...startButtons];
+  await interaction.message.edit({ embeds: [embed], components: allButtons });
 }
 
 /**

@@ -251,6 +251,21 @@ module.exports = (client, commandRouter, interactionRouter) => {
     const { startPhaseChecker } = require('../dailyMafia/utils/phaseChecker');
     startPhaseChecker(client, 5); // Check every 5 minutes
 
+    // Craftle handler - !craftle (daily Minecraft recipe guessing game)
+    const craftleHandler = require('./craftleHandler');
+    const craftleWrapper = createHandlerWrapper(client, () => craftleHandler);
+    if (craftleWrapper.messageHandler) {
+        commandRouter.registerMessageProcessor(craftleWrapper.messageHandler);
+    }
+    if (craftleWrapper.interactionHandler) {
+        interactionRouter.registerButton('craftle_', craftleWrapper.interactionHandler);
+        interactionRouter.registerSelectMenu('craftle_select_', craftleWrapper.interactionHandler);
+    }
+
+    // Start Craftle puzzle generation cron
+    const { startPuzzleGenerationCron } = require('../craftle/utils/puzzleGenerator');
+    startPuzzleGenerationCron();
+
     // Valorant API handler - special initialization
     try {
         const valorantApiHandler = require('./valorantApiHandler');

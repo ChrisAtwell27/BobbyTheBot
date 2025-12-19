@@ -775,4 +775,146 @@ export default defineSchema({
   })
     .index("by_game", ["gameId"])
     .index("by_game_and_timestamp", ["gameId", "timestamp"]),
+
+  // ============================================================================
+  // CRAFTLE PUZZLES TABLE
+  // ============================================================================
+  craftlePuzzles: defineTable({
+    puzzleId: v.string(), // Format: "craftle-YYYY-MM-DD"
+    date: v.string(), // "2025-12-19"
+
+    recipe: v.object({
+      id: v.string(),
+      output: v.string(),
+      outputCount: v.number(),
+      grid: v.array(v.array(v.union(v.string(), v.null()))), // 3x3 array of item IDs or null
+      category: v.string(),
+      difficulty: v.union(v.literal("easy"), v.literal("medium"), v.literal("hard")),
+      description: v.string(),
+    }),
+
+    metadata: v.object({
+      difficulty: v.union(v.literal("easy"), v.literal("medium"), v.literal("hard")),
+      category: v.string(),
+      commonItems: v.array(v.string()), // Items that appear in recipe
+    }),
+
+    stats: v.object({
+      totalAttempts: v.number(), // How many users attempted
+      totalSolved: v.number(), // How many users solved
+      averageAttempts: v.number(), // Avg attempts to solve
+      solveRate: v.number(), // % of users who solved
+    }),
+
+    createdAt: v.number(),
+  })
+    .index("by_date", ["date"])
+    .index("by_puzzle_id", ["puzzleId"]),
+
+  // ============================================================================
+  // CRAFTLE USER PROGRESS TABLE
+  // ============================================================================
+  craftleUserProgress: defineTable({
+    guildId: v.string(),
+    userId: v.string(),
+    puzzleId: v.string(), // Which puzzle
+    date: v.string(), // "2025-12-19"
+
+    attempts: v.number(), // How many guesses made (max 6)
+    solved: v.boolean(), // Did they solve it?
+    guesses: v.array(
+      v.object({
+        grid: v.array(v.array(v.union(v.string(), v.null()))), // 3x3 array of item IDs
+        feedback: v.array(
+          v.array(
+            v.union(
+              v.literal("correct"),
+              v.literal("wrong_position"),
+              v.literal("not_in_recipe"),
+              v.null()
+            )
+          )
+        ), // 3x3 array of feedback
+        timestamp: v.number(),
+      })
+    ),
+
+    solveTime: v.optional(v.number()), // Milliseconds to solve
+    completedAt: v.optional(v.number()), // Unix timestamp when solved/failed
+    rewardGiven: v.boolean(), // Currency awarded?
+    rewardAmount: v.optional(v.number()), // How much currency awarded
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_and_puzzle", ["userId", "puzzleId"])
+    .index("by_guild_and_date", ["guildId", "date"])
+    .index("by_guild_and_user", ["guildId", "userId"])
+    .index("by_user_stats", ["userId", "solved"]),
+
+  // ============================================================================
+  // CRAFTLE USER STATS TABLE
+  // ============================================================================
+  craftleUserStats: defineTable({
+    guildId: v.string(),
+    userId: v.string(),
+
+    totalAttempts: v.number(), // Total puzzles attempted
+    totalSolved: v.number(), // Puzzles solved successfully
+    currentStreak: v.number(), // Consecutive days solved
+    longestStreak: v.number(), // Best streak ever
+    bestTime: v.optional(v.number()), // Fastest solve time (ms)
+    averageAttempts: v.number(), // Avg guesses per solve
+    totalHoneyEarned: v.number(), // Total currency earned
+
+    lastPlayedDate: v.string(), // "2025-12-19"
+    lastPlayedPuzzle: v.string(), // "craftle-2025-12-19"
+
+    distribution: v.object({
+      // Guess distribution (like Wordle)
+      solve1: v.number(), // Solved in 1 guess
+      solve2: v.number(), // Solved in 2 guesses
+      solve3: v.number(),
+      solve4: v.number(),
+      solve5: v.number(),
+      solve6: v.number(),
+      fail: v.number(), // Failed to solve
+    }),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_guild_and_user", ["guildId", "userId"])
+    .index("by_guild_leaderboard", ["guildId", "totalSolved"]),
+
+  // ============================================================================
+  // CRAFTLE LEADERBOARDS TABLE
+  // ============================================================================
+  craftleLeaderboards: defineTable({
+    guildId: v.string(),
+    type: v.union(
+      v.literal("daily"),
+      v.literal("weekly"),
+      v.literal("monthly"),
+      v.literal("alltime")
+    ),
+    period: v.string(), // "2025-12-19", "2025-W50", "2025-12", "all"
+
+    rankings: v.array(
+      v.object({
+        userId: v.string(),
+        displayName: v.string(),
+        score: v.number(), // Weighted score for ranking
+        solveCount: v.number(),
+        averageAttempts: v.number(),
+        currentStreak: v.number(),
+        bestTime: v.optional(v.number()),
+      })
+    ),
+
+    generatedAt: v.number(),
+    expiresAt: v.number(), // When to regenerate
+  })
+    .index("by_guild_and_type", ["guildId", "type"])
+    .index("by_guild_period", ["guildId", "period"]),
 });

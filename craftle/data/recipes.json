@@ -1,0 +1,799 @@
+{
+  "items": {
+    "oak_planks": {
+      "id": "oak_planks",
+      "name": "Oak Planks",
+      "emoji": "🟫",
+      "category": "building"
+    },
+    "stick": {
+      "id": "stick",
+      "name": "Stick",
+      "emoji": "🪵",
+      "category": "misc"
+    },
+    "cobblestone": {
+      "id": "cobblestone",
+      "name": "Cobblestone",
+      "emoji": "🪨",
+      "category": "building"
+    },
+    "iron_ingot": {
+      "id": "iron_ingot",
+      "name": "Iron Ingot",
+      "emoji": "⚙️",
+      "category": "materials"
+    },
+    "gold_ingot": {
+      "id": "gold_ingot",
+      "name": "Gold Ingot",
+      "emoji": "🟡",
+      "category": "materials"
+    },
+    "diamond": {
+      "id": "diamond",
+      "name": "Diamond",
+      "emoji": "💎",
+      "category": "materials"
+    },
+    "string": {
+      "id": "string",
+      "name": "String",
+      "emoji": "🧵",
+      "category": "misc"
+    },
+    "coal": {
+      "id": "coal",
+      "name": "Coal",
+      "emoji": "⚫",
+      "category": "materials"
+    },
+    "wheat": {
+      "id": "wheat",
+      "name": "Wheat",
+      "emoji": "🌾",
+      "category": "food"
+    },
+    "sugar": {
+      "id": "sugar",
+      "name": "Sugar",
+      "emoji": "🧂",
+      "category": "food"
+    },
+    "cocoa_beans": {
+      "id": "cocoa_beans",
+      "name": "Cocoa Beans",
+      "emoji": "🫘",
+      "category": "food"
+    },
+    "egg": {
+      "id": "egg",
+      "name": "Egg",
+      "emoji": "🥚",
+      "category": "food"
+    },
+    "milk_bucket": {
+      "id": "milk_bucket",
+      "name": "Milk Bucket",
+      "emoji": "🥛",
+      "category": "food"
+    },
+    "redstone": {
+      "id": "redstone",
+      "name": "Redstone",
+      "emoji": "🔴",
+      "category": "redstone"
+    },
+    "stone": {
+      "id": "stone",
+      "name": "Stone",
+      "emoji": "🗿",
+      "category": "building"
+    },
+    "glass": {
+      "id": "glass",
+      "name": "Glass",
+      "emoji": "💠",
+      "category": "building"
+    },
+    "paper": {
+      "id": "paper",
+      "name": "Paper",
+      "emoji": "📄",
+      "category": "misc"
+    },
+    "leather": {
+      "id": "leather",
+      "name": "Leather",
+      "emoji": "🟤",
+      "category": "materials"
+    },
+    "gunpowder": {
+      "id": "gunpowder",
+      "name": "Gunpowder",
+      "emoji": "💥",
+      "category": "misc"
+    },
+    "sand": {
+      "id": "sand",
+      "name": "Sand",
+      "emoji": "🏖️",
+      "category": "building"
+    },
+    "sugar_cane": {
+      "id": "sugar_cane",
+      "name": "Sugar Cane",
+      "emoji": "🎋",
+      "category": "misc"
+    },
+    "glowstone_dust": {
+      "id": "glowstone_dust",
+      "name": "Glowstone Dust",
+      "emoji": "✨",
+      "category": "misc"
+    },
+    "chest": {
+      "id": "chest",
+      "name": "Chest",
+      "emoji": "📦",
+      "category": "storage"
+    },
+    "quartz": {
+      "id": "quartz",
+      "name": "Quartz",
+      "emoji": "⬜",
+      "category": "materials"
+    },
+    "feather": {
+      "id": "feather",
+      "name": "Feather",
+      "emoji": "🪶",
+      "category": "misc"
+    },
+    "flint": {
+      "id": "flint",
+      "name": "Flint",
+      "emoji": "🪨",
+      "category": "misc"
+    }
+  },
+  "recipes": [
+    {
+      "id": "wooden_pickaxe",
+      "output": "Wooden Pickaxe",
+      "outputCount": 1,
+      "grid": [
+        ["oak_planks", "oak_planks", "oak_planks"],
+        [null, "stick", null],
+        [null, "stick", null]
+      ],
+      "category": "tools",
+      "difficulty": "easy",
+      "description": "Basic mining tool made of wood"
+    },
+    {
+      "id": "wooden_sword",
+      "output": "Wooden Sword",
+      "outputCount": 1,
+      "grid": [
+        [null, "oak_planks", null],
+        [null, "oak_planks", null],
+        [null, "stick", null]
+      ],
+      "category": "weapons",
+      "difficulty": "easy",
+      "description": "Basic melee weapon made of wood"
+    },
+    {
+      "id": "crafting_table",
+      "output": "Crafting Table",
+      "outputCount": 1,
+      "grid": [
+        ["oak_planks", "oak_planks", null],
+        ["oak_planks", "oak_planks", null],
+        [null, null, null]
+      ],
+      "category": "utility",
+      "difficulty": "easy",
+      "description": "Essential for advanced crafting"
+    },
+    {
+      "id": "stick",
+      "output": "Stick",
+      "outputCount": 4,
+      "grid": [
+        [null, "oak_planks", null],
+        [null, "oak_planks", null],
+        [null, null, null]
+      ],
+      "category": "materials",
+      "difficulty": "easy",
+      "description": "Used as handles for tools"
+    },
+    {
+      "id": "stone_pickaxe",
+      "output": "Stone Pickaxe",
+      "outputCount": 1,
+      "grid": [
+        ["cobblestone", "cobblestone", "cobblestone"],
+        [null, "stick", null],
+        [null, "stick", null]
+      ],
+      "category": "tools",
+      "difficulty": "easy",
+      "description": "Improved mining tool made of stone"
+    },
+    {
+      "id": "stone_sword",
+      "output": "Stone Sword",
+      "outputCount": 1,
+      "grid": [
+        [null, "cobblestone", null],
+        [null, "cobblestone", null],
+        [null, "stick", null]
+      ],
+      "category": "weapons",
+      "difficulty": "easy",
+      "description": "Improved melee weapon made of stone"
+    },
+    {
+      "id": "iron_pickaxe",
+      "output": "Iron Pickaxe",
+      "outputCount": 1,
+      "grid": [
+        ["iron_ingot", "iron_ingot", "iron_ingot"],
+        [null, "stick", null],
+        [null, "stick", null]
+      ],
+      "category": "tools",
+      "difficulty": "medium",
+      "description": "Durable mining tool made of iron"
+    },
+    {
+      "id": "iron_sword",
+      "output": "Iron Sword",
+      "outputCount": 1,
+      "grid": [
+        [null, "iron_ingot", null],
+        [null, "iron_ingot", null],
+        [null, "stick", null]
+      ],
+      "category": "weapons",
+      "difficulty": "medium",
+      "description": "Durable melee weapon made of iron"
+    },
+    {
+      "id": "diamond_pickaxe",
+      "output": "Diamond Pickaxe",
+      "outputCount": 1,
+      "grid": [
+        ["diamond", "diamond", "diamond"],
+        [null, "stick", null],
+        [null, "stick", null]
+      ],
+      "category": "tools",
+      "difficulty": "hard",
+      "description": "Premium mining tool made of diamond"
+    },
+    {
+      "id": "diamond_sword",
+      "output": "Diamond Sword",
+      "outputCount": 1,
+      "grid": [
+        [null, "diamond", null],
+        [null, "diamond", null],
+        [null, "stick", null]
+      ],
+      "category": "weapons",
+      "difficulty": "hard",
+      "description": "Premium melee weapon made of diamond"
+    },
+    {
+      "id": "bow",
+      "output": "Bow",
+      "outputCount": 1,
+      "grid": [
+        [null, "stick", "string"],
+        ["stick", null, "string"],
+        [null, "stick", "string"]
+      ],
+      "category": "weapons",
+      "difficulty": "medium",
+      "description": "Ranged weapon that shoots arrows"
+    },
+    {
+      "id": "arrow",
+      "output": "Arrow",
+      "outputCount": 4,
+      "grid": [
+        [null, "flint", null],
+        [null, "stick", null],
+        [null, "feather", null]
+      ],
+      "category": "weapons",
+      "difficulty": "medium",
+      "description": "Ammunition for bows"
+    },
+    {
+      "id": "bread",
+      "output": "Bread",
+      "outputCount": 1,
+      "grid": [
+        ["wheat", "wheat", "wheat"],
+        [null, null, null],
+        [null, null, null]
+      ],
+      "category": "food",
+      "difficulty": "easy",
+      "description": "Basic food item"
+    },
+    {
+      "id": "cake",
+      "output": "Cake",
+      "outputCount": 1,
+      "grid": [
+        ["milk_bucket", "milk_bucket", "milk_bucket"],
+        ["sugar", "egg", "sugar"],
+        ["wheat", "wheat", "wheat"]
+      ],
+      "category": "food",
+      "difficulty": "hard",
+      "description": "Delicious dessert that can be placed"
+    },
+    {
+      "id": "cookie",
+      "output": "Cookie",
+      "outputCount": 8,
+      "grid": [
+        ["wheat", "cocoa_beans", "wheat"],
+        [null, null, null],
+        [null, null, null]
+      ],
+      "category": "food",
+      "difficulty": "easy",
+      "description": "Sweet snack"
+    },
+    {
+      "id": "torch",
+      "output": "Torch",
+      "outputCount": 4,
+      "grid": [
+        [null, "coal", null],
+        [null, "stick", null],
+        [null, null, null]
+      ],
+      "category": "lighting",
+      "difficulty": "easy",
+      "description": "Provides light"
+    },
+    {
+      "id": "chest",
+      "output": "Chest",
+      "outputCount": 1,
+      "grid": [
+        ["oak_planks", "oak_planks", "oak_planks"],
+        ["oak_planks", null, "oak_planks"],
+        ["oak_planks", "oak_planks", "oak_planks"]
+      ],
+      "category": "storage",
+      "difficulty": "easy",
+      "description": "Storage container"
+    },
+    {
+      "id": "fence",
+      "output": "Oak Fence",
+      "outputCount": 3,
+      "grid": [
+        ["oak_planks", "stick", "oak_planks"],
+        ["oak_planks", "stick", "oak_planks"],
+        [null, null, null]
+      ],
+      "category": "decoration",
+      "difficulty": "medium",
+      "description": "Wooden barrier"
+    },
+    {
+      "id": "door",
+      "output": "Oak Door",
+      "outputCount": 3,
+      "grid": [
+        ["oak_planks", "oak_planks", null],
+        ["oak_planks", "oak_planks", null],
+        ["oak_planks", "oak_planks", null]
+      ],
+      "category": "decoration",
+      "difficulty": "easy",
+      "description": "Entrance and exit"
+    },
+    {
+      "id": "iron_door",
+      "output": "Iron Door",
+      "outputCount": 3,
+      "grid": [
+        ["iron_ingot", "iron_ingot", null],
+        ["iron_ingot", "iron_ingot", null],
+        ["iron_ingot", "iron_ingot", null]
+      ],
+      "category": "decoration",
+      "difficulty": "medium",
+      "description": "Requires redstone to open"
+    },
+    {
+      "id": "redstone_torch",
+      "output": "Redstone Torch",
+      "outputCount": 1,
+      "grid": [
+        [null, "redstone", null],
+        [null, "stick", null],
+        [null, null, null]
+      ],
+      "category": "redstone",
+      "difficulty": "easy",
+      "description": "Provides redstone power"
+    },
+    {
+      "id": "repeater",
+      "output": "Redstone Repeater",
+      "outputCount": 1,
+      "grid": [
+        [null, "redstone", null],
+        ["stone", "redstone", "stone"],
+        [null, "stone", null]
+      ],
+      "category": "redstone",
+      "difficulty": "medium",
+      "description": "Delays redstone signal"
+    },
+    {
+      "id": "comparator",
+      "output": "Redstone Comparator",
+      "outputCount": 1,
+      "grid": [
+        [null, "redstone", null],
+        ["redstone", "quartz", "redstone"],
+        ["stone", "stone", "stone"]
+      ],
+      "category": "redstone",
+      "difficulty": "hard",
+      "description": "Compares signal strength"
+    },
+    {
+      "id": "tnt",
+      "output": "TNT",
+      "outputCount": 1,
+      "grid": [
+        ["gunpowder", "sand", "gunpowder"],
+        ["sand", "gunpowder", "sand"],
+        ["gunpowder", "sand", "gunpowder"]
+      ],
+      "category": "redstone",
+      "difficulty": "medium",
+      "description": "Explosive block"
+    },
+    {
+      "id": "paper",
+      "output": "Paper",
+      "outputCount": 3,
+      "grid": [
+        ["sugar_cane", "sugar_cane", "sugar_cane"],
+        [null, null, null],
+        [null, null, null]
+      ],
+      "category": "misc",
+      "difficulty": "easy",
+      "description": "Used for books and maps"
+    },
+    {
+      "id": "book",
+      "output": "Book",
+      "outputCount": 1,
+      "grid": [
+        ["paper", null, null],
+        ["paper", null, null],
+        ["paper", null, null]
+      ],
+      "category": "misc",
+      "difficulty": "easy",
+      "description": "Used for bookshelves and enchanting"
+    },
+    {
+      "id": "bookshelf",
+      "output": "Bookshelf",
+      "outputCount": 1,
+      "grid": [
+        ["oak_planks", "oak_planks", "oak_planks"],
+        ["paper", "paper", "paper"],
+        ["oak_planks", "oak_planks", "oak_planks"]
+      ],
+      "category": "decoration",
+      "difficulty": "medium",
+      "description": "Decoration and enchanting"
+    },
+    {
+      "id": "golden_apple",
+      "output": "Golden Apple",
+      "outputCount": 1,
+      "grid": [
+        ["gold_ingot", "gold_ingot", "gold_ingot"],
+        ["gold_ingot", null, "gold_ingot"],
+        ["gold_ingot", "gold_ingot", "gold_ingot"]
+      ],
+      "category": "food",
+      "difficulty": "hard",
+      "description": "Rare healing food (missing apple in center!)"
+    },
+    {
+      "id": "stone_axe",
+      "output": "Stone Axe",
+      "outputCount": 1,
+      "grid": [
+        ["cobblestone", "cobblestone", null],
+        ["cobblestone", "stick", null],
+        [null, "stick", null]
+      ],
+      "category": "tools",
+      "difficulty": "easy",
+      "description": "Chops wood faster"
+    },
+    {
+      "id": "iron_axe",
+      "output": "Iron Axe",
+      "outputCount": 1,
+      "grid": [
+        ["iron_ingot", "iron_ingot", null],
+        ["iron_ingot", "stick", null],
+        [null, "stick", null]
+      ],
+      "category": "tools",
+      "difficulty": "medium",
+      "description": "Efficient wood chopping"
+    },
+    {
+      "id": "stone_shovel",
+      "output": "Stone Shovel",
+      "outputCount": 1,
+      "grid": [
+        [null, "cobblestone", null],
+        [null, "stick", null],
+        [null, "stick", null]
+      ],
+      "category": "tools",
+      "difficulty": "easy",
+      "description": "Digs dirt and sand faster"
+    },
+    {
+      "id": "iron_shovel",
+      "output": "Iron Shovel",
+      "outputCount": 1,
+      "grid": [
+        [null, "iron_ingot", null],
+        [null, "stick", null],
+        [null, "stick", null]
+      ],
+      "category": "tools",
+      "difficulty": "medium",
+      "description": "Efficient digging tool"
+    },
+    {
+      "id": "ladder",
+      "output": "Ladder",
+      "outputCount": 3,
+      "grid": [
+        ["stick", null, "stick"],
+        ["stick", "stick", "stick"],
+        ["stick", null, "stick"]
+      ],
+      "category": "decoration",
+      "difficulty": "easy",
+      "description": "Climb up and down"
+    },
+    {
+      "id": "sign",
+      "output": "Sign",
+      "outputCount": 3,
+      "grid": [
+        ["oak_planks", "oak_planks", "oak_planks"],
+        ["oak_planks", "oak_planks", "oak_planks"],
+        [null, "stick", null]
+      ],
+      "category": "decoration",
+      "difficulty": "easy",
+      "description": "Display text"
+    },
+    {
+      "id": "painting",
+      "output": "Painting",
+      "outputCount": 1,
+      "grid": [
+        ["stick", "stick", "stick"],
+        ["stick", null, "stick"],
+        ["stick", "stick", "stick"]
+      ],
+      "category": "decoration",
+      "difficulty": "medium",
+      "description": "Wall decoration (missing wool in center!)"
+    },
+    {
+      "id": "fishing_rod",
+      "output": "Fishing Rod",
+      "outputCount": 1,
+      "grid": [
+        [null, null, "stick"],
+        [null, "stick", "string"],
+        ["stick", null, "string"]
+      ],
+      "category": "tools",
+      "difficulty": "medium",
+      "description": "Catch fish"
+    },
+    {
+      "id": "shears",
+      "output": "Shears",
+      "outputCount": 1,
+      "grid": [
+        [null, "iron_ingot", null],
+        ["iron_ingot", null, null],
+        [null, null, null]
+      ],
+      "category": "tools",
+      "difficulty": "medium",
+      "description": "Collect wool and leaves"
+    },
+    {
+      "id": "flint_and_steel",
+      "output": "Flint and Steel",
+      "outputCount": 1,
+      "grid": [
+        ["iron_ingot", null, null],
+        [null, "flint", null],
+        [null, null, null]
+      ],
+      "category": "tools",
+      "difficulty": "medium",
+      "description": "Creates fire"
+    },
+    {
+      "id": "trapdoor",
+      "output": "Oak Trapdoor",
+      "outputCount": 2,
+      "grid": [
+        ["oak_planks", "oak_planks", "oak_planks"],
+        ["oak_planks", "oak_planks", "oak_planks"],
+        [null, null, null]
+      ],
+      "category": "decoration",
+      "difficulty": "easy",
+      "description": "Horizontal door"
+    },
+    {
+      "id": "stone_pressure_plate",
+      "output": "Stone Pressure Plate",
+      "outputCount": 1,
+      "grid": [
+        ["stone", "stone", null],
+        [null, null, null],
+        [null, null, null]
+      ],
+      "category": "redstone",
+      "difficulty": "easy",
+      "description": "Activates when stepped on"
+    },
+    {
+      "id": "stone_button",
+      "output": "Stone Button",
+      "outputCount": 1,
+      "grid": [
+        ["stone", null, null],
+        [null, null, null],
+        [null, null, null]
+      ],
+      "category": "redstone",
+      "difficulty": "easy",
+      "description": "Activates when pressed"
+    },
+    {
+      "id": "piston",
+      "output": "Piston",
+      "outputCount": 1,
+      "grid": [
+        ["oak_planks", "oak_planks", "oak_planks"],
+        ["cobblestone", "iron_ingot", "cobblestone"],
+        ["cobblestone", "redstone", "cobblestone"]
+      ],
+      "category": "redstone",
+      "difficulty": "hard",
+      "description": "Pushes blocks"
+    },
+    {
+      "id": "glowstone",
+      "output": "Glowstone",
+      "outputCount": 1,
+      "grid": [
+        ["glowstone_dust", "glowstone_dust", null],
+        ["glowstone_dust", "glowstone_dust", null],
+        [null, null, null]
+      ],
+      "category": "lighting",
+      "difficulty": "medium",
+      "description": "Bright light source"
+    },
+    {
+      "id": "lever",
+      "output": "Lever",
+      "outputCount": 1,
+      "grid": [
+        [null, "stick", null],
+        [null, "cobblestone", null],
+        [null, null, null]
+      ],
+      "category": "redstone",
+      "difficulty": "easy",
+      "description": "Redstone switch"
+    },
+    {
+      "id": "bucket",
+      "output": "Bucket",
+      "outputCount": 1,
+      "grid": [
+        ["iron_ingot", null, "iron_ingot"],
+        [null, "iron_ingot", null],
+        [null, null, null]
+      ],
+      "category": "tools",
+      "difficulty": "medium",
+      "description": "Holds liquids"
+    },
+    {
+      "id": "iron_helmet",
+      "output": "Iron Helmet",
+      "outputCount": 1,
+      "grid": [
+        ["iron_ingot", "iron_ingot", "iron_ingot"],
+        ["iron_ingot", null, "iron_ingot"],
+        [null, null, null]
+      ],
+      "category": "armor",
+      "difficulty": "medium",
+      "description": "Head protection"
+    },
+    {
+      "id": "iron_chestplate",
+      "output": "Iron Chestplate",
+      "outputCount": 1,
+      "grid": [
+        ["iron_ingot", null, "iron_ingot"],
+        ["iron_ingot", "iron_ingot", "iron_ingot"],
+        ["iron_ingot", "iron_ingot", "iron_ingot"]
+      ],
+      "category": "armor",
+      "difficulty": "hard",
+      "description": "Chest protection"
+    },
+    {
+      "id": "iron_leggings",
+      "output": "Iron Leggings",
+      "outputCount": 1,
+      "grid": [
+        ["iron_ingot", "iron_ingot", "iron_ingot"],
+        ["iron_ingot", null, "iron_ingot"],
+        ["iron_ingot", null, "iron_ingot"]
+      ],
+      "category": "armor",
+      "difficulty": "hard",
+      "description": "Leg protection"
+    },
+    {
+      "id": "iron_boots",
+      "output": "Iron Boots",
+      "outputCount": 1,
+      "grid": [
+        ["iron_ingot", null, "iron_ingot"],
+        ["iron_ingot", null, "iron_ingot"],
+        [null, null, null]
+      ],
+      "category": "armor",
+      "difficulty": "medium",
+      "description": "Foot protection"
+    }
+  ]
+}

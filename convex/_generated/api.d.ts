@@ -11,6 +11,7 @@
 import type * as betting from "../betting.js";
 import type * as bounties from "../bounties.js";
 import type * as challenges from "../challenges.js";
+import type * as craftle from "../craftle.js";
 import type * as crons from "../crons.js";
 import type * as dailyMafia from "../dailyMafia.js";
 import type * as lottery from "../lottery.js";
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   betting: typeof betting;
   bounties: typeof bounties;
   challenges: typeof challenges;
+  craftle: typeof craftle;
   crons: typeof crons;
   dailyMafia: typeof dailyMafia;
   lottery: typeof lottery;
