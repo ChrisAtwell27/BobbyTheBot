@@ -33,32 +33,62 @@ async function sendNightActionPrompts(client, gameId) {
       if (player.playerId.startsWith("bot-")) continue;
 
       const role = gameState.getRoleDefinition(player.role);
-
-      if (!role || !role.nightAction) continue;
+      if (!role) continue;
 
       try {
         const user = await client.users.fetch(player.playerId);
         if (!user) continue;
 
-        const targets = alivePlayers.filter(
-          (p) => p.playerId !== player.playerId
-        );
-        const embed = buildActionEmbed(player, role, targets, game);
-        const components = buildActionComponents(
-          game.gameId,
-          player,
-          role,
-          targets
-        );
+        // CASE 1: Role has night action - send interactive prompt
+        if (role.nightAction) {
+          const targets = alivePlayers.filter(
+            (p) => p.playerId !== player.playerId
+          );
+          const embed = buildActionEmbed(player, role, targets, game);
+          const components = buildActionComponents(
+            game.gameId,
+            player,
+            role,
+            targets
+          );
 
-        await user.send({ embeds: [embed], components });
+          await user.send({ embeds: [embed], components });
 
-        console.log(
-          `[Daily Mafia ${gameId}] Sent night action prompt to ${player.displayName}`
-        );
+          console.log(
+            `[Daily Mafia ${gameId}] Sent night action prompt to ${player.displayName}`
+          );
+        }
+        // CASE 2: Role has no night action - send informational DM
+        else {
+          const { EmbedBuilder } = require("discord.js");
+
+          let color = "#808080"; // Default gray
+          if (role.team === "bee") color = "#FFD700"; // Gold
+          else if (role.team === "wasp") color = "#8B0000"; // Dark Red
+          else if (role.team === "neutral") color = "#9B59B6"; // Purple
+
+          const infoEmbed = new EmbedBuilder()
+            .setColor(color)
+            .setTitle(`🌙 Night ${game.nightNumber} - ${role.name} ${role.emoji}`)
+            .setDescription(
+              `**Night has begun!**\n\n` +
+              `As a **${role.name}**, you have no night action to perform.\n\n` +
+              `🛏️ **Rest up!** Other players with special abilities are taking their actions.\n\n` +
+              `☀️ When the day phase begins, you'll be able to participate in discussions and voting.`
+            )
+            .setFooter({
+              text: `You will be notified when the day phase starts. Stay tuned!`
+            });
+
+          await user.send({ embeds: [infoEmbed] });
+
+          console.log(
+            `[Daily Mafia ${gameId}] Sent night info message to ${player.displayName} (no action)`
+          );
+        }
       } catch (error) {
         console.error(
-          `Error sending night action prompt to ${player.displayName}:`,
+          `Error sending night prompt to ${player.displayName}:`,
           error
         );
       }
