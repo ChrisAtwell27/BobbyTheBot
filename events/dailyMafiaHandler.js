@@ -109,10 +109,14 @@ async function handleMessage(client, message) {
  */
 async function handleStartCommand(client, message, args) {
   try {
+    console.log('[Daily Mafia] START command called by', message.author.username, 'in channel', message.channelId);
+
     // Check tier - Daily Mafia requires Plus tier or higher
     const tier = await getServerTier(message.guildId) || 'free';
+    console.log('[Daily Mafia] Server tier:', tier);
 
     if (tier === 'free') {
+      console.log('[Daily Mafia] Blocked - free tier');
       await message.reply(
         '❌ **Daily Mafia requires Plus tier or higher!**\n\n' +
         'This feature allows games to span multiple days with persistent storage.\n' +
@@ -124,10 +128,12 @@ async function handleStartCommand(client, message, args) {
 
     // Check if Daily Mafia channel is configured
     const configuredChannelId = await getSetting(message.guildId, 'channels.dailymafia');
+    console.log('[Daily Mafia] Configured channel:', configuredChannelId, '| Current channel:', message.channelId);
 
     if (configuredChannelId && configuredChannelId !== message.channelId) {
+      console.log('[Daily Mafia] Blocked - wrong channel');
       await message.reply(
-        `❌ **Daily Mafia games can only be started in <#${configuredChannelId}>**\n\n` +
+        `❌ **Daily Mafia games can only be started in <#${configuredChannelId}>**\n\n' +
         'Your server admin has configured a specific channel for Daily Mafia games.\n' +
         'To change this, use the settings dashboard: <https://crackedgames.co/bobby-the-bot/>'
       );
@@ -135,10 +141,13 @@ async function handleStartCommand(client, message, args) {
     }
 
     // Check if there's already an active game in this channel
+    console.log('[Daily Mafia] Checking for existing games...');
     const activeGames = await gameState.getActiveGames(message.guildId);
+    console.log('[Daily Mafia] Found', activeGames.length, 'active games');
     const existingGame = activeGames.find(g => g.channelId === message.channelId);
 
     if (existingGame) {
+      console.log('[Daily Mafia] Blocked - existing game in channel');
       await message.reply('❌ There is already an active Daily Mafia game in this channel.');
       return;
     }
@@ -146,8 +155,10 @@ async function handleStartCommand(client, message, args) {
     // Parse options
     const debugMode = args.includes('debug');
     const revealRoles = !args.includes('noreveal');
+    console.log('[Daily Mafia] Creating game with debugMode:', debugMode, 'revealRoles:', revealRoles);
 
     // Create game
+    console.log('[Daily Mafia] Calling gameState.createGame...');
     const gameId = await gameState.createGame({
       guildId: message.guildId,
       channelId: message.channelId,
@@ -156,8 +167,10 @@ async function handleStartCommand(client, message, args) {
       revealRoles,
       tier,
     });
+    console.log('[Daily Mafia] Game created with ID:', gameId);
 
     // Add organizer as first player
+    console.log('[Daily Mafia] Adding organizer as first player...');
     await gameState.addPlayer({
       gameId,
       playerId: message.author.id,
@@ -166,11 +179,13 @@ async function handleStartCommand(client, message, args) {
     });
 
     // Create setup embed
+    console.log('[Daily Mafia] Building setup embed...');
     const players = await gameState.getPlayers(gameId);
     const game = await gameState.getGame(gameId);
     const embed = buildSetupEmbed(gameId, players, game?.lobbyDeadline);
     const buttons = buildJoinGameButton(gameId);
 
+    console.log('[Daily Mafia] Sending setup message...');
     const setupMessage = await message.channel.send({
       content: `🐝 **Daily Mafia Game Created!**\n\nOrganizer: ${message.author}\n\nPlayers can join using the button below. When ready, use \`${PREFIX} begin\` to start the game.`,
       embeds: [embed],
@@ -178,15 +193,17 @@ async function handleStartCommand(client, message, args) {
     });
 
     // Update game with setup message ID (for later updates)
+    console.log('[Daily Mafia] Updating game with setup message ID...');
     await gameState.updateGame(gameId, {
       statusMessageId: setupMessage.id,
     });
 
-    console.log(`[Daily Mafia] Game ${gameId} created by ${message.author.username}`);
+    console.log(`[Daily Mafia] ✅ Game ${gameId} created successfully by ${message.author.username}`);
 
   } catch (error) {
-    console.error('Error handling start command:', error);
-    await message.reply('❌ An error occurred while creating the game.');
+    console.error('[Daily Mafia] ❌ Error handling start command:', error);
+    console.error('[Daily Mafia] Error stack:', error.stack);
+    await message.reply('❌ An error occurred while creating the game. Check bot logs for details.');
   }
 }
 
