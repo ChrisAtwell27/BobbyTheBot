@@ -98,6 +98,10 @@ async function handleMessage(client, message) {
         await handleHelpCommand(client, message);
         break;
 
+      case "restartphase":
+        await handleRestartPhaseCommand(client, message, args);
+        break;
+
       default:
         await message.reply(
           `❌ Unknown command. Use \`${PREFIX} help\` for a list of commands.`
@@ -429,6 +433,65 @@ You can use \`${ALIAS}\` instead of \`${PREFIX}\`
 `;
 
   await message.reply(helpText);
+}
+
+/**
+ * Handle restart phase command (debug/recovery tool)
+ * @param {Object} client - Discord client
+ * @param {Object} message - Discord message
+ * @param {Array} args - Command arguments
+ * @returns {Promise<void>}
+ */
+async function handleRestartPhaseCommand(client, message, args) {
+  try {
+    const games = await gameState.getActiveGames(message.guildId);
+    const game = games.find((g) => g.channelId === message.channelId);
+
+    if (!game) {
+      await message.reply("❌ No active Daily Mafia game in this channel.");
+      return;
+    }
+
+    // Only organizer can restart phase
+    if (
+      game.organizerId !== message.author.id &&
+      !message.member.permissions.has("ADMINISTRATOR")
+    ) {
+      await message.reply(
+        "❌ Only the organizer or admin can restart the phase."
+      );
+      return;
+    }
+
+    const {
+      sendPhaseNotifications,
+    } = require("../dailyMafia/core/dailyGameLoop");
+
+    // 1. Send public phase notification
+    await sendPhaseNotifications(client, game.gameId, game.phase);
+
+    // 2. If Night phase, resend prompts
+    if (game.phase === "night") {
+      await sendNightActionPrompts(client, game.gameId);
+
+      // Resend Role DMs if requested (useful if start crashed)
+      if (args.includes("roles") || game.nightNumber === 1) {
+        await sendRoleDMs(client, game.gameId);
+        await message.reply(
+          "✅ Phase restarted: Notifications, Action Prompts, and Role DMs sent."
+        );
+      } else {
+        await message.reply(
+          "✅ Phase restarted: Notifications and Action Prompts sent. (Use `!dm restartphase roles` to resend role DMs)"
+        );
+      }
+    } else {
+      await message.reply("✅ Phase restarted: Notification sent.");
+    }
+  } catch (error) {
+    console.error("Error restarting phase:", error);
+    await message.reply("❌ An error occurred while restarting the phase.");
+  }
 }
 
 /**
