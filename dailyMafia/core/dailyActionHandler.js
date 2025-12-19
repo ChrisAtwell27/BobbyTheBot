@@ -365,11 +365,13 @@ async function handleActionInteraction(client, interaction) {
     await updateStatusMessage(client, game.gameId);
   } catch (error) {
     console.error("Error handling action interaction:", error);
-    if (!interaction.replied) {
+    if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: "❌ Error processing action.",
         ephemeral: true,
       });
+    } else {
+      await interaction.editReply({ content: "❌ Error processing action." });
     }
   }
 }
