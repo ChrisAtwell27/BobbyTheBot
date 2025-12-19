@@ -16,8 +16,7 @@ const {
   buildStartGameButtons,
   buildJoinGameButton,
 } = require('../dailyMafia/ui/dailyButtons');
-const { getTierForGuild } = require('../utils/subscriptionHelper');
-const { getSetting } = require('../utils/settingsManager');
+const { getSetting, getServerTier } = require('../utils/settingsManager');
 
 /**
  * Daily Mafia Command Handler
@@ -111,7 +110,7 @@ async function handleMessage(client, message) {
 async function handleStartCommand(client, message, args) {
   try {
     // Check tier - Daily Mafia requires Plus tier or higher
-    const tier = await getTierForGuild(message.guildId) || 'free';
+    const tier = await getServerTier(message.guildId) || 'free';
 
     if (tier === 'free') {
       await message.reply(
@@ -498,15 +497,20 @@ async function handleStartButton(client, interaction, gameId) {
   }
 
   // Assign roles (using shared mafiaUtils)
-  const { assignRoles } = require('../mafia/game/mafiaUtils');
-  const availableRoles = gameState.getDailyModeRoles(game.tier);
+  const { getRoleDistribution, shuffleArray } = require('../mafia/game/mafiaUtils');
+  const { ROLES } = require('../mafia/roles/mafiaRoles');
 
-  const roleAssignments = assignRoles(players.length, availableRoles);
+  // Get role distribution (returns role KEYS like 'QUEEN_BEE', 'KILLER_WASP')
+  const roleKeys = getRoleDistribution(players.length, false, false, game.tier);
+  const shuffledRoleKeys = shuffleArray(roleKeys);
 
-  // Update players with roles
+  // Update players with roles (convert keys to names for storage)
   for (let i = 0; i < players.length; i++) {
+    const roleKey = shuffledRoleKeys[i];
+    const roleName = ROLES[roleKey].name; // Convert key to display name
+
     await gameState.updatePlayer(gameId, players[i].playerId, {
-      role: roleAssignments[i].name,
+      role: roleName,
     });
   }
 

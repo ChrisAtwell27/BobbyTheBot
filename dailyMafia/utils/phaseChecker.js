@@ -205,17 +205,21 @@ async function handleLobbyDeadline(client, game) {
 
       // Use the same start logic as manual start
       const { startGame } = require('../core/dailyGameLoop');
-      const { assignRoles } = require('../../mafia/game/mafiaUtils');
+      const { getRoleDistribution, shuffleArray } = require('../../mafia/game/mafiaUtils');
+      const { ROLES } = require('../../mafia/roles/mafiaRoles');
       const { createStatusMessage } = require('../ui/dailyEmbeds');
       const { sendNightActionPrompts } = require('../core/dailyActionHandler');
 
       // Assign roles
-      const availableRoles = gameState.getDailyModeRoles(game.tier);
-      const roleAssignments = assignRoles(playerCount, availableRoles);
+      const roleKeys = getRoleDistribution(playerCount, false, false, game.tier);
+      const shuffledRoleKeys = shuffleArray(roleKeys);
 
       for (let i = 0; i < players.length; i++) {
+        const roleKey = shuffledRoleKeys[i];
+        const roleName = ROLES[roleKey].name; // Convert key to display name
+
         await gameState.updatePlayer(game.gameId, players[i].playerId, {
-          role: roleAssignments[i].name,
+          role: roleName,
         });
       }
 
