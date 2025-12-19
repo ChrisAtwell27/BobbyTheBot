@@ -529,9 +529,10 @@ async function handleButtonInteraction(client, interaction) {
         await handleCancelButton(client, interaction, gameId);
         break;
 
-      case "refresh":
-        await handleRefreshButton(client, interaction, gameId);
-        break;
+      // Refresh button removed - status updates automatically on phase changes
+      // case "refresh":
+      //   await handleRefreshButton(client, interaction, gameId);
+      //   break;
 
       case "action":
         // DM Action buttons (routed to dailyActionHandler)
@@ -736,13 +737,7 @@ async function handleCancelButton(client, interaction, gameId) {
   await interaction.reply({ content: "✅ Game cancelled.", ephemeral: true });
 }
 
-/**
- * Handle refresh button
- */
-async function handleRefreshButton(client, interaction, gameId) {
-  await updateStatusMessage(client, gameId);
-  await interaction.reply({ content: "✅ Status refreshed!", ephemeral: true });
-}
+// handleRefreshButton removed - status updates automatically on phase changes
 
 /**
  * Update existing pending game messages to include Start/Cancel buttons

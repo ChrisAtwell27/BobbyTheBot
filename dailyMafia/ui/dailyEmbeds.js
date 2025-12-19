@@ -41,7 +41,9 @@ async function buildStatusEmbed(gameId) {
       phaseInfo += ` ${game.dayNumber}`;
     }
 
-    phaseInfo += `\n**Time Remaining:** ${formatTimeRemaining(game.phaseDeadline)}`;
+    // Use Discord timestamp format that auto-updates on client side
+    const deadlineSeconds = Math.floor(game.phaseDeadline / 1000);
+    phaseInfo += `\n**Phase Ends:** <t:${deadlineSeconds}:R>`;
 
     embed.addFields({
       name: '📋 Game Info',
@@ -49,18 +51,13 @@ async function buildStatusEmbed(gameId) {
       inline: false,
     });
 
-    // Alive players
+    // Alive players (simple list without status indicators)
     let aliveList = '';
     for (const player of alivePlayers) {
-      const emoji = player.hasActedThisPhase ? '✅' :
-                   player.isInactive ? '💤' : '⏳';
-
-      aliveList += `${emoji} ${player.displayName}`;
+      aliveList += `• ${player.displayName}`;
 
       if (player.isInactive) {
         aliveList += ' (inactive)';
-      } else if (!player.hasActedThisPhase && game.phase !== 'day') {
-        aliveList += ' (waiting)';
       }
 
       aliveList += '\n';
@@ -71,6 +68,20 @@ async function buildStatusEmbed(gameId) {
       value: aliveList || 'None',
       inline: false,
     });
+
+    // Action progress (for night/voting phases)
+    if (game.phase === 'night' || game.phase === 'voting') {
+      const actedCount = alivePlayers.filter(p => p.hasActedThisPhase).length;
+      const totalCount = alivePlayers.length;
+      const progressBar = createProgressBar(actedCount, totalCount);
+
+      const actionType = game.phase === 'night' ? 'Night Actions' : 'Votes';
+      embed.addFields({
+        name: `📊 ${actionType} Progress`,
+        value: `${progressBar}\n**${actedCount}/${totalCount}** players completed`,
+        inline: false,
+      });
+    }
 
     // Dead players
     if (deadPlayers.length > 0) {
@@ -96,19 +107,7 @@ async function buildStatusEmbed(gameId) {
       });
     }
 
-    // Waiting for (if applicable)
-    if (game.phase !== 'day' && game.phase !== 'ended') {
-      const waiting = alivePlayers.filter(p => !p.hasActedThisPhase);
-
-      if (waiting.length > 0) {
-        const mentions = waiting.map(p => `<@${p.playerId}>`).join(', ');
-        embed.addFields({
-          name: '⏰ Waiting For',
-          value: mentions,
-          inline: false,
-        });
-      }
-    }
+    // No "Waiting For" section - player pings only happen in phase change notifications
 
     // Recent events
     if (recentEvents.length > 0) {
@@ -165,9 +164,8 @@ async function updateStatusMessage(client, gameId) {
     // Add voting buttons during voting phase
     if (game.phase === 'voting' && game.status === 'active') {
       components = await buildVotingButtons(gameId);
-    } else {
-      components = buildRefreshButton(gameId);
     }
+    // No refresh button - status updates automatically on phase changes
 
     // Send new status message
     const newMessage = await channel.send({
@@ -204,11 +202,9 @@ async function createStatusMessage(client, gameId) {
     const embed = await buildStatusEmbed(gameId);
     if (!embed) return null;
 
-    const components = buildRefreshButton(gameId);
-
+    // No refresh button - status updates automatically on phase changes
     const message = await channel.send({
       embeds: [embed],
-      components,
     });
 
     // Pin the message
@@ -344,6 +340,23 @@ function getTimeAgo(timestamp) {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+/**
+ * Create progress bar visualization
+ * @param {number} completed - Number completed
+ * @param {number} total - Total number
+ * @returns {string} Progress bar string
+ */
+function createProgressBar(completed, total) {
+  const barLength = 10;
+  const filledLength = Math.round((completed / total) * barLength);
+  const emptyLength = barLength - filledLength;
+
+  const filledBar = '█'.repeat(filledLength);
+  const emptyBar = '░'.repeat(emptyLength);
+
+  return `[${filledBar}${emptyBar}]`;
 }
 
 module.exports = {

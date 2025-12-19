@@ -58,7 +58,7 @@ async function sendNightActionPrompts(client, gameId) {
             `[Daily Mafia ${gameId}] Sent night action prompt to ${player.displayName}`
           );
         }
-        // CASE 2: Role has no night action - send informational DM
+        // CASE 2: Role has no night action - send informational DM and auto-mark as acted
         else {
           const { EmbedBuilder } = require("discord.js");
 
@@ -82,8 +82,13 @@ async function sendNightActionPrompts(client, gameId) {
 
           await user.send({ embeds: [infoEmbed] });
 
+          // Auto-mark as having acted (since they don't need to do anything)
+          await gameState.updatePlayer(gameId, player.playerId, {
+            hasActedThisPhase: true,
+          });
+
           console.log(
-            `[Daily Mafia ${gameId}] Sent night info message to ${player.displayName} (no action)`
+            `[Daily Mafia ${gameId}] Sent night info to ${player.displayName} (no action - auto-marked as completed)`
           );
         }
       } catch (error) {
