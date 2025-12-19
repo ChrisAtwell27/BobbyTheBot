@@ -73,6 +73,16 @@ const RANK_CACHE_SIZE = 100;
 const ACTIVE_TEAMS_CACHE_SIZE = 50;
 // ===================================
 
+// Preload rank images on module load to avoid first-call delays
+(async () => {
+  try {
+    await loadRankImages();
+    console.log("[Team] Rank images preloaded successfully");
+  } catch (error) {
+    console.error("[Team] Failed to preload rank images:", error.message);
+  }
+})();
+
 // Helper to get Valorant role from settings
 async function getValorantRoleId(guildId) {
   return await getSetting(guildId, 'roles.valorant_team', DEFAULT_VALORANT_ROLE_ID);
