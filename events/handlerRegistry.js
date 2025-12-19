@@ -237,6 +237,20 @@ module.exports = (client, commandRouter, interactionRouter) => {
         interactionRouter.registerSelectMenu('mafia_', mafiaWrapper.interactionHandler);
     }
 
+    // Daily Mafia handler - !dailymafia, !dm (asynchronous 24hr game mode)
+    const dailyMafiaHandler = require('./dailyMafiaHandler');
+    const dailyMafiaWrapper = createHandlerWrapper(client, () => dailyMafiaHandler);
+    if (dailyMafiaWrapper.messageHandler) {
+        commandRouter.registerMessageProcessor(dailyMafiaWrapper.messageHandler);
+    }
+    if (dailyMafiaWrapper.interactionHandler) {
+        interactionRouter.registerButton('dailymafia_', dailyMafiaWrapper.interactionHandler);
+    }
+
+    // Start Daily Mafia phase checker cron
+    const { startPhaseChecker } = require('../dailyMafia/utils/phaseChecker');
+    startPhaseChecker(client, 5); // Check every 5 minutes
+
     // Valorant API handler - special initialization
     try {
         const valorantApiHandler = require('./valorantApiHandler');

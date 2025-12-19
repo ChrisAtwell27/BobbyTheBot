@@ -72,6 +72,7 @@ const SETTING_REQUIREMENTS = {
   // Mafia channels
   "channels.mafia_text": "free",
   "channels.mafia_voice": "free",
+  "channels.dailymafia": "free", // Daily Mafia game channel (asynchronous 24hr games)
 
   // Moderation channels
   "channels.graveyard": "free",
