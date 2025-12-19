@@ -106,7 +106,13 @@ export const getAllActiveGames = query({
       .query("dailyMafiaGames")
       .withIndex("by_status", (q) => q.eq("status", "active"))
       .collect();
-    return games;
+
+    const pendingGames = await ctx.db
+      .query("dailyMafiaGames")
+      .withIndex("by_status", (q) => q.eq("status", "pending"))
+      .collect();
+
+    return [...activeGames, ...pendingGames];
   },
 });
 
