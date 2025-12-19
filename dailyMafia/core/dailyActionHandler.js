@@ -29,6 +29,9 @@ async function sendNightActionPrompts(client, gameId) {
     const alivePlayers = await gameState.getAlivePlayers(gameId);
 
     for (const player of alivePlayers) {
+      // Skip bots
+      if (player.playerId.startsWith("bot-")) continue;
+
       const role = gameState.getRoleDefinition(player.role);
 
       if (!role || !role.nightAction) continue;

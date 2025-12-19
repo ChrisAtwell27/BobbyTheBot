@@ -610,10 +610,12 @@ async function handleStartButton(client, interaction, gameId) {
     return;
   }
 
+  // Defer update immediately to prevent timeout
+  await interaction.deferReply({ ephemeral: true });
+
   if (game.organizerId !== interaction.user.id) {
-    await interaction.reply({
+    await interaction.editReply({
       content: "❌ Only the organizer can start the game.",
-      ephemeral: true,
     });
     return;
   }
@@ -680,7 +682,9 @@ async function handleStartButton(client, interaction, gameId) {
   // Send night action prompts
   await sendNightActionPrompts(client, gameId);
 
-  await interaction.reply({ content: "✅ Game started!", ephemeral: true });
+  await sendNightActionPrompts(client, gameId);
+
+  await interaction.editReply({ content: "✅ Game started!" });
 }
 
 /**
@@ -690,6 +694,9 @@ async function sendRoleDMs(client, gameId) {
   const players = await gameState.getPlayers(gameId);
 
   for (const player of players) {
+    // Skip bots
+    if (player.playerId.startsWith("bot-")) continue;
+
     try {
       const user = await client.users.fetch(player.playerId);
       const role = gameState.getRoleDefinition(player.role);
@@ -809,6 +816,9 @@ module.exports = (client) => {
       handleButtonInteraction(client, interaction);
     } else if (interaction.isStringSelectMenu()) {
       if (interaction.customId.startsWith("dailymafia_action_")) {
+        console.log(
+          `[Daily Mafia] Handling select menu: ${interaction.customId}`
+        );
         const {
           handleActionInteraction,
         } = require("../dailyMafia/core/dailyActionHandler");
