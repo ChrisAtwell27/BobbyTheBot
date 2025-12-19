@@ -1,6 +1,6 @@
-const { getConvexClient } = require('../../database/convexClient');
-const { api } = require('../../convex/_generated/api');
-const { ROLES } = require('../../mafia/roles/mafiaRoles');
+const { getConvexClient } = require("../../database/convexClient");
+const { api } = require("../../convex/_generated/api");
+const { ROLES } = require("../../mafia/roles/mafiaRoles");
 
 /**
  * Daily Mafia Game State Manager
@@ -29,8 +29,8 @@ function generateGameId() {
  * @param {string} tier - Subscription tier ("plus" or "ultimate")
  * @returns {Array} Filtered role definitions
  */
-function getDailyModeRoles(tier = 'plus') {
-  const deafFiltered = ROLES.filter(role => {
+function getDailyModeRoles(tier = "plus") {
+  const deafFiltered = Object.values(ROLES).filter((role) => {
     // FIRST FILTER: Exclude Deaf variants (require voice chat - not compatible with Daily Mafia)
     if (role.isDeafBee) return false;
 
@@ -39,10 +39,10 @@ function getDailyModeRoles(tier = 'plus') {
     return true;
   });
 
-  const tierFiltered = deafFiltered.filter(role => {
+  const tierFiltered = deafFiltered.filter((role) => {
     // SECOND FILTER: Apply tier restrictions (LOCK ULTIMATE ROLES)
     // If this is a Plus tier game AND the role requires Ultimate tier, exclude it
-    if (tier === 'plus' && role.tier && role.tier === 'ultimate') {
+    if (tier === "plus" && role.tier && role.tier === "ultimate") {
       return false; // LOCKED: Ultimate-only role in Plus tier game
     }
 
@@ -51,10 +51,12 @@ function getDailyModeRoles(tier = 'plus') {
     return true;
   });
 
-  const deafCount = ROLES.length - deafFiltered.length;
+  const deafCount = Object.keys(ROLES).length - deafFiltered.length;
   const ultimateCount = deafFiltered.length - tierFiltered.length;
 
-  console.log(`[Daily Mafia] Role filtering for ${tier} tier: ${tierFiltered.length} roles available (excluded ${deafCount} Deaf, ${ultimateCount} Ultimate-only)`);
+  console.log(
+    `[Daily Mafia] Role filtering for ${tier} tier: ${tierFiltered.length} roles available (excluded ${deafCount} Deaf, ${ultimateCount} Ultimate-only)`
+  );
 
   return tierFiltered;
 }
@@ -64,8 +66,12 @@ function getDailyModeRoles(tier = 'plus') {
  * @param {string} roleName - Role name
  * @returns {Object|null} Role definition
  */
-function getRoleDefinition(roleName) {
-  return ROLES.find(r => r.name === roleName) || null;
+function getRoleDefinition(roleIdentifier) {
+  // Try direct key lookup first (O(1))
+  if (ROLES[roleIdentifier]) return ROLES[roleIdentifier];
+
+  // Fallback to name search (O(n)) - for backward compatibility
+  return Object.values(ROLES).find((r) => r.name === roleIdentifier) || null;
 }
 
 // ============================================================================
@@ -83,11 +89,11 @@ async function createGame({
   organizerId,
   debugMode = false,
   revealRoles = true,
-  tier = 'plus'
+  tier = "plus",
 }) {
   try {
     const client = getConvexClient();
-    if (!client) throw new Error('Convex client not available');
+    if (!client) throw new Error("Convex client not available");
 
     const gameId = generateGameId();
 
@@ -98,12 +104,12 @@ async function createGame({
       organizerId,
       debugMode,
       revealRoles,
-      tier
+      tier,
     });
 
     return gameId;
   } catch (error) {
-    console.error('Error creating daily mafia game:', error);
+    console.error("Error creating daily mafia game:", error);
     throw error;
   }
 }
@@ -121,7 +127,7 @@ async function getGame(gameId) {
     const game = await client.query(api.dailyMafia.getGame, { gameId });
     return game;
   } catch (error) {
-    console.error('Error getting daily mafia game:', error);
+    console.error("Error getting daily mafia game:", error);
     return null;
   }
 }
@@ -136,10 +142,12 @@ async function getActiveGames(guildId) {
     const client = getConvexClient();
     if (!client) return [];
 
-    const games = await client.query(api.dailyMafia.getActiveGames, { guildId });
+    const games = await client.query(api.dailyMafia.getActiveGames, {
+      guildId,
+    });
     return games;
   } catch (error) {
-    console.error('Error getting active daily mafia games:', error);
+    console.error("Error getting active daily mafia games:", error);
     return [];
   }
 }
@@ -156,7 +164,7 @@ async function getAllActiveGames() {
     const games = await client.query(api.dailyMafia.getAllActiveGames, {});
     return games;
   } catch (error) {
-    console.error('Error getting all active daily mafia games:', error);
+    console.error("Error getting all active daily mafia games:", error);
     return [];
   }
 }
@@ -170,12 +178,12 @@ async function getAllActiveGames() {
 async function updateGame(gameId, updates) {
   try {
     const client = getConvexClient();
-    if (!client) throw new Error('Convex client not available');
+    if (!client) throw new Error("Convex client not available");
 
     await client.mutation(api.dailyMafia.updateGame, { gameId, updates });
     return true;
   } catch (error) {
-    console.error('Error updating daily mafia game:', error);
+    console.error("Error updating daily mafia game:", error);
     throw error;
   }
 }
@@ -194,23 +202,23 @@ async function addPlayer({
   playerId,
   displayName,
   role,
-  roleResources = {}
+  roleResources = {},
 }) {
   try {
     const client = getConvexClient();
-    if (!client) throw new Error('Convex client not available');
+    if (!client) throw new Error("Convex client not available");
 
     const id = await client.mutation(api.dailyMafia.addPlayer, {
       gameId,
       playerId,
       displayName,
       role,
-      roleResources
+      roleResources,
     });
 
     return id;
   } catch (error) {
-    console.error('Error adding player to daily mafia game:', error);
+    console.error("Error adding player to daily mafia game:", error);
     throw error;
   }
 }
@@ -228,7 +236,7 @@ async function getPlayers(gameId) {
     const players = await client.query(api.dailyMafia.getPlayers, { gameId });
     return players;
   } catch (error) {
-    console.error('Error getting daily mafia players:', error);
+    console.error("Error getting daily mafia players:", error);
     return [];
   }
 }
@@ -243,10 +251,12 @@ async function getAlivePlayers(gameId) {
     const client = getConvexClient();
     if (!client) return [];
 
-    const players = await client.query(api.dailyMafia.getAlivePlayers, { gameId });
+    const players = await client.query(api.dailyMafia.getAlivePlayers, {
+      gameId,
+    });
     return players;
   } catch (error) {
-    console.error('Error getting alive daily mafia players:', error);
+    console.error("Error getting alive daily mafia players:", error);
     return [];
   }
 }
@@ -262,10 +272,13 @@ async function getPlayer(gameId, playerId) {
     const client = getConvexClient();
     if (!client) return null;
 
-    const player = await client.query(api.dailyMafia.getPlayer, { gameId, playerId });
+    const player = await client.query(api.dailyMafia.getPlayer, {
+      gameId,
+      playerId,
+    });
     return player;
   } catch (error) {
-    console.error('Error getting daily mafia player:', error);
+    console.error("Error getting daily mafia player:", error);
     return null;
   }
 }
@@ -280,10 +293,12 @@ async function getPlayerActiveGame(playerId) {
     const client = getConvexClient();
     if (!client) return null;
 
-    const game = await client.query(api.dailyMafia.getPlayerActiveGame, { playerId });
+    const game = await client.query(api.dailyMafia.getPlayerActiveGame, {
+      playerId,
+    });
     return game;
   } catch (error) {
-    console.error('Error getting player active game:', error);
+    console.error("Error getting player active game:", error);
     return null;
   }
 }
@@ -298,12 +313,16 @@ async function getPlayerActiveGame(playerId) {
 async function updatePlayer(gameId, playerId, updates) {
   try {
     const client = getConvexClient();
-    if (!client) throw new Error('Convex client not available');
+    if (!client) throw new Error("Convex client not available");
 
-    await client.mutation(api.dailyMafia.updatePlayer, { gameId, playerId, updates });
+    await client.mutation(api.dailyMafia.updatePlayer, {
+      gameId,
+      playerId,
+      updates,
+    });
     return true;
   } catch (error) {
-    console.error('Error updating daily mafia player:', error);
+    console.error("Error updating daily mafia player:", error);
     throw error;
   }
 }
@@ -316,12 +335,12 @@ async function updatePlayer(gameId, playerId, updates) {
 async function resetPhaseActions(gameId) {
   try {
     const client = getConvexClient();
-    if (!client) throw new Error('Convex client not available');
+    if (!client) throw new Error("Convex client not available");
 
     await client.mutation(api.dailyMafia.resetPhaseActions, { gameId });
     return true;
   } catch (error) {
-    console.error('Error resetting phase actions:', error);
+    console.error("Error resetting phase actions:", error);
     throw error;
   }
 }
@@ -341,11 +360,11 @@ async function upsertAction({
   playerId,
   actionType,
   targetId,
-  keyword
+  keyword,
 }) {
   try {
     const client = getConvexClient();
-    if (!client) throw new Error('Convex client not available');
+    if (!client) throw new Error("Convex client not available");
 
     const id = await client.mutation(api.dailyMafia.upsertAction, {
       gameId,
@@ -353,12 +372,12 @@ async function upsertAction({
       playerId,
       actionType,
       targetId,
-      keyword
+      keyword,
     });
 
     return id;
   } catch (error) {
-    console.error('Error upserting action:', error);
+    console.error("Error upserting action:", error);
     throw error;
   }
 }
@@ -374,10 +393,13 @@ async function getActionsForNight(gameId, nightNumber) {
     const client = getConvexClient();
     if (!client) return [];
 
-    const actions = await client.query(api.dailyMafia.getActionsForNight, { gameId, nightNumber });
+    const actions = await client.query(api.dailyMafia.getActionsForNight, {
+      gameId,
+      nightNumber,
+    });
     return actions;
   } catch (error) {
-    console.error('Error getting actions for night:', error);
+    console.error("Error getting actions for night:", error);
     return [];
   }
 }
@@ -391,12 +413,15 @@ async function getActionsForNight(gameId, nightNumber) {
 async function markActionsProcessed(gameId, nightNumber) {
   try {
     const client = getConvexClient();
-    if (!client) throw new Error('Convex client not available');
+    if (!client) throw new Error("Convex client not available");
 
-    await client.mutation(api.dailyMafia.markActionsProcessed, { gameId, nightNumber });
+    await client.mutation(api.dailyMafia.markActionsProcessed, {
+      gameId,
+      nightNumber,
+    });
     return true;
   } catch (error) {
-    console.error('Error marking actions processed:', error);
+    console.error("Error marking actions processed:", error);
     throw error;
   }
 }
@@ -410,26 +435,21 @@ async function markActionsProcessed(gameId, nightNumber) {
  * @param {Object} params - Vote parameters
  * @returns {Promise<string>} Vote ID
  */
-async function upsertVote({
-  gameId,
-  dayNumber,
-  voterId,
-  targetId
-}) {
+async function upsertVote({ gameId, dayNumber, voterId, targetId }) {
   try {
     const client = getConvexClient();
-    if (!client) throw new Error('Convex client not available');
+    if (!client) throw new Error("Convex client not available");
 
     const id = await client.mutation(api.dailyMafia.upsertVote, {
       gameId,
       dayNumber,
       voterId,
-      targetId
+      targetId,
     });
 
     return id;
   } catch (error) {
-    console.error('Error upserting vote:', error);
+    console.error("Error upserting vote:", error);
     throw error;
   }
 }
@@ -445,10 +465,13 @@ async function getVotesForDay(gameId, dayNumber) {
     const client = getConvexClient();
     if (!client) return [];
 
-    const votes = await client.query(api.dailyMafia.getVotesForDay, { gameId, dayNumber });
+    const votes = await client.query(api.dailyMafia.getVotesForDay, {
+      gameId,
+      dayNumber,
+    });
     return votes;
   } catch (error) {
-    console.error('Error getting votes for day:', error);
+    console.error("Error getting votes for day:", error);
     return [];
   }
 }
@@ -468,12 +491,12 @@ async function deleteVote(gameId, dayNumber, voterId) {
     const success = await client.mutation(api.dailyMafia.deleteVote, {
       gameId,
       dayNumber,
-      voterId
+      voterId,
     });
 
     return success;
   } catch (error) {
-    console.error('Error deleting vote:', error);
+    console.error("Error deleting vote:", error);
     return false;
   }
 }
@@ -493,11 +516,11 @@ async function createEvent({
   phaseNumber,
   eventType,
   description,
-  data
+  data,
 }) {
   try {
     const client = getConvexClient();
-    if (!client) throw new Error('Convex client not available');
+    if (!client) throw new Error("Convex client not available");
 
     const id = await client.mutation(api.dailyMafia.createEvent, {
       gameId,
@@ -505,12 +528,12 @@ async function createEvent({
       phaseNumber,
       eventType,
       description,
-      data
+      data,
     });
 
     return id;
   } catch (error) {
-    console.error('Error creating event:', error);
+    console.error("Error creating event:", error);
     throw error;
   }
 }
@@ -526,10 +549,13 @@ async function getRecentEvents(gameId, limit = 5) {
     const client = getConvexClient();
     if (!client) return [];
 
-    const events = await client.query(api.dailyMafia.getRecentEvents, { gameId, limit });
+    const events = await client.query(api.dailyMafia.getRecentEvents, {
+      gameId,
+      limit,
+    });
     return events;
   } catch (error) {
-    console.error('Error getting recent events:', error);
+    console.error("Error getting recent events:", error);
     return [];
   }
 }
@@ -547,7 +573,7 @@ async function getAllEvents(gameId) {
     const events = await client.query(api.dailyMafia.getAllEvents, { gameId });
     return events;
   } catch (error) {
-    console.error('Error getting all events:', error);
+    console.error("Error getting all events:", error);
     return [];
   }
 }

@@ -1,5 +1,5 @@
-const gameState = require('../game/dailyGameState');
-const { checkWinConditions } = require('../../mafia/game/mafiaUtils');
+const gameState = require("../game/dailyGameState");
+const { checkWinConditions } = require("../../mafia/game/mafiaUtils");
 
 /**
  * Daily Mafia Game Loop
@@ -8,7 +8,7 @@ const { checkWinConditions } = require('../../mafia/game/mafiaUtils');
 
 // Phase duration - same for ALL phases
 const PHASE_DURATION_NORMAL = 24 * 60 * 60 * 1000; // 24 hours
-const PHASE_DURATION_DEBUG = 5 * 60 * 1000;       // 5 minutes
+const PHASE_DURATION_DEBUG = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Get phase duration - same for all phases (24hr or 5min debug)
@@ -59,22 +59,22 @@ async function checkAllPlayersActed(gameId, phase) {
 
   const alivePlayers = await gameState.getAlivePlayers(gameId);
 
-  if (phase === 'night') {
+  if (phase === "night") {
     // Check only players with night actions
-    const playersWithActions = alivePlayers.filter(p => {
+    const playersWithActions = alivePlayers.filter((p) => {
       const role = gameState.getRoleDefinition(p.role);
       return role && role.nightAction;
     });
 
     if (playersWithActions.length === 0) return true;
 
-    return playersWithActions.every(p => p.hasActedThisPhase);
+    return playersWithActions.every((p) => p.hasActedThisPhase);
   }
 
-  if (phase === 'voting') {
+  if (phase === "voting") {
     // Check all alive players have voted
     if (alivePlayers.length === 0) return true;
-    return alivePlayers.every(p => p.hasActedThisPhase);
+    return alivePlayers.every((p) => p.hasActedThisPhase);
   }
 
   // Day phase doesn't require actions
@@ -106,9 +106,9 @@ async function startPhase(client, gameId, newPhase, options = {}) {
     };
 
     // Increment counters
-    if (newPhase === 'night') {
+    if (newPhase === "night") {
       updates.nightNumber = game.nightNumber + 1;
-    } else if (newPhase === 'voting') {
+    } else if (newPhase === "voting") {
       updates.dayNumber = game.dayNumber + 1;
     }
 
@@ -121,8 +121,9 @@ async function startPhase(client, gameId, newPhase, options = {}) {
     await gameState.createEvent({
       gameId,
       phase: newPhase,
-      phaseNumber: newPhase === 'night' ? updates.nightNumber : updates.dayNumber,
-      eventType: 'phase_change',
+      phaseNumber:
+        newPhase === "night" ? updates.nightNumber : updates.dayNumber,
+      eventType: "phase_change",
       description: `${newPhase.charAt(0).toUpperCase() + newPhase.slice(1)} phase started`,
     });
 
@@ -149,7 +150,9 @@ async function endPhase(client, gameId, isTimeout = false) {
     const game = await gameState.getGame(gameId);
     if (!game) return false;
 
-    console.log(`[Daily Mafia ${gameId}] Ending ${game.phase} phase (timeout: ${isTimeout})`);
+    console.log(
+      `[Daily Mafia ${gameId}] Ending ${game.phase} phase (timeout: ${isTimeout})`
+    );
 
     // Mark inactive players if timeout
     if (isTimeout) {
@@ -157,9 +160,9 @@ async function endPhase(client, gameId, isTimeout = false) {
     }
 
     // Process phase-specific logic
-    if (game.phase === 'night') {
+    if (game.phase === "night") {
       await processNightPhaseEnd(client, gameId);
-    } else if (game.phase === 'voting') {
+    } else if (game.phase === "voting") {
       await processVotingPhaseEnd(client, gameId);
     }
 
@@ -187,11 +190,11 @@ async function endPhase(client, gameId, isTimeout = false) {
  * @returns {string} Next phase
  */
 function getNextPhase(currentPhase) {
-  const phaseOrder = ['night', 'day', 'voting'];
+  const phaseOrder = ["night", "day", "voting"];
   const currentIndex = phaseOrder.indexOf(currentPhase);
 
   if (currentIndex === -1 || currentIndex === phaseOrder.length - 1) {
-    return 'night'; // Loop back to night
+    return "night"; // Loop back to night
   }
 
   return phaseOrder[currentIndex + 1];
@@ -215,13 +218,15 @@ async function markInactivePlayers(gameId, phase) {
       await gameState.createEvent({
         gameId,
         phase,
-        phaseNumber: phase === 'night' ? player.nightNumber : player.dayNumber,
-        eventType: 'other',
+        phaseNumber: phase === "night" ? player.nightNumber : player.dayNumber,
+        eventType: "other",
         description: `${player.displayName} was marked inactive (did not act)`,
         data: { playerId: player.playerId },
       });
 
-      console.log(`[Daily Mafia ${gameId}] Marked ${player.displayName} as inactive`);
+      console.log(
+        `[Daily Mafia ${gameId}] Marked ${player.displayName} as inactive`
+      );
     }
   }
 }
@@ -234,7 +239,7 @@ async function markInactivePlayers(gameId, phase) {
  */
 async function processNightPhaseEnd(client, gameId) {
   // Import action handler dynamically to avoid circular dependency
-  const { processNightActions } = require('./dailyActionHandler');
+  const { processNightActions } = require("./dailyActionHandler");
   await processNightActions(client, gameId);
 }
 
@@ -246,7 +251,7 @@ async function processNightPhaseEnd(client, gameId) {
  */
 async function processVotingPhaseEnd(client, gameId) {
   // Import voting handler dynamically to avoid circular dependency
-  const { tallyVotes } = require('./dailyVotingHandler');
+  const { tallyVotes } = require("./dailyVotingHandler");
   await tallyVotes(client, gameId);
 }
 
@@ -263,7 +268,7 @@ async function checkGameWinCondition(client, gameId) {
 
     // Convert to format expected by shared mafiaUtils
     const gameData = {
-      players: players.map(p => ({
+      players: players.map((p) => ({
         userId: p.playerId,
         role: p.role,
         alive: p.alive,
@@ -279,7 +284,7 @@ async function checkGameWinCondition(client, gameId) {
 
     return null;
   } catch (error) {
-    console.error('Error checking win conditions:', error);
+    console.error("Error checking win conditions:", error);
     return null;
   }
 }
@@ -293,33 +298,34 @@ async function checkGameWinCondition(client, gameId) {
  */
 async function endGame(client, gameId, winnerTeam) {
   try {
-    console.log(`[Daily Mafia ${gameId}] Game ended - ${winnerTeam} team wins!`);
+    console.log(
+      `[Daily Mafia ${gameId}] Game ended - ${winnerTeam} team wins!`
+    );
 
     // Update game status
     await gameState.updateGame(gameId, {
-      phase: 'ended',
-      status: 'completed',
+      phase: "ended",
+      status: "completed",
     });
 
     // Create win event
     await gameState.createEvent({
       gameId,
-      phase: 'ended',
+      phase: "ended",
       phaseNumber: 0,
-      eventType: 'win',
+      eventType: "win",
       description: `${winnerTeam} team wins!`,
       data: { winnerTeam },
     });
 
     // Distribute rewards
-    const { distributeRewards } = require('../game/dailyRewards');
+    const { distributeRewards } = require("../game/dailyRewards");
     await distributeRewards(client, gameId, winnerTeam);
 
     // Send game end notifications
     await sendGameEndNotifications(client, gameId, winnerTeam);
-
   } catch (error) {
-    console.error('Error ending game:', error);
+    console.error("Error ending game:", error);
   }
 }
 
@@ -340,16 +346,16 @@ async function sendPhaseNotifications(client, gameId, phase) {
 
     const timeRemaining = formatTimeRemaining(game.phaseDeadline);
 
-    let message = '';
-    if (phase === 'night') {
+    let message = "";
+    if (phase === "night") {
       message = `🌙 **[Game ${gameId}] Night ${game.nightNumber + 1} has begun!**\n`;
       message += `Players with night actions should check their DMs.\n`;
       message += `⏰ Phase ends in ${timeRemaining} or when all players act.`;
-    } else if (phase === 'day') {
+    } else if (phase === "day") {
       message = `☀️ **[Game ${gameId}] Day ${game.dayNumber} has begun!**\n`;
       message += `Discuss and prepare for voting.\n`;
       message += `⏰ Phase ends in ${timeRemaining}.`;
-    } else if (phase === 'voting') {
+    } else if (phase === "voting") {
       message = `🗳️ **[Game ${gameId}] Voting Phase has begun!**\n`;
       message += `Use \`!vote @player\` or the buttons below to vote.\n`;
       message += `⏰ Phase ends in ${timeRemaining} or when all players vote.`;
@@ -358,11 +364,10 @@ async function sendPhaseNotifications(client, gameId, phase) {
     await channel.send(message);
 
     // Update status display
-    const { updateStatusMessage } = require('../ui/dailyEmbeds');
+    const { updateStatusMessage } = require("../ui/dailyEmbeds");
     await updateStatusMessage(client, gameId);
-
   } catch (error) {
-    console.error('Error sending phase notifications:', error);
+    console.error("Error sending phase notifications:", error);
   }
 }
 
@@ -382,27 +387,31 @@ async function sendGameEndNotifications(client, gameId, winnerTeam) {
     if (!channel) return;
 
     const players = await gameState.getPlayers(gameId);
-    const winners = players.filter(p => {
+    const winners = players.filter((p) => {
       const role = gameState.getRoleDefinition(p.role);
       return role && role.team === winnerTeam;
     });
 
-    const { formatCurrency } = require('../../utils/currencyHelper');
+    const { formatCurrency } = require("../../utils/currencyHelper");
     const rewardAmount = await formatCurrency(game.guildId, 10000);
 
     let message = `🎉 **[Game ${gameId}] GAME OVER!** 🎉\n\n`;
     message += `**${winnerTeam.toUpperCase()} TEAM WINS!**\n\n`;
     message += `**Winners** (each receives ${rewardAmount}):\n`;
-    message += winners.map(w => `• ${w.displayName} - ${w.role}`).join('\n');
+    message += winners
+      .map((w) => {
+        const roleName = gameState.getRoleDefinition(w.role)?.name || w.role;
+        return `• ${w.displayName} - ${roleName}`;
+      })
+      .join("\n");
 
     await channel.send(message);
 
     // Final status update
-    const { updateStatusMessage } = require('../ui/dailyEmbeds');
+    const { updateStatusMessage } = require("../ui/dailyEmbeds");
     await updateStatusMessage(client, gameId);
-
   } catch (error) {
-    console.error('Error sending game end notifications:', error);
+    console.error("Error sending game end notifications:", error);
   }
 }
 
@@ -415,16 +424,18 @@ async function sendGameEndNotifications(client, gameId, winnerTeam) {
 async function checkEarlyPhaseEnd(client, gameId) {
   try {
     const game = await gameState.getGame(gameId);
-    if (!game || game.status !== 'active') return;
+    if (!game || game.status !== "active") return;
 
     const allActed = await checkAllPlayersActed(gameId, game.phase);
 
     if (allActed) {
-      console.log(`[Daily Mafia ${gameId}] All players acted - ending phase early`);
+      console.log(
+        `[Daily Mafia ${gameId}] All players acted - ending phase early`
+      );
       await endPhase(client, gameId, false);
     }
   } catch (error) {
-    console.error('Error checking early phase end:', error);
+    console.error("Error checking early phase end:", error);
   }
 }
 
@@ -439,32 +450,32 @@ async function startGame(client, gameId) {
     const game = await gameState.getGame(gameId);
     if (!game) return false;
 
-    if (game.status !== 'pending') {
+    if (game.status !== "pending") {
       console.log(`Game ${gameId} is not in pending status`);
       return false;
     }
 
     // Update status to active
     await gameState.updateGame(gameId, {
-      status: 'active',
+      status: "active",
     });
 
     // Create game start event
     await gameState.createEvent({
       gameId,
-      phase: 'setup',
+      phase: "setup",
       phaseNumber: 0,
-      eventType: 'other',
-      description: 'Game started',
+      eventType: "other",
+      description: "Game started",
     });
 
     // Start first night phase
-    await startPhase(client, gameId, 'night');
+    await startPhase(client, gameId, "night");
 
     console.log(`[Daily Mafia ${gameId}] Game started!`);
     return true;
   } catch (error) {
-    console.error('Error starting game:', error);
+    console.error("Error starting game:", error);
     return false;
   }
 }
@@ -481,16 +492,16 @@ async function cancelGame(client, gameId) {
     if (!game) return false;
 
     await gameState.updateGame(gameId, {
-      status: 'cancelled',
-      phase: 'ended',
+      status: "cancelled",
+      phase: "ended",
     });
 
     await gameState.createEvent({
       gameId,
       phase: game.phase,
       phaseNumber: 0,
-      eventType: 'other',
-      description: 'Game cancelled',
+      eventType: "other",
+      description: "Game cancelled",
     });
 
     const channel = await client.channels.fetch(game.channelId);
@@ -501,7 +512,7 @@ async function cancelGame(client, gameId) {
     console.log(`[Daily Mafia ${gameId}] Game cancelled`);
     return true;
   } catch (error) {
-    console.error('Error cancelling game:', error);
+    console.error("Error cancelling game:", error);
     return false;
   }
 }
