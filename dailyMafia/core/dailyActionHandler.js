@@ -324,8 +324,8 @@ async function handleActionInteraction(client, interaction) {
 
     const role = gameState.getRoleDefinition(player.role);
 
-    let targetId = null;
-    let keyword = null;
+    let targetId = undefined;
+    let keyword = undefined;
 
     if (type === "target") {
       targetId = interaction.values[0];
@@ -393,7 +393,7 @@ function parseActionInput(input, game, player, role) {
   // Check for keywords
   const keywords = ["skip", "alert", "vest", "ignite"];
   if (keywords.includes(trimmed)) {
-    return { keyword: trimmed, targetId: null };
+    return { keyword: trimmed, targetId: undefined };
   }
 
   // Check for number (target selection)
@@ -406,7 +406,7 @@ function parseActionInput(input, game, player, role) {
   // For now, just return the target index
   // This will be validated during processing
 
-  return { keyword: null, targetId: String(num) };
+  return { keyword: undefined, targetId: String(num) };
 }
 
 /**
