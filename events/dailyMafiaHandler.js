@@ -532,6 +532,14 @@ async function handleButtonInteraction(client, interaction) {
       case "refresh":
         await handleRefreshButton(client, interaction, gameId);
         break;
+
+      case "action":
+        // DM Action buttons (routed to dailyActionHandler)
+        const {
+          handleActionInteraction,
+        } = require("../dailyMafia/core/dailyActionHandler");
+        await handleActionInteraction(client, interaction);
+        break;
     }
   } catch (error) {
     console.error("Error handling button interaction:", error);
@@ -782,6 +790,13 @@ module.exports = (client) => {
   client.on("interactionCreate", (interaction) => {
     if (interaction.isButton()) {
       handleButtonInteraction(client, interaction);
+    } else if (interaction.isStringSelectMenu()) {
+      if (interaction.customId.startsWith("dailymafia_action_")) {
+        const {
+          handleActionInteraction,
+        } = require("../dailyMafia/core/dailyActionHandler");
+        handleActionInteraction(client, interaction);
+      }
     }
   });
 
