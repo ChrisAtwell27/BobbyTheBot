@@ -619,13 +619,30 @@ async function handleStartButton(client, interaction, gameId) {
   }
 
   const players = await gameState.getPlayers(gameId);
-  if (players.length < 8) {
+
+  // Debug mode: Auto-fill with bots if needed
+  if (game.debugMode && players.length < 8) {
+    const needed = 8 - players.length;
+    for (let i = 0; i < needed; i++) {
+      await gameState.addPlayer({
+        gameId,
+        playerId: `bot-${Date.now()}-${i}`,
+        displayName: `Bot ${i + 1}`,
+        role: "pending",
+      });
+    }
+    // Refresh player list
+    players.push(...Array(needed).fill(null)); // Just to pass check, we re-fetch below
+  } else if (players.length < 8) {
     await interaction.reply({
       content: `❌ Need at least 8 players to start (currently ${players.length}).`,
       ephemeral: true,
     });
     return;
   }
+
+  // Re-fetch players to get bots
+  const finalPlayers = await gameState.getPlayers(gameId);
 
   // Assign roles (using shared mafiaUtils)
   const {
@@ -639,11 +656,11 @@ async function handleStartButton(client, interaction, gameId) {
   const shuffledRoleKeys = shuffleArray(roleKeys);
 
   // Update players with roles (convert keys to names for storage)
-  for (let i = 0; i < players.length; i++) {
+  for (let i = 0; i < finalPlayers.length; i++) {
     const roleKey = shuffledRoleKeys[i];
     // Store role KEY (e.g. 'QUEEN_BEE') not name, for compatibility with utility functions
 
-    await gameState.updatePlayer(gameId, players[i].playerId, {
+    await gameState.updatePlayer(gameId, finalPlayers[i].playerId, {
       role: roleKey,
     });
   }
