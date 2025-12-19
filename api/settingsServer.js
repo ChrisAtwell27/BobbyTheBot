@@ -455,6 +455,7 @@ class SettingsServer {
             "changelog",
             "mafia_text",
             "mafia_voice",
+            "dailymafia", // Daily Mafia game channel (asynchronous 24hr games)
             "graveyard",
             "clip_submission",
             "shop",
