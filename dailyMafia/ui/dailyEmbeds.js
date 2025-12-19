@@ -134,7 +134,7 @@ async function buildStatusEmbed(gameId) {
 }
 
 /**
- * Update status message in channel
+ * Update status message in channel by sending a new message
  * @param {Object} client - Discord client
  * @param {string} gameId - Game ID
  * @returns {Promise<void>}
@@ -152,7 +152,7 @@ async function updateStatusMessage(client, gameId) {
     updateDebounce.set(gameId, now);
 
     const game = await gameState.getGame(gameId);
-    if (!game || !game.statusMessageId) return;
+    if (!game) return;
 
     const channel = await client.channels.fetch(game.channelId);
     if (!channel) return;
@@ -169,27 +169,18 @@ async function updateStatusMessage(client, gameId) {
       components = buildRefreshButton(gameId);
     }
 
-    try {
-      const message = await channel.messages.fetch(game.statusMessageId);
-      await message.edit({
-        embeds: [embed],
-        components,
-      });
+    // Send new status message
+    const newMessage = await channel.send({
+      embeds: [embed],
+      components,
+    });
 
-      console.log(`[Daily Mafia ${gameId}] Updated status message`);
-    } catch (error) {
-      // Message might have been deleted, create new one
-      const newMessage = await channel.send({
-        embeds: [embed],
-        components,
-      });
+    // Update the statusMessageId to the latest message
+    await gameState.updateGame(gameId, {
+      statusMessageId: newMessage.id,
+    });
 
-      await gameState.updateGame(gameId, {
-        statusMessageId: newMessage.id,
-      });
-
-      console.log(`[Daily Mafia ${gameId}] Created new status message`);
-    }
+    console.log(`[Daily Mafia ${gameId}] Sent new status message`);
 
   } catch (error) {
     console.error('Error updating status message:', error);
