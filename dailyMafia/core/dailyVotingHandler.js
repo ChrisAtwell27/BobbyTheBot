@@ -131,10 +131,6 @@ async function handleUnvoteCommand(client, message) {
       });
 
       await message.reply("✅ Vote removed.");
-
-      // Update status display
-      const { updateStatusMessage } = require("../ui/dailyEmbeds");
-      await updateStatusMessage(client, game.gameId);
     } else {
       await message.reply("❌ You have not voted yet.");
     }
@@ -212,10 +208,6 @@ async function submitVote(client, gameId, voterId, targetId) {
       description: `${voter.displayName} voted for ${targetName}`,
       data: { voterId, targetId },
     });
-
-    // Update status display
-    const { updateStatusMessage } = require("../ui/dailyEmbeds");
-    await updateStatusMessage(client, gameId);
 
     // Check if all players have voted (early phase end)
     const { checkEarlyPhaseEnd } = require("./dailyGameLoop");

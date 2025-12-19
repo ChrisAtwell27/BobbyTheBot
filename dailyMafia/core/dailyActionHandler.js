@@ -278,10 +278,6 @@ async function handleActionSubmission(client, message) {
     // Check if all players have acted (early phase end)
     const { checkEarlyPhaseEnd } = require("./dailyGameLoop");
     await checkEarlyPhaseEnd(client, game.gameId);
-
-    // Update status display
-    const { updateStatusMessage } = require("../ui/dailyEmbeds");
-    await updateStatusMessage(client, game.gameId);
   } catch (error) {
     console.error("Error handling action submission:", error);
     await message.reply(
@@ -362,10 +358,6 @@ async function handleActionInteraction(client, interaction) {
     // Check early end
     const { checkEarlyPhaseEnd } = require("./dailyGameLoop");
     await checkEarlyPhaseEnd(client, game.gameId);
-
-    // Update public status
-    const { updateStatusMessage } = require("../ui/dailyEmbeds");
-    await updateStatusMessage(client, game.gameId);
   } catch (error) {
     console.error("Error handling action interaction:", error);
     if (!interaction.replied && !interaction.deferred) {
