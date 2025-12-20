@@ -1,4 +1,4 @@
-const { getRandomRecipe, extractItemsFromGrid } = require('./itemLoader');
+const { loadRecipes, loadItems, extractItemsFromGrid } = require('./itemLoader');
 const convex = require('../../utils/convexClient');
 const { api } = require('../../convex/_generated/api');
 
@@ -6,6 +6,40 @@ const { api } = require('../../convex/_generated/api');
  * Craftle Daily Puzzle Generator
  * Generates daily puzzles at midnight UTC with difficulty rotation
  */
+
+/**
+ * Seeded random number generator for consistent daily randomness
+ * @param {string} seed - Seed string (e.g., date)
+ * @returns {function} Random function that returns 0-1
+ */
+function seededRandom(seed) {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    const char = seed.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+
+  return function() {
+    hash = (hash * 1103515245 + 12345) & 0x7fffffff;
+    return hash / 0x7fffffff;
+  };
+}
+
+/**
+ * Shuffle array using seeded random
+ * @param {Array} array - Array to shuffle
+ * @param {function} random - Seeded random function
+ * @returns {Array} Shuffled array
+ */
+function seededShuffle(array, random) {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
 
 /**
  * Get the difficulty for a specific date
@@ -28,6 +62,50 @@ function getDifficultyForDate(date) {
 
   // Monday, Tuesday, Thursday, Friday = Medium
   return 'medium';
+}
+
+/**
+ * Select daily items and a recipe that uses them
+ * Each day gets a random set of ~25 items + one recipe that can be made from them
+ * @param {string} date - Date string for seeding randomness
+ * @param {string} difficulty - Desired difficulty
+ * @returns {Object} { recipe, dailyItems }
+ */
+function selectDailyPuzzle(date, difficulty) {
+  const random = seededRandom(date + '-craftle');
+  const allRecipes = loadRecipes();
+  const allItems = loadItems();
+  const allItemIds = Object.keys(allItems);
+
+  // Filter recipes by difficulty
+  let eligibleRecipes = allRecipes.filter(r => r.difficulty === difficulty);
+  if (eligibleRecipes.length === 0) {
+    eligibleRecipes = allRecipes; // Fallback to all recipes
+  }
+
+  // Shuffle recipes for this day
+  const shuffledRecipes = seededShuffle(eligibleRecipes, random);
+
+  // Pick the first recipe
+  const recipe = shuffledRecipes[0];
+
+  // Get items needed for this recipe
+  const recipeItems = extractItemsFromGrid(recipe.grid);
+
+  // Start with recipe items, then add random decoys to reach ~25 total
+  const dailyItemsSet = new Set(recipeItems);
+
+  // Shuffle all items and add decoys
+  const shuffledAllItems = seededShuffle(allItemIds, random);
+  for (const itemId of shuffledAllItems) {
+    if (dailyItemsSet.size >= 25) break;
+    dailyItemsSet.add(itemId);
+  }
+
+  // Convert to array and shuffle again so recipe items aren't always first
+  const dailyItems = seededShuffle(Array.from(dailyItemsSet), random);
+
+  return { recipe, dailyItems };
 }
 
 /**
@@ -55,19 +133,16 @@ async function generateDailyPuzzle(date = null) {
     // Get difficulty for this date
     const difficulty = getDifficultyForDate(date);
 
-    // Select a random recipe with appropriate difficulty
-    const recipe = getRandomRecipe({
-      difficulty,
-      minItems: 3, // At least 3 unique items for interesting gameplay
-    });
+    // Select recipe and daily items using seeded random
+    const { recipe, dailyItems } = selectDailyPuzzle(date, difficulty);
 
     if (!recipe) {
       console.error(`[Craftle] No recipe found for difficulty ${difficulty}`);
       return null;
     }
 
-    // Extract items from recipe grid
-    const commonItems = extractItemsFromGrid(recipe.grid);
+    // Extract items from recipe grid (for metadata)
+    const recipeItems = extractItemsFromGrid(recipe.grid);
 
     // Create puzzle in database
     const createdPuzzleId = await convex.mutation(api.craftle.createPuzzle, {
@@ -76,21 +151,22 @@ async function generateDailyPuzzle(date = null) {
       recipe: {
         id: recipe.id,
         output: recipe.output,
-        outputCount: recipe.outputCount,
+        outputCount: recipe.outputCount || 1,
         grid: recipe.grid,
         category: recipe.category,
         difficulty: recipe.difficulty,
-        description: recipe.description,
+        description: recipe.description || '',
       },
       metadata: {
         difficulty,
         category: recipe.category,
-        commonItems,
+        recipeItems,
+        dailyItems, // The 25 random items for today
       },
     });
 
     console.log(
-      `[Craftle] Generated puzzle for ${date}: ${recipe.output} (${difficulty}) - ${commonItems.length} items`
+      `[Craftle] Generated puzzle for ${date}: ${recipe.output} (${difficulty}) - ${dailyItems.length} daily items`
     );
 
     return {
@@ -101,7 +177,8 @@ async function generateDailyPuzzle(date = null) {
       metadata: {
         difficulty,
         category: recipe.category,
-        commonItems,
+        recipeItems,
+        dailyItems,
       },
     };
   } catch (error) {

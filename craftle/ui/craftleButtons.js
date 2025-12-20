@@ -67,14 +67,17 @@ function createGameUI(currentGrid = null, selectedCell = null) {
  * @param {number} cellCol - Column of selected cell (0-2)
  * @param {string} category - Category filter
  * @param {number} page - Page number for pagination
+ * @param {Array} dailyItems - Optional array of item IDs available for today's puzzle
  * @returns {Array} Array of ActionRow components (max 5)
  */
-function createItemPickerUI(cellRow, cellCol, category = 'all', page = 0) {
+function createItemPickerUI(cellRow, cellCol, category = 'all', page = 0, dailyItems = null) {
   const items = loadItems();
-  const recipeItems = getAllRecipeItems();
 
-  // Filter to only items used in recipes
-  let availableItems = recipeItems
+  // Use daily items if provided, otherwise fall back to all recipe items
+  const itemIds = dailyItems || getAllRecipeItems();
+
+  // Map to item objects
+  let availableItems = itemIds
     .map(itemId => items[itemId])
     .filter(item => item !== undefined);
 
@@ -110,13 +113,13 @@ function createItemPickerUI(cellRow, cellCol, category = 'all', page = 0) {
 
   const selectRow = new ActionRowBuilder().addComponents(selectMenu);
 
-  // Row 2: Category filters (more categories now)
+  // Row 2: Category filters (simplified - only 5 categories for cleaner UI)
   const categories = [
     { name: 'All', value: 'all' },
-    { name: 'Tools', value: 'tools' },
-    { name: 'Weapons', value: 'weapons' },
     { name: 'Building', value: 'building' },
     { name: 'Misc', value: 'misc' },
+    { name: 'Food', value: 'food' },
+    { name: 'Redstone', value: 'redstone' },
   ];
 
   const categoryRow = new ActionRowBuilder().addComponents(
@@ -128,25 +131,7 @@ function createItemPickerUI(cellRow, cellCol, category = 'all', page = 0) {
     )
   );
 
-  // Row 3: More categories
-  const categories2 = [
-    { name: 'Redstone', value: 'redstone' },
-    { name: 'Food', value: 'food' },
-    { name: 'Armor', value: 'armor' },
-    { name: 'Transport', value: 'transport' },
-    { name: 'Decor', value: 'decoration' },
-  ];
-
-  const categoryRow2 = new ActionRowBuilder().addComponents(
-    ...categories2.map(cat =>
-      new ButtonBuilder()
-        .setCustomId(`craftle_picker_cat:${cellRow},${cellCol}:${cat.value}:${page}`)
-        .setLabel(cat.name)
-        .setStyle(cat.value === category ? ButtonStyle.Primary : ButtonStyle.Secondary)
-    )
-  );
-
-  // Row 4: Pagination + Clear cell + Back
+  // Row 3: Pagination
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`craftle_picker_page:${cellRow},${cellCol}:${category}:${Math.max(0, page - 1)}`)
@@ -165,7 +150,7 @@ function createItemPickerUI(cellRow, cellCol, category = 'all', page = 0) {
       .setDisabled(page >= totalPages - 1)
   );
 
-  // Row 5: Clear cell + Back to grid
+  // Row 4: Clear cell + Back to grid
   const actionRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`craftle_clear_cell:${cellRow},${cellCol}`)
@@ -177,7 +162,7 @@ function createItemPickerUI(cellRow, cellCol, category = 'all', page = 0) {
       .setStyle(ButtonStyle.Primary)
   );
 
-  return [selectRow, categoryRow, categoryRow2, navRow, actionRow];
+  return [selectRow, categoryRow, navRow, actionRow];
 }
 
 /**

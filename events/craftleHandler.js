@@ -25,7 +25,7 @@ const {
  */
 
 // Store active game sessions
-// Each session: { puzzleId, currentGrid, category, page }
+// Each session: { puzzleId, currentGrid, category, page, guildId, dailyItems }
 const activeSessions = new Map();
 
 /**
@@ -93,12 +93,14 @@ async function handlePlayCommand(message) {
       }
     }
 
-    // Initialize session
+    // Initialize session - store guildId and dailyItems for DM interactions
     activeSessions.set(userId, {
       puzzleId: puzzle.puzzleId,
       currentGrid: createEmptyGrid(),
       category: 'all',
       page: 0,
+      guildId: guildId, // Store guild context for DM lookups
+      dailyItems: puzzle.metadata?.dailyItems || null, // Today's random item set
     });
 
     // Create game UI
@@ -207,8 +209,8 @@ async function handleButtonInteraction(interaction) {
 
     const { row, col } = parseCellPosition(customId);
 
-    // Show item picker for this cell
-    const components = createItemPickerUI(row, col, session.category || 'all', session.page || 0);
+    // Show item picker for this cell (pass dailyItems for today's random set)
+    const components = createItemPickerUI(row, col, session.category || 'all', session.page || 0, session.dailyItems);
 
     return interaction.update({
       content: `📦 **Select an item for cell [${row + 1},${col + 1}]:**`,
@@ -231,7 +233,7 @@ async function handleButtonInteraction(interaction) {
     session.category = category;
     session.page = 0;
 
-    const components = createItemPickerUI(cellRow, cellCol, category, 0);
+    const components = createItemPickerUI(cellRow, cellCol, category, 0, session.dailyItems);
     return interaction.update({ components });
   }
 
@@ -248,7 +250,7 @@ async function handleButtonInteraction(interaction) {
 
     session.page = page;
 
-    const components = createItemPickerUI(cellRow, cellCol, category, page);
+    const components = createItemPickerUI(cellRow, cellCol, category, page, session.dailyItems);
     return interaction.update({ components });
   }
 
@@ -350,8 +352,10 @@ async function handleSelectMenuInteraction(interaction) {
 async function showGridView(interaction, session) {
   try {
     const puzzle = await getTodaysPuzzle();
+    // Use stored guildId from session (works in DMs)
+    const guildId = session.guildId || interaction.guild?.id || interaction.channel?.id;
     const progress = await gameState.getUserProgress(
-      interaction.guild?.id || interaction.channel?.id,
+      guildId,
       interaction.user.id,
       puzzle.puzzleId
     );
@@ -391,7 +395,8 @@ async function handleSubmitGuess(interaction) {
 
   try {
     const puzzle = await getTodaysPuzzle();
-    const guildId = interaction.guild?.id || interaction.channel?.id;
+    // Use stored guildId from session (works in DMs)
+    const guildId = session.guildId || interaction.guild?.id || interaction.channel?.id;
     const progress = await gameState.getUserProgress(guildId, userId, puzzle.puzzleId);
 
     if (!progress) {

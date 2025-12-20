@@ -58,8 +58,12 @@ async function loadTexture(itemId) {
     path.join(BLOCK_TEXTURES, `${itemId.replace('_block', '')}.png`),
     // Try adding _top for blocks
     path.join(BLOCK_TEXTURES, `${itemId}_top.png`),
+    // Try _side for blocks (like pumpkin)
+    path.join(BLOCK_TEXTURES, `${itemId}_side.png`),
     // Try planks
     path.join(BLOCK_TEXTURES, `${itemId}_planks.png`),
+    // Try carved_ prefix (for pumpkin -> carved_pumpkin)
+    path.join(BLOCK_TEXTURES, `carved_${itemId}.png`),
   ];
 
   for (const texturePath of alternates) {
