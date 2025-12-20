@@ -8,7 +8,7 @@
  * - !arenastats [@user] - View gladiator statistics
  * - !arenahelp - Show arena help and class info
  */
-
+//
 const {
   EmbedBuilder,
   ActionRowBuilder,
