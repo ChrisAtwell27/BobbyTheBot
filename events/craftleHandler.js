@@ -26,6 +26,7 @@ const {
  */
 
 // Store active game sessions (user grids being built)
+// Each session: { puzzleId, currentGrid, selectedCell, category, messageId }
 const activeSessions = new Map();
 
 /**
@@ -84,11 +85,12 @@ async function handlePlayCommand(message) {
       const { embed, files } = await createGameEmbedWithCanvas(puzzle, progress, null);
       const buttons = createCompletedGameButtons();
 
-      return message.reply({
-        embeds: [embed],
-        files,
+      // Reply publicly that they already played, but show result privately
+      await message.reply({
+        content: `You've already completed today's Craftle! Check your DMs for results, or use the buttons below.`,
         components: [buttons],
       });
+      return;
     }
 
     // Initialize active session
@@ -96,17 +98,30 @@ async function handlePlayCommand(message) {
       puzzleId: puzzle.puzzleId,
       currentGrid: createEmptyGrid(),
       selectedCell: null,
+      category: 'all',
     });
 
-    // Show game interface with canvas image
+    // Show game interface with canvas image (ephemeral - only visible to the player)
     const { embed, files } = await createGameEmbedWithCanvas(puzzle, progress, activeSessions.get(userId).currentGrid);
-    const components = createItemSelectionMenu(activeSessions.get(userId).currentGrid);
+    const components = createItemSelectionMenu(activeSessions.get(userId).currentGrid, 'all');
 
-    return message.reply({
+    // Send a public message directing them to play, then send the actual game privately
+    const publicMsg = await message.reply({
+      content: `🎮 **${message.author.displayName}** is playing Craftle! Use \`!craftle\` to play too.`,
+    });
+
+    // Send the game interface as a DM or ephemeral follow-up
+    // For now, we'll use a reply with a note that it's their private game
+    const gameMsg = await message.channel.send({
+      content: `<@${userId}> Here's your Craftle game (only you can interact):`,
       embeds: [embed],
       files,
       components,
     });
+
+    // Store the message ID for updates
+    activeSessions.get(userId).messageId = gameMsg.id;
+    activeSessions.get(userId).channelId = message.channel.id;
   } catch (error) {
     console.error('[Craftle] Error in handlePlayCommand:', error);
     return message.reply('❌ An error occurred. Please try again.');
@@ -219,8 +234,8 @@ async function handleButtonInteraction(interaction) {
     return await handleShareButton(interaction);
   }
 
-  if (customId.startsWith('craftle_page')) {
-    return await handlePageChange(interaction);
+  if (customId.startsWith('craftle_category')) {
+    return await handleCategoryChange(interaction);
   }
 
   if (customId.startsWith('craftle_lb')) {
@@ -254,7 +269,23 @@ async function handleItemFromMenu(interaction) {
     });
   }
 
+  // Verify ownership
+  if (session.messageId && interaction.message.id !== session.messageId) {
+    return await interaction.reply({
+      content: '❌ This is not your game! Use !craftle to start your own.',
+      ephemeral: true,
+    });
+  }
+
   const selectedItemId = interaction.values[0];
+
+  // Handle "none" selection when category is empty
+  if (selectedItemId === 'none') {
+    return await interaction.reply({
+      content: '⚠️ No items in this category. Try switching to another category.',
+      ephemeral: true,
+    });
+  }
 
   // Add item to first available cell
   let placed = false;
@@ -317,6 +348,14 @@ async function handleCellSelection(interaction) {
     });
   }
 
+  // Verify ownership
+  if (session.messageId && interaction.message.id !== session.messageId) {
+    return await interaction.reply({
+      content: '❌ This is not your game! Use !craftle to start your own.',
+      ephemeral: true,
+    });
+  }
+
   const { row, col } = parseCellPosition(interaction.customId);
 
   // Clear the cell
@@ -337,6 +376,14 @@ async function handleSubmitGuess(interaction) {
   if (!session) {
     return await interaction.reply({
       content: '❌ Your session has expired. Please start a new game with !craftle',
+      ephemeral: true,
+    });
+  }
+
+  // Verify ownership
+  if (session.messageId && interaction.message.id !== session.messageId) {
+    return await interaction.reply({
+      content: '❌ This is not your game! Use !craftle to start your own.',
       ephemeral: true,
     });
   }
@@ -426,7 +473,7 @@ async function handleSubmitGuess(interaction) {
       session.currentGrid = createEmptyGrid();
 
       const { embed, files } = await createGameEmbedWithCanvas(puzzle, updatedProgress, session.currentGrid);
-      const components = createItemSelectionMenu(session.currentGrid);
+      const components = createItemSelectionMenu(session.currentGrid, session.category || 'all');
 
       await interaction.message.edit({
         embeds: [embed],
@@ -453,6 +500,14 @@ async function handleClearGrid(interaction) {
   if (!session) {
     return await interaction.reply({
       content: '❌ Your session has expired.',
+      ephemeral: true,
+    });
+  }
+
+  // Verify ownership
+  if (session.messageId && interaction.message.id !== session.messageId) {
+    return await interaction.reply({
+      content: '❌ This is not your game! Use !craftle to start your own.',
       ephemeral: true,
     });
   }
@@ -516,22 +571,35 @@ async function handleShareButton(interaction) {
 }
 
 /**
- * Handle page change button
+ * Handle category change button
  */
-async function handlePageChange(interaction) {
-  const { data } = parseCustomId(interaction.customId);
-  const page = parseInt(data);
+async function handleCategoryChange(interaction) {
   const userId = interaction.user.id;
-  const session = activeSessions.get(userId);
 
+  // Verify this is the owner of the game
+  const session = activeSessions.get(userId);
   if (!session) {
     return await interaction.reply({
-      content: '❌ Your session has expired.',
+      content: '❌ Your session has expired. Start a new game with !craftle',
       ephemeral: true,
     });
   }
 
-  const components = createItemSelectionMenu(session.currentGrid, page);
+  // Check if this user owns this interaction's message
+  if (session.messageId && interaction.message.id !== session.messageId) {
+    return await interaction.reply({
+      content: '❌ This is not your game! Use !craftle to start your own.',
+      ephemeral: true,
+    });
+  }
+
+  const { data } = parseCustomId(interaction.customId);
+  const category = data;
+
+  // Update session category
+  session.category = category;
+
+  const components = createItemSelectionMenu(session.currentGrid, category);
 
   await interaction.update({ components });
 }
@@ -562,7 +630,7 @@ async function updateGameMessage(message, userId) {
   const progress = await gameState.getUserProgress(message.guild.id, userId, puzzle.puzzleId);
 
   const { embed, files } = await createGameEmbedWithCanvas(puzzle, progress, session.currentGrid);
-  const components = createItemSelectionMenu(session.currentGrid);
+  const components = createItemSelectionMenu(session.currentGrid, session.category || 'all');
 
   await message.edit({
     embeds: [embed],

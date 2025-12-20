@@ -7,108 +7,121 @@ const { loadItems, getAllRecipeItems } = require('../utils/itemLoader');
  */
 
 /**
- * Create item selection menu
+ * Create item selection menu (max 5 rows for Discord)
+ * Layout: Row 1: Item Select | Row 2: Category Select | Row 3-4: Grid (2 rows of buttons) | Row 5: Controls
  * @param {Array} currentGrid - Current guess grid (3x3)
- * @param {number} page - Current page number
- * @returns {Array} Array of ActionRow components
+ * @param {string} category - Selected category filter
+ * @returns {Array} Array of ActionRow components (max 5)
  */
-function createItemSelectionMenu(currentGrid = null, page = 0) {
+function createItemSelectionMenu(currentGrid = null, category = 'all') {
   const items = loadItems();
   const recipeItems = getAllRecipeItems();
 
   // Filter to only items used in recipes
-  const availableItems = recipeItems
+  let availableItems = recipeItems
     .map(itemId => items[itemId])
-    .filter(item => item !== undefined)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter(item => item !== undefined);
 
-  const itemsPerPage = 25; // Discord limit
-  const totalPages = Math.ceil(availableItems.length / itemsPerPage);
-  const startIdx = page * itemsPerPage;
-  const endIdx = Math.min(startIdx + itemsPerPage, availableItems.length);
-  const pageItems = availableItems.slice(startIdx, endIdx);
+  // Apply category filter
+  if (category !== 'all') {
+    availableItems = availableItems.filter(item => item.category === category);
+  }
+
+  availableItems.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Limit to 25 items (Discord select menu limit)
+  const pageItems = availableItems.slice(0, 25);
 
   // Create select menu with items
-  const options = pageItems.map(item =>
-    new StringSelectMenuOptionBuilder()
-      .setLabel(item.name)
-      .setValue(item.id)
-      .setEmoji(item.emoji || '🟫')
-      .setDescription(`${item.category}`)
-  );
+  const options = pageItems.length > 0
+    ? pageItems.map(item =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(item.name)
+          .setValue(item.id)
+          .setDescription(item.category || 'misc')
+      )
+    : [new StringSelectMenuOptionBuilder().setLabel('No items in category').setValue('none').setDescription('Try another category')];
 
   const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId(`craftle_select_item:${page}`)
-    .setPlaceholder('Select an item to place')
+    .setCustomId(`craftle_select_item:${category}`)
+    .setPlaceholder(`Select item (${category === 'all' ? 'All Items' : category})`)
     .setMinValues(1)
     .setMaxValues(1)
     .addOptions(options);
 
   const selectRow = new ActionRowBuilder().addComponents(selectMenu);
 
-  // Create grid position buttons (for selecting where to place)
-  const gridButtons = [];
-  for (let i = 0; i < 3; i++) {
-    const row = new ActionRowBuilder();
-    for (let j = 0; j < 3; j++) {
-      const cell = currentGrid ? currentGrid[i][j] : null;
-      const item = cell ? items[cell] : null;
+  // Row 2: Category filter buttons (5 categories max)
+  const categories = [
+    { name: 'All', value: 'all' },
+    { name: 'Tools', value: 'tools' },
+    { name: 'Building', value: 'building' },
+    { name: 'Redstone', value: 'redstone' },
+    { name: 'Misc', value: 'misc' },
+  ];
 
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`craftle_cell:${i},${j}`)
-          .setLabel(item ? item.emoji || '?' : '⬛')
-          .setStyle(cell ? ButtonStyle.Primary : ButtonStyle.Secondary)
-      );
-    }
-    gridButtons.push(row);
+  const categoryRow = new ActionRowBuilder().addComponents(
+    ...categories.map(cat =>
+      new ButtonBuilder()
+        .setCustomId(`craftle_category:${cat.value}`)
+        .setLabel(cat.name)
+        .setStyle(cat.value === category ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    )
+  );
+
+  // Rows 3-4: Grid buttons (3x3 = 9 buttons, split into 2 rows: 5 + 4)
+  // Row 3: cells 0,0 | 0,1 | 0,2 | 1,0 | 1,1
+  // Row 4: cells 1,2 | 2,0 | 2,1 | 2,2 + Clear button
+  const gridPositions = [
+    [[0,0], [0,1], [0,2], [1,0], [1,1]],  // First 5
+    [[1,2], [2,0], [2,1], [2,2]]           // Last 4
+  ];
+
+  const gridRow1 = new ActionRowBuilder();
+  for (const [i, j] of gridPositions[0]) {
+    const cell = currentGrid ? currentGrid[i][j] : null;
+    const item = cell ? items[cell] : null;
+    gridRow1.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`craftle_cell:${i},${j}`)
+        .setLabel(item ? item.name.substring(0, 10) : `[${i+1},${j+1}]`)
+        .setStyle(cell ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    );
   }
 
-  // Create control buttons
+  const gridRow2 = new ActionRowBuilder();
+  for (const [i, j] of gridPositions[1]) {
+    const cell = currentGrid ? currentGrid[i][j] : null;
+    const item = cell ? items[cell] : null;
+    gridRow2.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`craftle_cell:${i},${j}`)
+        .setLabel(item ? item.name.substring(0, 10) : `[${i+1},${j+1}]`)
+        .setStyle(cell ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    );
+  }
+  // Add clear button to row 2
+  gridRow2.addComponents(
+    new ButtonBuilder()
+      .setCustomId('craftle_clear')
+      .setLabel('Clear')
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  // Row 5: Control buttons
   const controlRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('craftle_submit')
       .setLabel('Submit Guess')
-      .setEmoji('✅')
       .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId('craftle_clear')
-      .setLabel('Clear Grid')
-      .setEmoji('🗑️')
-      .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId('craftle_help')
       .setLabel('Help')
-      .setEmoji('❓')
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Secondary)
   );
 
-  // Add pagination buttons if needed
-  if (totalPages > 1) {
-    const paginationRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`craftle_page:${Math.max(0, page - 1)}`)
-        .setLabel('Previous')
-        .setEmoji('⬅️')
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page === 0),
-      new ButtonBuilder()
-        .setCustomId(`craftle_page_info:${page}`)
-        .setLabel(`Page ${page + 1}/${totalPages}`)
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(true),
-      new ButtonBuilder()
-        .setCustomId(`craftle_page:${Math.min(totalPages - 1, page + 1)}`)
-        .setLabel('Next')
-        .setEmoji('➡️')
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page === totalPages - 1)
-    );
-
-    return [selectRow, ...gridButtons, controlRow, paginationRow];
-  }
-
-  return [selectRow, ...gridButtons, controlRow];
+  // Return exactly 5 rows
+  return [selectRow, categoryRow, gridRow1, gridRow2, controlRow];
 }
 
 /**
