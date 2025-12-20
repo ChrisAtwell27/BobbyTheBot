@@ -4,9 +4,7 @@ const {validateGuess, isSolved, createEmptyGrid, isGridComplete} = require('../c
 const {awardPuzzleReward} = require('../craftle/game/craftleRewards');
 const {getItemById, loadItems} = require('../craftle/utils/itemLoader');
 const {
-  createGameEmbed,
   createGameEmbedWithCanvas,
-  createResultEmbed,
   createResultEmbedWithCanvas,
   createStatsEmbed,
   createLeaderboardEmbed,
@@ -14,7 +12,8 @@ const {
   generateShareText,
 } = require('../craftle/ui/craftleEmbeds');
 const {
-  createItemSelectionMenu,
+  createGameUI,
+  createItemPickerUI,
   createCompletedGameButtons,
   parseCustomId,
   parseCellPosition,
@@ -22,22 +21,19 @@ const {
 
 /**
  * Craftle Command Handler
- * Handles all !craftle commands and button interactions
+ * All interactions are EPHEMERAL (only visible to the player)
  */
 
-// Store active game sessions (user grids being built)
-// Each session: { puzzleId, currentGrid, selectedCell, category, messageId }
+// Store active game sessions
+// Each session: { puzzleId, currentGrid, category, page }
 const activeSessions = new Map();
 
 /**
  * Main command handler
- * @param {Object} message - Discord message object
- * @param {Array} args - Command arguments
  */
 async function handleCraftleCommand(message, args) {
   const subcommand = args[0]?.toLowerCase();
 
-  // Handle subcommands
   if (subcommand === 'stats') {
     return await handleStatsCommand(message);
   }
@@ -50,78 +46,91 @@ async function handleCraftleCommand(message, args) {
     return await handleHelpCommand(message);
   }
 
-  // Default: Show today's puzzle
+  // Default: Play
   return await handlePlayCommand(message);
 }
 
 /**
  * Handle !craftle (play today's puzzle)
+ * Sends an ephemeral-like message by using DM or thread
  */
 async function handlePlayCommand(message) {
   const guildId = message.guild.id;
   const userId = message.author.id;
 
   try {
-    // Get today's puzzle
     const puzzle = await getTodaysPuzzle();
     if (!puzzle) {
       return message.reply('❌ Could not load today\'s puzzle. Please try again later.');
     }
 
-    // Get or create user progress
-    const progress = await gameState.getOrCreateUserProgress(
-      guildId,
-      userId,
-      puzzle.puzzleId,
-      puzzle.date
-    );
-
+    const progress = await gameState.getOrCreateUserProgress(guildId, userId, puzzle.puzzleId, puzzle.date);
     if (!progress) {
       return message.reply('❌ Error loading your progress. Please try again.');
     }
 
-    // Check if user has already completed this puzzle
+    // Check if already completed
     if (progress.solved || progress.attempts >= 6) {
-      const { embed, files } = await createGameEmbedWithCanvas(puzzle, progress, null);
+      const { embed, files } = await createResultEmbedWithCanvas(puzzle, progress, 0);
       const buttons = createCompletedGameButtons();
 
-      // Reply publicly that they already played, but show result privately
-      await message.reply({
-        content: `You've already completed today's Craftle! Check your DMs for results, or use the buttons below.`,
-        components: [buttons],
-      });
-      return;
+      // Try to DM the result, fall back to reply
+      try {
+        await message.author.send({
+          content: `You've already completed today's Craftle!`,
+          embeds: [embed],
+          files,
+          components: [buttons],
+        });
+        return message.reply(`✅ You've already completed today's Craftle! Check your DMs for your result.`);
+      } catch {
+        return message.reply({
+          content: `You've already completed today's Craftle!`,
+          embeds: [embed],
+          files,
+          components: [buttons],
+        });
+      }
     }
 
-    // Initialize active session
+    // Initialize session
     activeSessions.set(userId, {
       puzzleId: puzzle.puzzleId,
       currentGrid: createEmptyGrid(),
-      selectedCell: null,
       category: 'all',
+      page: 0,
     });
 
-    // Show game interface with canvas image (ephemeral - only visible to the player)
+    // Create game UI
     const { embed, files } = await createGameEmbedWithCanvas(puzzle, progress, activeSessions.get(userId).currentGrid);
-    const components = createItemSelectionMenu(activeSessions.get(userId).currentGrid, 'all');
+    const components = createGameUI(activeSessions.get(userId).currentGrid);
 
-    // Send a public message directing them to play, then send the actual game privately
-    const publicMsg = await message.reply({
-      content: `🎮 **${message.author.displayName}** is playing Craftle! Use \`!craftle\` to play too.`,
-    });
+    // Try to DM the game (truly private)
+    try {
+      const dmMsg = await message.author.send({
+        content: `🎮 **Craftle Puzzle #${getPuzzleNumber(puzzle.date)}** - Click a cell to place an item!`,
+        embeds: [embed],
+        files,
+        components,
+      });
 
-    // Send the game interface as a DM or ephemeral follow-up
-    // For now, we'll use a reply with a note that it's their private game
-    const gameMsg = await message.channel.send({
-      content: `<@${userId}> Here's your Craftle game (only you can interact):`,
-      embeds: [embed],
-      files,
-      components,
-    });
+      // Store DM message info for updates
+      activeSessions.get(userId).dmChannelId = dmMsg.channel.id;
+      activeSessions.get(userId).messageId = dmMsg.id;
 
-    // Store the message ID for updates
-    activeSessions.get(userId).messageId = gameMsg.id;
-    activeSessions.get(userId).channelId = message.channel.id;
+      return message.reply(`✅ Craftle game sent to your DMs! Check your messages to play privately.`);
+    } catch (dmError) {
+      // DMs disabled, send in channel but note it's visible
+      const gameMsg = await message.reply({
+        content: `⚠️ I couldn't DM you, so here's your game (others can see but can't interact):`,
+        embeds: [embed],
+        files,
+        components,
+      });
+
+      activeSessions.get(userId).messageId = gameMsg.id;
+      activeSessions.get(userId).channelId = message.channel.id;
+    }
   } catch (error) {
     console.error('[Craftle] Error in handlePlayCommand:', error);
     return message.reply('❌ An error occurred. Please try again.');
@@ -136,9 +145,7 @@ async function handleStatsCommand(message) {
   const userId = message.author.id;
 
   try {
-    // Get or initialize user stats
     const stats = await gameState.getOrInitializeUserStats(guildId, userId);
-
     if (!stats) {
       return message.reply('❌ Error loading your statistics.');
     }
@@ -158,25 +165,14 @@ async function handleLeaderboardCommand(message, type = 'daily') {
   const guildId = message.guild.id;
   const validTypes = ['daily', 'weekly', 'monthly', 'alltime'];
 
-  // Validate type
   if (!validTypes.includes(type)) {
     type = 'daily';
   }
 
   try {
-    // Get top players (real-time)
     const topPlayers = await gameState.getTopPlayers(guildId, 10);
-
-    // Calculate rankings
     const rankings = gameState.calculateLeaderboardScores(topPlayers);
-
-    // Create leaderboard embed
-    const embed = await createLeaderboardEmbed(
-      message.guild.name,
-      rankings,
-      type,
-      message.client
-    );
+    const embed = await createLeaderboardEmbed(message.guild.name, rankings, type, message.client);
 
     return message.reply({ embeds: [embed] });
   } catch (error) {
@@ -195,226 +191,211 @@ async function handleHelpCommand(message) {
 
 /**
  * Handle button interactions
- * @param {Object} interaction - Button interaction
  */
 async function handleButtonInteraction(interaction) {
   const customId = interaction.customId;
+  const userId = interaction.user.id;
 
-  // Parse action
-  if (customId.startsWith('craftle_select_item')) {
-    return await handleItemSelection(interaction);
+  // Get session
+  const session = activeSessions.get(userId);
+
+  // Cell click - open item picker
+  if (customId.startsWith('craftle_cell:')) {
+    if (!session) {
+      return interaction.reply({ content: '❌ Session expired. Use !craftle to start a new game.', ephemeral: true });
+    }
+
+    const { row, col } = parseCellPosition(customId);
+
+    // Show item picker for this cell
+    const components = createItemPickerUI(row, col, session.category || 'all', session.page || 0);
+
+    return interaction.update({
+      content: `📦 **Select an item for cell [${row + 1},${col + 1}]:**`,
+      components,
+      embeds: [],
+      files: [],
+    });
   }
 
-  if (customId.startsWith('craftle_cell')) {
-    return await handleCellSelection(interaction);
+  // Category change in picker
+  if (customId.startsWith('craftle_picker_cat:')) {
+    if (!session) {
+      return interaction.reply({ content: '❌ Session expired.', ephemeral: true });
+    }
+
+    const parts = customId.split(':');
+    const [cellRow, cellCol] = parts[1].split(',').map(Number);
+    const category = parts[2];
+
+    session.category = category;
+    session.page = 0;
+
+    const components = createItemPickerUI(cellRow, cellCol, category, 0);
+    return interaction.update({ components });
   }
 
-  if (customId === 'craftle_submit') {
-    return await handleSubmitGuess(interaction);
+  // Page change in picker
+  if (customId.startsWith('craftle_picker_page:')) {
+    if (!session) {
+      return interaction.reply({ content: '❌ Session expired.', ephemeral: true });
+    }
+
+    const parts = customId.split(':');
+    const [cellRow, cellCol] = parts[1].split(',').map(Number);
+    const category = parts[2];
+    const page = parseInt(parts[3]);
+
+    session.page = page;
+
+    const components = createItemPickerUI(cellRow, cellCol, category, page);
+    return interaction.update({ components });
   }
 
+  // Clear specific cell
+  if (customId.startsWith('craftle_clear_cell:')) {
+    if (!session) {
+      return interaction.reply({ content: '❌ Session expired.', ephemeral: true });
+    }
+
+    const parts = customId.split(':');
+    const [cellRow, cellCol] = parts[1].split(',').map(Number);
+
+    session.currentGrid[cellRow][cellCol] = null;
+
+    // Go back to grid view
+    return showGridView(interaction, session);
+  }
+
+  // Back to grid
+  if (customId === 'craftle_back_to_grid') {
+    if (!session) {
+      return interaction.reply({ content: '❌ Session expired.', ephemeral: true });
+    }
+
+    return showGridView(interaction, session);
+  }
+
+  // Clear all
   if (customId === 'craftle_clear') {
-    return await handleClearGrid(interaction);
+    if (!session) {
+      return interaction.reply({ content: '❌ Session expired.', ephemeral: true });
+    }
+
+    session.currentGrid = createEmptyGrid();
+    return showGridView(interaction, session);
   }
 
+  // Submit guess
+  if (customId === 'craftle_submit') {
+    return handleSubmitGuess(interaction);
+  }
+
+  // Help
   if (customId === 'craftle_help') {
     const embed = createHelpEmbed();
-    return await interaction.reply({ embeds: [embed], ephemeral: true });
+    return interaction.reply({ embeds: [embed], ephemeral: true });
   }
 
+  // Stats button
   if (customId === 'craftle_stats') {
-    return await handleStatsButton(interaction);
+    return handleStatsButton(interaction);
   }
 
+  // Leaderboard button
   if (customId === 'craftle_leaderboard') {
-    return await handleLeaderboardButton(interaction);
+    return handleLeaderboardButton(interaction);
   }
 
+  // Share button
   if (customId === 'craftle_share') {
-    return await handleShareButton(interaction);
-  }
-
-  if (customId.startsWith('craftle_category')) {
-    return await handleCategoryChange(interaction);
-  }
-
-  if (customId.startsWith('craftle_lb')) {
-    return await handleLeaderboardTypeChange(interaction);
+    return handleShareButton(interaction);
   }
 }
 
 /**
- * Handle select menu interactions
- * @param {Object} interaction - Select menu interaction
+ * Handle select menu interactions (item selection)
  */
 async function handleSelectMenuInteraction(interaction) {
   const customId = interaction.customId;
-
-  if (customId.startsWith('craftle_select_item')) {
-    return await handleItemFromMenu(interaction);
-  }
-}
-
-/**
- * Handle item selection from dropdown menu
- */
-async function handleItemFromMenu(interaction) {
   const userId = interaction.user.id;
   const session = activeSessions.get(userId);
 
   if (!session) {
-    return await interaction.reply({
-      content: '❌ Your session has expired. Please start a new game with !craftle',
-      ephemeral: true,
-    });
+    return interaction.reply({ content: '❌ Session expired. Use !craftle to start a new game.', ephemeral: true });
   }
 
-  // Verify ownership
-  if (session.messageId && interaction.message.id !== session.messageId) {
-    return await interaction.reply({
-      content: '❌ This is not your game! Use !craftle to start your own.',
-      ephemeral: true,
-    });
-  }
+  // Item picked for a cell
+  if (customId.startsWith('craftle_pick_item:')) {
+    const selectedItemId = interaction.values[0];
 
-  const selectedItemId = interaction.values[0];
-
-  // Handle "none" selection when category is empty
-  if (selectedItemId === 'none') {
-    return await interaction.reply({
-      content: '⚠️ No items in this category. Try switching to another category.',
-      ephemeral: true,
-    });
-  }
-
-  // Add item to first available cell
-  let placed = false;
-  for (let i = 0; i < 3; i++) {
-    for (let j = 0; j < 3; j++) {
-      if (session.currentGrid[i][j] === null) {
-        session.currentGrid[i][j] = selectedItemId;
-        placed = true;
-        break;
-      }
+    if (selectedItemId === 'none') {
+      return interaction.reply({ content: '⚠️ No items in this category.', ephemeral: true });
     }
-    if (placed) break;
+
+    const parts = customId.split(':');
+    const [cellRow, cellCol] = parts[1].split(',').map(Number);
+
+    // Place item in cell
+    session.currentGrid[cellRow][cellCol] = selectedItemId;
+
+    // Show grid view
+    return showGridView(interaction, session);
   }
-
-  if (!placed) {
-    return await interaction.reply({
-      content: '⚠️ Grid is full! Clear a cell or submit your guess.',
-      ephemeral: true,
-    });
-  }
-
-  const item = getItemById(selectedItemId);
-  await interaction.reply({
-    content: `✅ Added **${item.name}** to the grid!`,
-    ephemeral: true,
-  });
-
-  // Update the message with new grid
-  await updateGameMessage(interaction.message, userId);
 }
 
 /**
- * Handle item selection button
+ * Show the main grid view
  */
-async function handleItemSelection(interaction) {
-  const userId = interaction.user.id;
-  const session = activeSessions.get(userId);
+async function showGridView(interaction, session) {
+  try {
+    const puzzle = await getTodaysPuzzle();
+    const progress = await gameState.getUserProgress(
+      interaction.guild?.id || interaction.channel?.id,
+      interaction.user.id,
+      puzzle.puzzleId
+    );
 
-  if (!session) {
-    return await interaction.reply({
-      content: '❌ Your session has expired. Please start a new game with !craftle',
-      ephemeral: true,
+    const { embed, files } = await createGameEmbedWithCanvas(puzzle, progress, session.currentGrid);
+    const components = createGameUI(session.currentGrid);
+
+    return interaction.update({
+      content: `🎮 **Craftle** - Click a cell to place an item!`,
+      embeds: [embed],
+      files,
+      components,
     });
+  } catch (error) {
+    console.error('[Craftle] Error in showGridView:', error);
+    return interaction.reply({ content: '❌ Error updating game view.', ephemeral: true });
   }
-
-  await interaction.deferUpdate();
 }
 
 /**
- * Handle cell selection (to clear or replace)
- */
-async function handleCellSelection(interaction) {
-  const userId = interaction.user.id;
-  const session = activeSessions.get(userId);
-
-  if (!session) {
-    return await interaction.reply({
-      content: '❌ Your session has expired. Please start a new game with !craftle',
-      ephemeral: true,
-    });
-  }
-
-  // Verify ownership
-  if (session.messageId && interaction.message.id !== session.messageId) {
-    return await interaction.reply({
-      content: '❌ This is not your game! Use !craftle to start your own.',
-      ephemeral: true,
-    });
-  }
-
-  const { row, col } = parseCellPosition(interaction.customId);
-
-  // Clear the cell
-  session.currentGrid[row][col] = null;
-
-  await interaction.deferUpdate();
-  await updateGameMessage(interaction.message, userId);
-}
-
-/**
- * Handle submit guess button
+ * Handle submit guess
  */
 async function handleSubmitGuess(interaction) {
-  const guildId = interaction.guild.id;
   const userId = interaction.user.id;
   const session = activeSessions.get(userId);
 
   if (!session) {
-    return await interaction.reply({
-      content: '❌ Your session has expired. Please start a new game with !craftle',
-      ephemeral: true,
-    });
-  }
-
-  // Verify ownership
-  if (session.messageId && interaction.message.id !== session.messageId) {
-    return await interaction.reply({
-      content: '❌ This is not your game! Use !craftle to start your own.',
-      ephemeral: true,
-    });
+    return interaction.reply({ content: '❌ Session expired. Use !craftle to start a new game.', ephemeral: true });
   }
 
   // Check if grid is complete
   if (!isGridComplete(session.currentGrid)) {
-    return await interaction.reply({
-      content: '⚠️ Please fill all 9 cells before submitting!',
-      ephemeral: true,
-    });
+    return interaction.reply({ content: '⚠️ Please fill all 9 cells before submitting!', ephemeral: true });
   }
 
   await interaction.deferUpdate();
 
   try {
-    // Get puzzle
     const puzzle = await getTodaysPuzzle();
-    if (!puzzle) {
-      return await interaction.followUp({
-        content: '❌ Error loading puzzle.',
-        ephemeral: true,
-      });
-    }
-
-    // Get user progress
+    const guildId = interaction.guild?.id || interaction.channel?.id;
     const progress = await gameState.getUserProgress(guildId, userId, puzzle.puzzleId);
+
     if (!progress) {
-      return await interaction.followUp({
-        content: '❌ Error loading progress.',
-        ephemeral: true,
-      });
+      return interaction.followUp({ content: '❌ Error loading progress.', ephemeral: true });
     }
 
     // Validate guess
@@ -430,52 +411,33 @@ async function handleSubmitGuess(interaction) {
     const isComplete = solved || attempts >= 6;
 
     if (isComplete) {
-      // Game over - award rewards
+      // Game over
       const stats = await gameState.getOrInitializeUserStats(guildId, userId);
-      const reward = await awardPuzzleReward(
-        guildId,
-        userId,
-        solved,
-        attempts,
-        stats,
-        puzzle.metadata.difficulty,
-        false
-      );
+      const reward = await awardPuzzleReward(guildId, userId, solved, attempts, stats, puzzle.metadata.difficulty, false);
 
-      // Mark reward as given
       await gameState.markRewardGiven(guildId, userId, puzzle.puzzleId, reward);
+      await gameState.updateUserStats(guildId, userId, solved, attempts, puzzle.date, puzzle.puzzleId, reward);
 
-      // Update user stats
-      await gameState.updateUserStats(
-        guildId,
-        userId,
-        solved,
-        attempts,
-        puzzle.date,
-        puzzle.puzzleId,
-        reward
-      );
-
-      // Show result embed with canvas image
       const { embed: resultEmbed, files } = await createResultEmbedWithCanvas(puzzle, updatedProgress, reward);
       const buttons = createCompletedGameButtons();
 
-      await interaction.message.edit({
+      await interaction.editReply({
+        content: solved ? '🎉 **Congratulations!**' : '😔 **Better luck tomorrow!**',
         embeds: [resultEmbed],
         files,
         components: [buttons],
       });
 
-      // Clear session
       activeSessions.delete(userId);
     } else {
-      // Continue playing - reset grid for next guess
+      // Continue playing - reset grid
       session.currentGrid = createEmptyGrid();
 
       const { embed, files } = await createGameEmbedWithCanvas(puzzle, updatedProgress, session.currentGrid);
-      const components = createItemSelectionMenu(session.currentGrid, session.category || 'all');
+      const components = createGameUI(session.currentGrid);
 
-      await interaction.message.edit({
+      await interaction.editReply({
+        content: `🎮 **Attempt ${attempts}/6** - Click a cell to place an item!`,
         embeds: [embed],
         files,
         components,
@@ -483,47 +445,15 @@ async function handleSubmitGuess(interaction) {
     }
   } catch (error) {
     console.error('[Craftle] Error in handleSubmitGuess:', error);
-    await interaction.followUp({
-      content: '❌ An error occurred while submitting your guess.',
-      ephemeral: true,
-    });
+    await interaction.followUp({ content: '❌ Error submitting guess.', ephemeral: true });
   }
 }
 
 /**
- * Handle clear grid button
- */
-async function handleClearGrid(interaction) {
-  const userId = interaction.user.id;
-  const session = activeSessions.get(userId);
-
-  if (!session) {
-    return await interaction.reply({
-      content: '❌ Your session has expired.',
-      ephemeral: true,
-    });
-  }
-
-  // Verify ownership
-  if (session.messageId && interaction.message.id !== session.messageId) {
-    return await interaction.reply({
-      content: '❌ This is not your game! Use !craftle to start your own.',
-      ephemeral: true,
-    });
-  }
-
-  // Clear the grid
-  session.currentGrid = createEmptyGrid();
-
-  await interaction.deferUpdate();
-  await updateGameMessage(interaction.message, userId);
-}
-
-/**
- * Handle stats button (from completed game)
+ * Handle stats button
  */
 async function handleStatsButton(interaction) {
-  const guildId = interaction.guild.id;
+  const guildId = interaction.guild?.id || interaction.channel?.id;
   const userId = interaction.user.id;
 
   const stats = await gameState.getOrInitializeUserStats(guildId, userId);
@@ -536,7 +466,12 @@ async function handleStatsButton(interaction) {
  * Handle leaderboard button
  */
 async function handleLeaderboardButton(interaction) {
-  const guildId = interaction.guild.id;
+  const guildId = interaction.guild?.id;
+
+  if (!guildId) {
+    return interaction.reply({ content: 'Leaderboard is only available in servers.', ephemeral: true });
+  }
+
   const topPlayers = await gameState.getTopPlayers(guildId, 10);
   const rankings = gameState.calculateLeaderboardScores(topPlayers);
   const embed = await createLeaderboardEmbed(interaction.guild.name, rankings, 'daily', interaction.client);
@@ -548,104 +483,28 @@ async function handleLeaderboardButton(interaction) {
  * Handle share button
  */
 async function handleShareButton(interaction) {
-  const guildId = interaction.guild.id;
+  const guildId = interaction.guild?.id || interaction.channel?.id;
   const userId = interaction.user.id;
 
   const puzzle = await getTodaysPuzzle();
   const progress = await gameState.getUserProgress(guildId, userId, puzzle.puzzleId);
 
   if (!progress || (!progress.solved && progress.attempts < 6)) {
-    return await interaction.reply({
-      content: '❌ You haven\'t completed today\'s puzzle yet!',
-      ephemeral: true,
-    });
+    return interaction.reply({ content: '❌ Complete the puzzle first!', ephemeral: true });
   }
 
   const puzzleNum = getPuzzleNumber(puzzle.date);
   const shareText = generateShareText(puzzleNum, progress.guesses, progress.solved);
 
-  await interaction.reply({
-    content: shareText,
-    ephemeral: false,
-  });
-}
-
-/**
- * Handle category change button
- */
-async function handleCategoryChange(interaction) {
-  const userId = interaction.user.id;
-
-  // Verify this is the owner of the game
-  const session = activeSessions.get(userId);
-  if (!session) {
-    return await interaction.reply({
-      content: '❌ Your session has expired. Start a new game with !craftle',
-      ephemeral: true,
-    });
-  }
-
-  // Check if this user owns this interaction's message
-  if (session.messageId && interaction.message.id !== session.messageId) {
-    return await interaction.reply({
-      content: '❌ This is not your game! Use !craftle to start your own.',
-      ephemeral: true,
-    });
-  }
-
-  const { data } = parseCustomId(interaction.customId);
-  const category = data;
-
-  // Update session category
-  session.category = category;
-
-  const components = createItemSelectionMenu(session.currentGrid, category);
-
-  await interaction.update({ components });
-}
-
-/**
- * Handle leaderboard type change
- */
-async function handleLeaderboardTypeChange(interaction) {
-  const { data } = parseCustomId(interaction.customId);
-  const type = data; // daily, weekly, monthly, alltime
-
-  const guildId = interaction.guild.id;
-  const topPlayers = await gameState.getTopPlayers(guildId, 10);
-  const rankings = gameState.calculateLeaderboardScores(topPlayers);
-  const embed = await createLeaderboardEmbed(interaction.guild.name, rankings, type, interaction.client);
-
-  await interaction.update({ embeds: [embed] });
-}
-
-/**
- * Update game message with current grid (using canvas)
- */
-async function updateGameMessage(message, userId) {
-  const session = activeSessions.get(userId);
-  if (!session) return;
-
-  const puzzle = await getTodaysPuzzle();
-  const progress = await gameState.getUserProgress(message.guild.id, userId, puzzle.puzzleId);
-
-  const { embed, files } = await createGameEmbedWithCanvas(puzzle, progress, session.currentGrid);
-  const components = createItemSelectionMenu(session.currentGrid, session.category || 'all');
-
-  await message.edit({
-    embeds: [embed],
-    files,
-    components,
-  });
+  // Post publicly
+  await interaction.reply({ content: shareText });
 }
 
 module.exports = (client) => {
-  // Register message handler
+  // Message handler
   client.on('messageCreate', async (message) => {
-    // Ignore bots
     if (message.author.bot) return;
 
-    // Only respond to !craftle commands
     const prefix = '!';
     if (!message.content.startsWith(prefix)) return;
 
@@ -657,15 +516,23 @@ module.exports = (client) => {
     }
   });
 
-  // Register interaction handler
+  // Interaction handler
   client.on('interactionCreate', async (interaction) => {
-    // Only handle Craftle interactions
     if (!interaction.customId || !interaction.customId.startsWith('craftle_')) return;
 
-    if (interaction.isButton()) {
-      await handleButtonInteraction(interaction);
-    } else if (interaction.isStringSelectMenu()) {
-      await handleSelectMenuInteraction(interaction);
+    try {
+      if (interaction.isButton()) {
+        await handleButtonInteraction(interaction);
+      } else if (interaction.isStringSelectMenu()) {
+        await handleSelectMenuInteraction(interaction);
+      }
+    } catch (error) {
+      console.error('[Craftle] Interaction error:', error);
+      try {
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({ content: '❌ An error occurred.', ephemeral: true });
+        }
+      } catch {}
     }
   });
 };
