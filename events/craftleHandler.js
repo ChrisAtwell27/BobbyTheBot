@@ -5,7 +5,9 @@ const {awardPuzzleReward} = require('../craftle/game/craftleRewards');
 const {getItemById, loadItems} = require('../craftle/utils/itemLoader');
 const {
   createGameEmbed,
+  createGameEmbedWithCanvas,
   createResultEmbed,
+  createResultEmbedWithCanvas,
   createStatsEmbed,
   createLeaderboardEmbed,
   createHelpEmbed,
@@ -79,11 +81,12 @@ async function handlePlayCommand(message) {
 
     // Check if user has already completed this puzzle
     if (progress.solved || progress.attempts >= 6) {
-      const embed = createGameEmbed(puzzle, progress);
+      const { embed, files } = await createGameEmbedWithCanvas(puzzle, progress, null);
       const buttons = createCompletedGameButtons();
 
       return message.reply({
         embeds: [embed],
+        files,
         components: [buttons],
       });
     }
@@ -95,12 +98,13 @@ async function handlePlayCommand(message) {
       selectedCell: null,
     });
 
-    // Show game interface
-    const embed = createGameEmbed(puzzle, progress);
+    // Show game interface with canvas image
+    const { embed, files } = await createGameEmbedWithCanvas(puzzle, progress, activeSessions.get(userId).currentGrid);
     const components = createItemSelectionMenu(activeSessions.get(userId).currentGrid);
 
     return message.reply({
       embeds: [embed],
+      files,
       components,
     });
   } catch (error) {
@@ -405,12 +409,13 @@ async function handleSubmitGuess(interaction) {
         reward
       );
 
-      // Show result embed
-      const resultEmbed = createResultEmbed(puzzle, updatedProgress, reward);
+      // Show result embed with canvas image
+      const { embed: resultEmbed, files } = await createResultEmbedWithCanvas(puzzle, updatedProgress, reward);
       const buttons = createCompletedGameButtons();
 
       await interaction.message.edit({
         embeds: [resultEmbed],
+        files,
         components: [buttons],
       });
 
@@ -420,11 +425,12 @@ async function handleSubmitGuess(interaction) {
       // Continue playing - reset grid for next guess
       session.currentGrid = createEmptyGrid();
 
-      const embed = createGameEmbed(puzzle, updatedProgress);
+      const { embed, files } = await createGameEmbedWithCanvas(puzzle, updatedProgress, session.currentGrid);
       const components = createItemSelectionMenu(session.currentGrid);
 
       await interaction.message.edit({
         embeds: [embed],
+        files,
         components,
       });
     }
@@ -546,7 +552,7 @@ async function handleLeaderboardTypeChange(interaction) {
 }
 
 /**
- * Update game message with current grid
+ * Update game message with current grid (using canvas)
  */
 async function updateGameMessage(message, userId) {
   const session = activeSessions.get(userId);
@@ -555,11 +561,12 @@ async function updateGameMessage(message, userId) {
   const puzzle = await getTodaysPuzzle();
   const progress = await gameState.getUserProgress(message.guild.id, userId, puzzle.puzzleId);
 
-  const embed = createGameEmbed(puzzle, progress);
+  const { embed, files } = await createGameEmbedWithCanvas(puzzle, progress, session.currentGrid);
   const components = createItemSelectionMenu(session.currentGrid);
 
   await message.edit({
     embeds: [embed],
+    files,
     components,
   });
 }

@@ -1,6 +1,12 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const { getItemById } = require('../utils/itemLoader');
 const { getPuzzleNumber } = require('../utils/puzzleGenerator');
+const {
+  createGridImage,
+  createGameDisplayImage,
+  createAnswerRevealImage,
+  createGuessHistoryImage,
+} = require('../utils/craftleCanvasUtils');
 
 /**
  * Craftle Discord Embeds
@@ -183,6 +189,134 @@ function createGameEmbed(puzzle, progress) {
   });
 
   return embed;
+}
+
+/**
+ * Create the main game embed with canvas image (uses real Minecraft textures)
+ * @param {Object} puzzle - Puzzle object
+ * @param {Object} progress - User progress object
+ * @param {Array} currentGrid - Current guess grid (3x3)
+ * @returns {Promise<{embed: EmbedBuilder, files: AttachmentBuilder[]}>} Embed with attached image
+ */
+async function createGameEmbedWithCanvas(puzzle, progress, currentGrid = null) {
+  const puzzleNum = getPuzzleNumber(puzzle.date);
+  const attempts = progress ? progress.attempts : 0;
+  const guesses = progress ? progress.guesses : [];
+  const solved = progress ? progress.solved : false;
+
+  // Create the grid image
+  const grid = currentGrid || [[null, null, null], [null, null, null], [null, null, null]];
+  const lastFeedback = guesses.length > 0 ? guesses[guesses.length - 1].feedback : null;
+
+  const gridBuffer = await createGridImage(grid, lastFeedback);
+  const attachment = new AttachmentBuilder(gridBuffer, { name: 'craftle-grid.png' });
+
+  const embed = new EmbedBuilder()
+    .setColor(solved ? COLORS.SUCCESS : COLORS.PRIMARY)
+    .setTitle(`${EMOJIS.PICKAXE} Daily Craftle - Puzzle #${puzzleNum}`)
+    .setDescription(
+      solved
+        ? `✅ **SOLVED!** You guessed the recipe in ${attempts} attempt${attempts !== 1 ? 's' : ''}!`
+        : `Guess the Minecraft crafting recipe!\n**Attempts:** ${attempts}/6`
+    )
+    .setImage('attachment://craftle-grid.png');
+
+  // Add difficulty badge
+  const difficultyBadge = {
+    easy: '🟢 Easy',
+    medium: '🟡 Medium',
+    hard: '🔴 Hard',
+  }[puzzle.metadata?.difficulty] || '🟢 Easy';
+
+  embed.addFields(
+    {
+      name: 'Difficulty',
+      value: difficultyBadge,
+      inline: true,
+    },
+    {
+      name: 'Category',
+      value: (puzzle.recipe.category || 'misc').charAt(0).toUpperCase() + (puzzle.recipe.category || 'misc').slice(1),
+      inline: true,
+    }
+  );
+
+  // Add hints after first guess
+  if (!solved && attempts > 0 && attempts < 6) {
+    const lastGuess = guesses[guesses.length - 1];
+    if (lastGuess?.feedback) {
+      const correctCount = lastGuess.feedback.flat().filter(f => f === 'correct').length;
+      const wrongPositionCount = lastGuess.feedback.flat().filter(f => f === 'wrong_position').length;
+
+      embed.addFields({
+        name: 'Last Guess Feedback',
+        value: `${EMOJIS.CORRECT} Correct: ${correctCount} | ${EMOJIS.WRONG_POSITION} Wrong Position: ${wrongPositionCount}`,
+        inline: false,
+      });
+    }
+  }
+
+  embed.setFooter({
+    text: solved
+      ? 'Use !craftle stats to see your statistics'
+      : 'Select items below and submit your guess!',
+  });
+
+  return { embed, files: [attachment] };
+}
+
+/**
+ * Create the result embed with canvas image (shown after completing)
+ * @param {Object} puzzle - Puzzle object
+ * @param {Object} progress - User progress object
+ * @param {number} reward - Currency reward amount
+ * @returns {Promise<{embed: EmbedBuilder, files: AttachmentBuilder[]}>} Result embed with image
+ */
+async function createResultEmbedWithCanvas(puzzle, progress, reward) {
+  const puzzleNum = getPuzzleNumber(puzzle.date);
+  const solved = progress.solved;
+  const attempts = progress.attempts;
+
+  // Create the answer reveal image
+  const answerBuffer = await createAnswerRevealImage(puzzle.recipe);
+  const attachment = new AttachmentBuilder(answerBuffer, { name: 'craftle-answer.png' });
+
+  const embed = new EmbedBuilder()
+    .setColor(solved ? COLORS.SUCCESS : COLORS.WARNING)
+    .setTitle(
+      solved
+        ? `${EMOJIS.STAR} Puzzle #${puzzleNum} Solved!`
+        : `${EMOJIS.FIRE} Puzzle #${puzzleNum} Complete`
+    )
+    .setDescription(
+      solved
+        ? `You crafted **${puzzle.recipe.output}** in ${attempts} attempt${attempts !== 1 ? 's' : ''}!`
+        : `You used all 6 attempts. The recipe was **${puzzle.recipe.output}**.`
+    )
+    .setImage('attachment://craftle-answer.png');
+
+  // Add reward info
+  if (reward > 0) {
+    embed.addFields({
+      name: 'Reward',
+      value: `${EMOJIS.HONEY} **+${reward.toLocaleString()}** honey`,
+      inline: true,
+    });
+  }
+
+  // Add share text
+  const shareText = generateShareText(puzzleNum, progress.guesses, solved);
+  embed.addFields({
+    name: 'Share Your Result',
+    value: `\`\`\`${shareText}\`\`\``,
+    inline: false,
+  });
+
+  embed.setFooter({
+    text: 'Come back tomorrow for a new puzzle!',
+  });
+
+  return { embed, files: [attachment] };
 }
 
 /**
@@ -506,7 +640,9 @@ function createHelpEmbed() {
 
 module.exports = {
   createGameEmbed,
+  createGameEmbedWithCanvas,
   createResultEmbed,
+  createResultEmbedWithCanvas,
   createStatsEmbed,
   createLeaderboardEmbed,
   createHelpEmbed,
