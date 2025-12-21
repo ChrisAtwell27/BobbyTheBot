@@ -30,18 +30,22 @@ function getAlignmentShift(guessGrid, answerGrid) {
  * The guess pattern is aligned to match the answer pattern position
  * Feedback is shown in the player's coordinate space, with "missing" markers
  * showing where additional items should be placed relative to what they placed
+ *
+ * Empty cells are only shown as "correct" if they're within the aligned answer's
+ * bounding box (where the recipe actually is). Cells outside are left neutral.
+ *
  * @param {Array} guessGrid - 3x3 array of guessed item IDs (or null)
  * @param {Array} answerGrid - 3x3 array of correct item IDs (or null)
  * @returns {Array} 3x3 array of feedback strings (in player's positions)
  */
 function validateGuess(guessGrid, answerGrid) {
-  // Start with all cells as "correct" (empty cells are valid)
-  const feedback = Array(3).fill(null).map(() => Array(3).fill("correct"));
+  // Start with null feedback (will be set based on what matters)
+  const feedback = Array(3).fill(null).map(() => Array(3).fill(null));
 
-  // Get alignment shift - how much to shift guess pattern to align with answer
+  // Get alignment shift - how much to shift answer pattern to align with guess
   const shift = getAlignmentShift(guessGrid, answerGrid);
 
-  // If guess is empty, just return all correct (player hasn't placed anything yet)
+  // If guess is empty, just return all null (no feedback yet)
   if (!shift) {
     return feedback;
   }
@@ -62,6 +66,9 @@ function validateGuess(guessGrid, answerGrid) {
       }
     }
   }
+
+  // Get the bounding box of the aligned answer (where the recipe is in player's space)
+  const alignedBounds = getGridBounds(alignedAnswer);
 
   // Build a map of items in the answer (for "wrong_position" detection)
   const answerItems = new Map();
@@ -91,28 +98,41 @@ function validateGuess(guessGrid, answerGrid) {
     }
   }
 
-  // Second pass: Handle non-matching cells
-  for (let i = 0; i < 3; i++) {
-    for (let j = 0; j < 3; j++) {
-      if (correctMatches.has(`${i},${j}`)) continue;
+  // Second pass: Handle cells within the aligned answer's bounding box
+  // Only show feedback for cells that matter (where the recipe is)
+  if (alignedBounds) {
+    for (let i = alignedBounds.minRow; i <= alignedBounds.maxRow; i++) {
+      for (let j = alignedBounds.minCol; j <= alignedBounds.maxCol; j++) {
+        if (correctMatches.has(`${i},${j}`)) continue;
 
-      const guessedItem = guessGrid[i][j];
-      const correctItem = alignedAnswer[i][j];
+        const guessedItem = guessGrid[i][j];
+        const correctItem = alignedAnswer[i][j];
 
-      // Both empty - correct (empty matches empty)
-      if (guessedItem === null && correctItem === null) {
-        feedback[i][j] = "correct";
-        continue;
-      }
+        // Both empty within recipe bounds - this empty cell is correct
+        if (guessedItem === null && correctItem === null) {
+          feedback[i][j] = "correct";
+          continue;
+        }
 
-      // Empty guess where item is expected - mark as "missing"
-      if (guessedItem === null && correctItem !== null) {
-        feedback[i][j] = "missing";
-        continue;
-      }
+        // Empty guess where item is expected - mark as "missing"
+        if (guessedItem === null && correctItem !== null) {
+          feedback[i][j] = "missing";
+          continue;
+        }
 
-      // Item placed where should be empty
-      if (guessedItem !== null && correctItem === null) {
+        // Item placed where should be empty (within recipe bounds)
+        if (guessedItem !== null && correctItem === null) {
+          const remainingCount = answerItems.get(guessedItem) || 0;
+          if (remainingCount > 0) {
+            feedback[i][j] = "wrong_position";
+            answerItems.set(guessedItem, remainingCount - 1);
+          } else {
+            feedback[i][j] = "not_in_recipe";
+          }
+          continue;
+        }
+
+        // Both have items but they don't match
         const remainingCount = answerItems.get(guessedItem) || 0;
         if (remainingCount > 0) {
           feedback[i][j] = "wrong_position";
@@ -120,10 +140,24 @@ function validateGuess(guessGrid, answerGrid) {
         } else {
           feedback[i][j] = "not_in_recipe";
         }
+      }
+    }
+  }
+
+  // Third pass: Handle items placed outside the recipe's bounding box
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      // Skip cells we've already processed
+      if (feedback[i][j] !== null) continue;
+
+      const guessedItem = guessGrid[i][j];
+
+      // Empty cell outside recipe bounds - no feedback (neutral)
+      if (guessedItem === null) {
         continue;
       }
 
-      // Both have items but they don't match
+      // Item placed outside recipe bounds
       const remainingCount = answerItems.get(guessedItem) || 0;
       if (remainingCount > 0) {
         feedback[i][j] = "wrong_position";
@@ -140,19 +174,31 @@ function validateGuess(guessGrid, answerGrid) {
 /**
  * Check if the guess is completely correct
  * @param {Array} feedback - 3x3 feedback array
- * @returns {boolean} True if all cells are "correct"
+ * @returns {boolean} True if all non-null feedback cells are "correct"
  */
 function isSolved(feedback) {
+  let hasAnyFeedback = false;
+
   for (let i = 0; i < 3; i++) {
     for (let j = 0; j < 3; j++) {
       const cell = feedback[i][j];
-      // All cells must be "correct" (items match OR both empty)
+
+      // Null means cell is outside the recipe area - ignore it
+      if (cell === null) {
+        continue;
+      }
+
+      hasAnyFeedback = true;
+
+      // Any non-correct feedback means not solved
       if (cell !== "correct") {
         return false;
       }
     }
   }
-  return true;
+
+  // Must have at least some feedback to be considered solved
+  return hasAnyFeedback;
 }
 
 /**
