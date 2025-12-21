@@ -131,10 +131,10 @@ function createItemPickerUI(cellRow, cellCol, category = 'all', page = 0, dailyI
     )
   );
 
-  // Row 3: Pagination
+  // Row 3: Pagination (use prev/next prefix to avoid duplicate IDs when on single page)
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`craftle_picker_page:${cellRow},${cellCol}:${category}:${Math.max(0, page - 1)}`)
+      .setCustomId(`craftle_picker_prev:${cellRow},${cellCol}:${category}:${Math.max(0, page - 1)}`)
       .setLabel('◀ Prev')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page === 0),
@@ -144,7 +144,7 @@ function createItemPickerUI(cellRow, cellCol, category = 'all', page = 0, dailyI
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(true),
     new ButtonBuilder()
-      .setCustomId(`craftle_picker_page:${cellRow},${cellCol}:${category}:${Math.min(totalPages - 1, page + 1)}`)
+      .setCustomId(`craftle_picker_next:${cellRow},${cellCol}:${category}:${Math.min(totalPages - 1, page + 1)}`)
       .setLabel('Next ▶')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page >= totalPages - 1)

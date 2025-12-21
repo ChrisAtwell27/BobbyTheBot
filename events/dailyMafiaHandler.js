@@ -107,6 +107,10 @@ async function handleMessage(client, message) {
         await handleSkipPhaseCommand(client, message);
         break;
 
+      case "forcecancel":
+        await handleForceCancelCommand(client, message, args);
+        break;
+
       default:
         await message.reply(
           `❌ Unknown command. Use \`${PREFIX} help\` for a list of commands.`
@@ -561,6 +565,43 @@ async function handleSkipPhaseCommand(client, message) {
   } catch (error) {
     console.error("Error skipping phase:", error);
     await message.reply("❌ An error occurred while skipping the phase.");
+  }
+}
+
+/**
+ * Handle forcecancel command - force cancel a stuck game (admin only)
+ * @param {Object} client - Discord client
+ * @param {Object} message - Discord message
+ * @param {Array} args - Command arguments [gameId]
+ * @returns {Promise<void>}
+ */
+async function handleForceCancelCommand(client, message, args) {
+  try {
+    // Admin only
+    if (!message.member.permissions.has("ADMINISTRATOR")) {
+      await message.reply("❌ Only administrators can force cancel games.");
+      return;
+    }
+
+    const gameId = args[0];
+    if (!gameId) {
+      await message.reply(
+        "❌ Usage: `!dailymafia forcecancel <gameId>`\n" +
+        "Example: `!dailymafia forcecancel daily-1766159187961-qhawbl`"
+      );
+      return;
+    }
+
+    const result = await gameState.forceCancelGame(gameId);
+
+    if (result.success) {
+      await message.reply(`✅ **Game force cancelled!**\nGame ID: \`${gameId}\``);
+    } else {
+      await message.reply(`❌ Failed to cancel game: ${result.error}`);
+    }
+  } catch (error) {
+    console.error("Error force cancelling game:", error);
+    await message.reply("❌ An error occurred while force cancelling the game.");
   }
 }
 

@@ -207,6 +207,9 @@ function getNextPhase(currentPhase) {
  * @returns {Promise<void>}
  */
 async function markInactivePlayers(gameId, phase) {
+  const game = await gameState.getGame(gameId);
+  if (!game) return;
+
   const alivePlayers = await gameState.getAlivePlayers(gameId);
 
   for (const player of alivePlayers) {
@@ -218,7 +221,7 @@ async function markInactivePlayers(gameId, phase) {
       await gameState.createEvent({
         gameId,
         phase,
-        phaseNumber: phase === "night" ? player.nightNumber : player.dayNumber,
+        phaseNumber: phase === "night" ? game.nightNumber : game.dayNumber,
         eventType: "other",
         description: `${player.displayName} was marked inactive (did not act)`,
         data: { playerId: player.playerId },

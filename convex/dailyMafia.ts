@@ -581,3 +581,28 @@ export const getAllEvents = query({
     return events;
   },
 });
+
+/**
+ * Force cancel a stuck game (admin utility)
+ */
+export const forceCancelGame = mutation({
+  args: { gameId: v.string() },
+  handler: async (ctx, { gameId }) => {
+    const game = await ctx.db
+      .query("dailyMafiaGames")
+      .withIndex("by_game_id", (q) => q.eq("gameId", gameId))
+      .first();
+
+    if (!game) {
+      return { success: false, error: "Game not found" };
+    }
+
+    await ctx.db.patch(game._id, {
+      status: "cancelled",
+      phase: "ended",
+      lastActivityAt: Date.now(),
+    });
+
+    return { success: true, gameId };
+  },
+});

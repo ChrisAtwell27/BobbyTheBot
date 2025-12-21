@@ -237,8 +237,8 @@ async function handleButtonInteraction(interaction) {
     return interaction.update({ components });
   }
 
-  // Page change in picker
-  if (customId.startsWith('craftle_picker_page:')) {
+  // Page change in picker (handles both prev and next buttons)
+  if (customId.startsWith('craftle_picker_prev:') || customId.startsWith('craftle_picker_next:')) {
     if (!session) {
       return interaction.reply({ content: '❌ Session expired.', ephemeral: true });
     }

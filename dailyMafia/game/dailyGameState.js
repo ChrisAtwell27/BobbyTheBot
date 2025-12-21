@@ -578,6 +578,24 @@ async function getAllEvents(gameId) {
   }
 }
 
+/**
+ * Force cancel a stuck game
+ * @param {string} gameId - Game ID
+ * @returns {Promise<Object>} Result
+ */
+async function forceCancelGame(gameId) {
+  try {
+    const client = getConvexClient();
+    if (!client) return { success: false, error: "Convex client not available" };
+
+    const result = await client.mutation(api.dailyMafia.forceCancelGame, { gameId });
+    return result;
+  } catch (error) {
+    console.error("Error force cancelling game:", error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   // Game operations
   generateGameId,
@@ -614,4 +632,7 @@ module.exports = {
   // Role operations
   getDailyModeRoles,
   getRoleDefinition,
+
+  // Admin operations
+  forceCancelGame,
 };
