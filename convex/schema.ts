@@ -796,7 +796,9 @@ export default defineSchema({
     metadata: v.object({
       difficulty: v.union(v.literal("easy"), v.literal("medium"), v.literal("hard")),
       category: v.string(),
-      commonItems: v.array(v.string()), // Items that appear in recipe
+      commonItems: v.optional(v.array(v.string())), // Legacy field - Items that appear in recipe
+      recipeItems: v.optional(v.array(v.string())), // Items required for the recipe
+      dailyItems: v.optional(v.array(v.string())), // Random items available for today's puzzle
     }),
 
     stats: v.object({

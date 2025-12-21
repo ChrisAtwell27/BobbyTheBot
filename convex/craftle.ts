@@ -58,7 +58,9 @@ export const createPuzzle = mutation({
         v.literal("hard")
       ),
       category: v.string(),
-      commonItems: v.array(v.string()),
+      commonItems: v.optional(v.array(v.string())), // Legacy field
+      recipeItems: v.optional(v.array(v.string())),
+      dailyItems: v.optional(v.array(v.string())),
     }),
   },
   handler: async (ctx, args) => {
