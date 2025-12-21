@@ -195,6 +195,7 @@ export const addGuess = mutation({
           v.literal("correct"),
           v.literal("wrong_position"),
           v.literal("not_in_recipe"),
+          v.literal("missing"),
           v.null()
         )
       )

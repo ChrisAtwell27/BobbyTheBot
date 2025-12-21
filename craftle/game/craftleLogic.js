@@ -4,65 +4,127 @@
  */
 
 /**
+ * Calculate the shift needed to align answer pattern to player's guess pattern
+ * We align by top-left corners so the first item matches the player's first placement
+ * @param {Array} guessGrid - Player's guess grid
+ * @param {Array} answerGrid - Answer grid to align
+ * @returns {Object} { rowShift, colShift } to apply to answer positions, or null if either is empty
+ */
+function getAlignmentShift(guessGrid, answerGrid) {
+  const guessBounds = getGridBounds(guessGrid);
+  const answerBounds = getGridBounds(answerGrid);
+
+  if (!guessBounds || !answerBounds) return null;
+
+  // Align by top-left corners of the patterns
+  // This makes the first placed item align with where the answer expects its first item
+  // Shift = guessTL - answerTL (how much to move answer to align with guess)
+  return {
+    rowShift: guessBounds.minRow - answerBounds.minRow,
+    colShift: guessBounds.minCol - answerBounds.minCol
+  };
+}
+
+/**
  * Validate a guess against the answer recipe
+ * The guess pattern is aligned to match the answer pattern position
+ * Feedback is shown in the player's coordinate space, with "missing" markers
+ * showing where additional items should be placed relative to what they placed
  * @param {Array} guessGrid - 3x3 array of guessed item IDs (or null)
  * @param {Array} answerGrid - 3x3 array of correct item IDs (or null)
- * @returns {Array} 3x3 array of feedback strings
+ * @returns {Array} 3x3 array of feedback strings (in player's positions)
  */
 function validateGuess(guessGrid, answerGrid) {
-  const feedback = Array(3).fill(null).map(() => Array(3).fill(null));
+  // Start with all cells as "correct" (empty cells are valid)
+  const feedback = Array(3).fill(null).map(() => Array(3).fill("correct"));
 
-  // Build a map of items in the answer (for "wrong_position" detection)
-  const answerItems = new Map();
-  answerGrid.forEach(row => {
-    row.forEach(cell => {
-      if (cell !== null) {
-        answerItems.set(cell, (answerItems.get(cell) || 0) + 1);
-      }
-    });
-  });
+  // Get alignment shift - how much to shift guess pattern to align with answer
+  const shift = getAlignmentShift(guessGrid, answerGrid);
 
-  // Track which cells have been matched correctly
-  const correctMatches = new Map();
+  // If guess is empty, just return all correct (player hasn't placed anything yet)
+  if (!shift) {
+    return feedback;
+  }
 
-  // First pass: Mark exact matches (green)
+  // Create an aligned version of the answer for comparison in player's space
+  // This shifts the answer to match where the player placed their items
+  const alignedAnswer = createEmptyGrid();
   for (let i = 0; i < 3; i++) {
     for (let j = 0; j < 3; j++) {
-      const guessedItem = guessGrid[i][j];
-      const correctItem = answerGrid[i][j];
+      if (answerGrid[i][j] !== null) {
+        // Shift answer position to align with player's placement
+        const alignedRow = i + shift.rowShift;
+        const alignedCol = j + shift.colShift;
 
-      if (guessedItem === correctItem) {
-        feedback[i][j] = "correct";
-        // Track correct matches to avoid double-counting in second pass
-        correctMatches.set(`${i},${j}`, true);
-
-        // Decrease available count for this item
-        if (guessedItem !== null) {
-          answerItems.set(guessedItem, answerItems.get(guessedItem) - 1);
+        if (alignedRow >= 0 && alignedRow < 3 && alignedCol >= 0 && alignedCol < 3) {
+          alignedAnswer[alignedRow][alignedCol] = answerGrid[i][j];
         }
       }
     }
   }
 
-  // Second pass: Mark wrong position (yellow) and not in recipe (gray)
+  // Build a map of items in the answer (for "wrong_position" detection)
+  const answerItems = new Map();
   for (let i = 0; i < 3; i++) {
     for (let j = 0; j < 3; j++) {
-      // Skip cells already marked as correct
-      if (correctMatches.has(`${i},${j}`)) {
-        continue;
+      const cell = alignedAnswer[i][j];
+      if (cell !== null) {
+        answerItems.set(cell, (answerItems.get(cell) || 0) + 1);
       }
+    }
+  }
+
+  // Track which cells have exact matches
+  const correctMatches = new Set();
+
+  // First pass: Check exact item matches
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      const guessedItem = guessGrid[i][j];
+      const correctItem = alignedAnswer[i][j];
+
+      if (guessedItem !== null && guessedItem === correctItem) {
+        feedback[i][j] = "correct";
+        correctMatches.add(`${i},${j}`);
+        answerItems.set(guessedItem, answerItems.get(guessedItem) - 1);
+      }
+    }
+  }
+
+  // Second pass: Handle non-matching cells
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      if (correctMatches.has(`${i},${j}`)) continue;
 
       const guessedItem = guessGrid[i][j];
+      const correctItem = alignedAnswer[i][j];
 
-      // Empty cell
-      if (guessedItem === null) {
-        feedback[i][j] = null;
+      // Both empty - correct (empty matches empty)
+      if (guessedItem === null && correctItem === null) {
+        feedback[i][j] = "correct";
         continue;
       }
 
-      // Check if item exists elsewhere in the recipe
-      const remainingCount = answerItems.get(guessedItem) || 0;
+      // Empty guess where item is expected - mark as "missing"
+      if (guessedItem === null && correctItem !== null) {
+        feedback[i][j] = "missing";
+        continue;
+      }
 
+      // Item placed where should be empty
+      if (guessedItem !== null && correctItem === null) {
+        const remainingCount = answerItems.get(guessedItem) || 0;
+        if (remainingCount > 0) {
+          feedback[i][j] = "wrong_position";
+          answerItems.set(guessedItem, remainingCount - 1);
+        } else {
+          feedback[i][j] = "not_in_recipe";
+        }
+        continue;
+      }
+
+      // Both have items but they don't match
+      const remainingCount = answerItems.get(guessedItem) || 0;
       if (remainingCount > 0) {
         feedback[i][j] = "wrong_position";
         answerItems.set(guessedItem, remainingCount - 1);
@@ -78,14 +140,14 @@ function validateGuess(guessGrid, answerGrid) {
 /**
  * Check if the guess is completely correct
  * @param {Array} feedback - 3x3 feedback array
- * @returns {boolean} True if all non-null cells are correct
+ * @returns {boolean} True if all cells are "correct"
  */
 function isSolved(feedback) {
   for (let i = 0; i < 3; i++) {
     for (let j = 0; j < 3; j++) {
       const cell = feedback[i][j];
-      // If there's a feedback value and it's not "correct", puzzle is not solved
-      if (cell !== null && cell !== "correct") {
+      // All cells must be "correct" (items match OR both empty)
+      if (cell !== "correct") {
         return false;
       }
     }
@@ -202,6 +264,66 @@ function cloneGrid(grid) {
 }
 
 /**
+ * Get the bounding box of non-null items in a grid
+ * @param {Array} grid - 3x3 grid
+ * @returns {Object} { minRow, maxRow, minCol, maxCol } or null if empty
+ */
+function getGridBounds(grid) {
+  let minRow = 3, maxRow = -1, minCol = 3, maxCol = -1;
+
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      if (grid[i][j] !== null) {
+        minRow = Math.min(minRow, i);
+        maxRow = Math.max(maxRow, i);
+        minCol = Math.min(minCol, j);
+        maxCol = Math.max(maxCol, j);
+      }
+    }
+  }
+
+  if (maxRow === -1) return null; // Empty grid
+
+  return { minRow, maxRow, minCol, maxCol };
+}
+
+/**
+ * Normalize a grid by shifting items to bottom-right
+ * This allows matching recipes placed anywhere in the grid
+ * @param {Array} grid - 3x3 grid
+ * @returns {Array} Normalized grid (bottom-right aligned)
+ */
+function normalizeGrid(grid) {
+  const bounds = getGridBounds(grid);
+  if (!bounds) return cloneGrid(grid); // Empty grid
+
+  const { minRow, maxRow, minCol, maxCol } = bounds;
+  const height = maxRow - minRow + 1;
+  const width = maxCol - minCol + 1;
+
+  // Calculate shift needed to move to bottom-right
+  const rowShift = (3 - height) - minRow;
+  const colShift = (3 - width) - minCol;
+
+  // Create new grid with shifted positions
+  const normalized = createEmptyGrid();
+
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      if (grid[i][j] !== null) {
+        const newRow = i + rowShift;
+        const newCol = j + colShift;
+        if (newRow >= 0 && newRow < 3 && newCol >= 0 && newCol < 3) {
+          normalized[newRow][newCol] = grid[i][j];
+        }
+      }
+    }
+  }
+
+  return normalized;
+}
+
+/**
  * Get feedback summary for a guess
  * @param {Array} feedback - Feedback grid
  * @returns {Object} Summary with counts
@@ -301,6 +423,8 @@ module.exports = {
   areGridsEqual,
   createEmptyGrid,
   cloneGrid,
+  getGridBounds,
+  normalizeGrid,
   getFeedbackSummary,
   calculateAccuracy,
   generateHint,

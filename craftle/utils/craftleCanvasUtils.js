@@ -26,7 +26,8 @@ const COLORS = {
   SLOT_BG: '#8B8B8B',         // Slot background
   CORRECT: '#55FF55',         // Green for correct
   WRONG_POSITION: '#FFFF55',  // Yellow for wrong position
-  NOT_IN_RECIPE: '#FF5555',   // Red/gray for not in recipe
+  NOT_IN_RECIPE: '#AAAAAA',   // Gray for not in recipe
+  MISSING: '#FF5555',         // Red for missing item (cell needs an item)
   EMPTY: '#555555',           // Empty slot overlay
 };
 
@@ -156,6 +157,8 @@ async function createGridImage(grid, feedback = null) {
           feedbackColor = COLORS.CORRECT;
         } else if (fb === 'wrong_position') {
           feedbackColor = COLORS.WRONG_POSITION;
+        } else if (fb === 'missing') {
+          feedbackColor = COLORS.MISSING;
         } else if (fb === 'not_in_recipe') {
           feedbackColor = COLORS.NOT_IN_RECIPE;
         }
@@ -251,8 +254,10 @@ async function createGuessHistoryImage(guesses) {
           color = COLORS.CORRECT;
         } else if (fb === 'wrong_position') {
           color = COLORS.WRONG_POSITION;
+        } else if (fb === 'missing') {
+          color = COLORS.MISSING;
         } else if (fb === 'not_in_recipe') {
-          color = '#AAAAAA';
+          color = COLORS.NOT_IN_RECIPE;
         } else if (guess.grid[r][c] === null) {
           color = COLORS.SLOT_DARK;
         }

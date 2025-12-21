@@ -363,6 +363,8 @@ function createTextGrid(grid, feedback = null) {
           display += '🟨';
         } else if (fb === 'not_in_recipe') {
           display += '⬜';
+        } else if (fb === 'missing') {
+          display += '🟥'; // Red for missing item (cell should have an item)
         } else {
           display += '⬛';
         }

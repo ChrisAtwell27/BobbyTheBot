@@ -27,6 +27,7 @@ const EMOJIS = {
   CORRECT: '🟩',
   WRONG_POSITION: '🟨',
   NOT_IN_RECIPE: '⬜',
+  MISSING: '🟥', // Red for missing item (empty cell where item should be)
   EMPTY: '⬛',
   PICKAXE: '⛏️',
   HONEY: '🍯',
@@ -57,16 +58,16 @@ function buildGridDisplay(guesses, attempts, showItems = false) {
           const itemId = guess.grid[i][j];
           const fb = feedback[i][j];
 
-          if (itemId === null) {
-            display += EMOJIS.EMPTY;
+          if (fb === 'correct') {
+            display += EMOJIS.CORRECT;
+          } else if (fb === 'wrong_position') {
+            display += EMOJIS.WRONG_POSITION;
+          } else if (fb === 'missing') {
+            display += EMOJIS.MISSING;
+          } else if (fb === 'not_in_recipe') {
+            display += EMOJIS.NOT_IN_RECIPE;
           } else {
-            if (fb === 'correct') {
-              display += EMOJIS.CORRECT;
-            } else if (fb === 'wrong_position') {
-              display += EMOJIS.WRONG_POSITION;
-            } else {
-              display += EMOJIS.NOT_IN_RECIPE;
-            }
+            display += EMOJIS.EMPTY;
           }
         }
         display += '\n';
@@ -81,6 +82,8 @@ function buildGridDisplay(guesses, attempts, showItems = false) {
             display += EMOJIS.CORRECT;
           } else if (fb === 'wrong_position') {
             display += EMOJIS.WRONG_POSITION;
+          } else if (fb === 'missing') {
+            display += EMOJIS.MISSING;
           } else if (fb === 'not_in_recipe') {
             display += EMOJIS.NOT_IN_RECIPE;
           } else {
@@ -594,18 +597,20 @@ function createHelpEmbed() {
       {
         name: 'How to Play',
         value:
-          '• Guess the 3x3 crafting recipe in 6 attempts\n' +
-          '• Select items to fill the grid\n' +
-          '• Submit your guess to get feedback\n' +
-          '• Use the feedback to refine your next guess',
+          '• Guess the crafting recipe in 6 attempts\n' +
+          '• Click cells to place items (leave empty cells empty!)\n' +
+          '• Place your pattern anywhere - it auto-aligns\n' +
+          '• Submit your guess to get color feedback\n' +
+          '• Not all recipes use all 9 cells!',
         inline: false,
       },
       {
         name: 'Feedback Colors',
         value:
-          `${EMOJIS.CORRECT} **Green**: Item is correct and in the right position\n` +
-          `${EMOJIS.WRONG_POSITION} **Yellow**: Item is in the recipe but wrong position\n` +
-          `${EMOJIS.NOT_IN_RECIPE} **Gray**: Item is not in the recipe`,
+          `${EMOJIS.CORRECT} **Green**: Correct (item OR empty cell matches)\n` +
+          `${EMOJIS.WRONG_POSITION} **Yellow**: Item in recipe but wrong position\n` +
+          `${EMOJIS.MISSING} **Red**: Missing item (this cell needs an item)\n` +
+          `${EMOJIS.NOT_IN_RECIPE} **White**: Item is not in the recipe`,
         inline: false,
       },
       {

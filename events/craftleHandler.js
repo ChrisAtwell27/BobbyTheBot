@@ -1,6 +1,6 @@
 const {getTodaysPuzzle, getPuzzleNumber} = require('../craftle/utils/puzzleGenerator');
 const gameState = require('../craftle/game/craftleGameState');
-const {validateGuess, isSolved, createEmptyGrid, isGridComplete} = require('../craftle/game/craftleLogic');
+const {validateGuess, isSolved, createEmptyGrid, countFilledCells} = require('../craftle/game/craftleLogic');
 const {awardPuzzleReward} = require('../craftle/game/craftleRewards');
 const {getItemById, loadItems} = require('../craftle/utils/itemLoader');
 const {
@@ -391,9 +391,9 @@ async function handleSubmitGuess(interaction) {
     return interaction.reply({ content: '❌ Session expired. Use !craftle to start a new game.', ephemeral: true });
   }
 
-  // Check if grid is complete
-  if (!isGridComplete(session.currentGrid)) {
-    return interaction.reply({ content: '⚠️ Please fill all 9 cells before submitting!', ephemeral: true });
+  // Check if grid has at least one item (don't submit empty grid)
+  if (countFilledCells(session.currentGrid) === 0) {
+    return interaction.reply({ content: '⚠️ Please place at least one item before submitting!', ephemeral: true });
   }
 
   await interaction.deferUpdate();

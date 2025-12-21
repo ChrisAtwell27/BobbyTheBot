@@ -833,6 +833,7 @@ export default defineSchema({
               v.literal("correct"),
               v.literal("wrong_position"),
               v.literal("not_in_recipe"),
+              v.literal("missing"), // Empty cell where item should be
               v.null()
             )
           )

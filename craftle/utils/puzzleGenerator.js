@@ -65,6 +65,23 @@ function getDifficultyForDate(date) {
 }
 
 /**
+ * Count total items in a grid (including duplicates)
+ * @param {Array} grid - 3x3 grid
+ * @returns {number} Total item count
+ */
+function countGridItems(grid) {
+  let count = 0;
+  for (const row of grid) {
+    for (const cell of row) {
+      if (cell !== null) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+/**
  * Select daily items and a recipe that uses them
  * Each day gets a random set of ~25 items + one recipe that can be made from them
  * @param {string} date - Date string for seeding randomness
@@ -77,10 +94,22 @@ function selectDailyPuzzle(date, difficulty) {
   const allItems = loadItems();
   const allItemIds = Object.keys(allItems);
 
-  // Filter recipes by difficulty
-  let eligibleRecipes = allRecipes.filter(r => r.difficulty === difficulty);
+  // Filter recipes by difficulty AND minimum item count (exclude trivial 2-3 item recipes)
+  let eligibleRecipes = allRecipes.filter(r => {
+    const matchesDifficulty = r.difficulty === difficulty;
+    const itemCount = countGridItems(r.grid);
+    // Require at least 4 items to make the puzzle interesting
+    return matchesDifficulty && itemCount >= 4;
+  });
+
+  // Fallback: if no recipes match, try without difficulty filter
   if (eligibleRecipes.length === 0) {
-    eligibleRecipes = allRecipes; // Fallback to all recipes
+    eligibleRecipes = allRecipes.filter(r => countGridItems(r.grid) >= 4);
+  }
+
+  // Final fallback: use all recipes if still empty
+  if (eligibleRecipes.length === 0) {
+    eligibleRecipes = allRecipes;
   }
 
   // Shuffle recipes for this day
