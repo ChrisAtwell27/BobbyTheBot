@@ -55,6 +55,11 @@ async function handleCraftleCommand(message, args) {
  * Sends an ephemeral-like message by using DM or thread
  */
 async function handlePlayCommand(message) {
+  // Must be run from a guild (not DM) to initialize the game
+  if (!message.guild) {
+    return message.reply('❌ Please use `!craftle` in a server channel first, then the game will be sent to your DMs.');
+  }
+
   const guildId = message.guild.id;
   const userId = message.author.id;
 

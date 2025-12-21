@@ -260,7 +260,7 @@ module.exports = (client, commandRouter, interactionRouter) => {
     }
     if (craftleWrapper.interactionHandler) {
         interactionRouter.registerButton('craftle_', craftleWrapper.interactionHandler);
-        interactionRouter.registerSelectMenu('craftle_select_', craftleWrapper.interactionHandler);
+        interactionRouter.registerSelectMenu('craftle_pick_item:', craftleWrapper.interactionHandler);
     }
 
     // Start Craftle puzzle generation cron
