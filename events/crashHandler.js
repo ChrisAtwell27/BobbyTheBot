@@ -158,7 +158,7 @@ function drawHeader(ctx, playerName, betAmount, targetMultiplier, currencyEmoji)
   ctx.fillText(`Target: ${targetMultiplier}x`, BOARD_WIDTH - 10, 40);
 }
 
-function drawGraph(ctx, multiplierHistory, currentMultiplier, crashed, graphArea) {
+function drawGraph(ctx, multiplierHistory, currentMultiplier, crashed, graphArea, totalFrames) {
   const { x, y, width, height } = graphArea;
 
   // Graph background
@@ -174,75 +174,92 @@ function drawGraph(ctx, multiplierHistory, currentMultiplier, crashed, graphArea
   ctx.strokeStyle = COLORS.gridLine;
   ctx.lineWidth = 0.5;
 
+  // Dynamic max display - scales with current multiplier
+  const maxDisplayMult = Math.max(currentMultiplier * 1.5, 2.5);
+
   // Horizontal grid lines (multiplier levels)
-  const gridLevels = [1.5, 2, 3, 5, 10];
-  const maxDisplayMult = Math.max(currentMultiplier * 1.2, 2);
+  const gridLevels = [1.5, 2, 3, 5, 10, 20, 50];
 
   for (const level of gridLevels) {
-    if (level <= maxDisplayMult) {
+    if (level <= maxDisplayMult && level >= 1) {
       const yPos = y + height - ((level - 1) / (maxDisplayMult - 1)) * height;
-      ctx.beginPath();
-      ctx.moveTo(x, yPos);
-      ctx.lineTo(x + width, yPos);
-      ctx.stroke();
+      if (yPos >= y && yPos <= y + height) {
+        ctx.beginPath();
+        ctx.moveTo(x, yPos);
+        ctx.lineTo(x + width, yPos);
+        ctx.stroke();
 
-      // Label
-      ctx.fillStyle = COLORS.textDim;
-      ctx.font = "10px Arial";
-      ctx.textAlign = "right";
-      ctx.fillText(`${level}x`, x - 5, yPos + 3);
+        // Label
+        ctx.fillStyle = COLORS.textDim;
+        ctx.font = "10px Arial";
+        ctx.textAlign = "right";
+        ctx.fillText(`${level}x`, x - 5, yPos + 3);
+      }
     }
   }
 
+  // Draw 1x baseline
+  const baselineY = y + height;
+  ctx.fillStyle = COLORS.textDim;
+  ctx.font = "10px Arial";
+  ctx.textAlign = "right";
+  ctx.fillText("1x", x - 5, baselineY - 2);
+
   // Draw multiplier curve
-  if (multiplierHistory.length > 1) {
+  if (multiplierHistory.length > 0) {
     ctx.beginPath();
     ctx.strokeStyle = crashed ? COLORS.crashed : COLORS.graphLine;
     ctx.lineWidth = 3;
 
+    // X position based on frame progress (spreads across full width)
+    const frameCount = multiplierHistory.length;
+    const maxFrames = totalFrames || frameCount;
+
     for (let i = 0; i < multiplierHistory.length; i++) {
-      const xPos = x + (i / (multiplierHistory.length - 1 || 1)) * width;
+      // X spreads based on time/frame progress
+      const xPos = x + (i / maxFrames) * width;
       const mult = multiplierHistory[i];
+      // Y position: 1x at bottom, higher multipliers go up
       const yPos = y + height - ((mult - 1) / (maxDisplayMult - 1)) * height;
+      const clampedY = Math.max(y, Math.min(y + height, yPos));
 
       if (i === 0) {
-        ctx.moveTo(xPos, yPos);
+        ctx.moveTo(xPos, clampedY);
       } else {
-        ctx.lineTo(xPos, yPos);
+        ctx.lineTo(xPos, clampedY);
       }
     }
     ctx.stroke();
 
     // Fill under the curve
-    ctx.lineTo(x + width, y + height);
+    const lastXPos = x + ((multiplierHistory.length - 1) / maxFrames) * width;
+    ctx.lineTo(lastXPos, y + height);
     ctx.lineTo(x, y + height);
     ctx.closePath();
-    ctx.fillStyle = crashed ? "rgba(248, 81, 73, 0.1)" : COLORS.graphFill;
+    ctx.fillStyle = crashed ? "rgba(248, 81, 73, 0.15)" : COLORS.graphFill;
     ctx.fill();
-  }
 
-  // Draw rocket at current position
-  if (multiplierHistory.length > 0) {
-    const lastX = x + ((multiplierHistory.length - 1) / (multiplierHistory.length - 1 || 1)) * width;
+    // Draw rocket/dot at current position
     const lastMult = multiplierHistory[multiplierHistory.length - 1];
     const lastY = y + height - ((lastMult - 1) / (maxDisplayMult - 1)) * height;
+    const clampedLastY = Math.max(y + 8, Math.min(y + height - 8, lastY));
 
-    // Draw rocket or explosion as a circle
+    // Glow effect first (behind)
     ctx.beginPath();
-    ctx.arc(lastX, lastY, 8, 0, Math.PI * 2);
-    if (crashed) {
-      // Red explosion
-      ctx.fillStyle = COLORS.crashed;
-    } else {
-      // Blue rocket dot
-      ctx.fillStyle = COLORS.graphLine;
-    }
+    ctx.arc(lastXPos, clampedLastY, 14, 0, Math.PI * 2);
+    ctx.fillStyle = crashed ? "rgba(248, 81, 73, 0.4)" : "rgba(88, 166, 255, 0.4)";
     ctx.fill();
 
-    // Glow effect
+    // Main dot
     ctx.beginPath();
-    ctx.arc(lastX, lastY, 12, 0, Math.PI * 2);
-    ctx.fillStyle = crashed ? "rgba(248, 81, 73, 0.3)" : "rgba(88, 166, 255, 0.3)";
+    ctx.arc(lastXPos, clampedLastY, 8, 0, Math.PI * 2);
+    ctx.fillStyle = crashed ? COLORS.crashed : COLORS.graphLine;
+    ctx.fill();
+
+    // Inner highlight
+    ctx.beginPath();
+    ctx.arc(lastXPos - 2, clampedLastY - 2, 3, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
     ctx.fill();
   }
 }
@@ -339,7 +356,8 @@ async function renderCrashFrame(gameState) {
     gameState.multiplierHistory,
     gameState.currentMultiplier,
     gameState.crashed,
-    graphArea
+    graphArea,
+    gameState.totalFrames
   );
 
   // 4. Multiplier display
@@ -380,46 +398,36 @@ async function generateCrashGIF(gameState, crashPoint, targetMultiplier) {
   const cashedOut = targetMultiplier <= crashPoint;
   const resultMultiplier = cashedOut ? targetMultiplier : crashPoint;
 
-  // Calculate animation duration based on crash point
-  // Faster games for lower crash points, slower for higher
-  const baseDuration = 40; // frames
-  const durationMultiplier = Math.log(crashPoint + 1) / Math.log(2);
-  const totalFrames = Math.min(Math.floor(baseDuration * durationMultiplier), 100);
+  // Calculate animation duration - use the result multiplier for timing
+  // This ensures the animation always goes to the end point (cashout or crash)
+  const endMultiplier = cashedOut ? targetMultiplier : crashPoint;
+  const baseDuration = 50; // frames
+  const durationMultiplier = Math.log(endMultiplier + 1) / Math.log(2);
+  const totalFrames = Math.max(30, Math.min(Math.floor(baseDuration * durationMultiplier), 80));
 
-  // Generate the multiplier curve
-  const curve = generateMultiplierCurve(crashPoint, totalFrames);
-
-  // Find the frame where we cash out (if applicable)
-  let cashoutFrame = totalFrames;
-  if (cashedOut) {
-    for (let i = 0; i < curve.length; i++) {
-      if (curve[i] >= targetMultiplier) {
-        cashoutFrame = i;
-        break;
-      }
-    }
-  }
+  // Generate the multiplier curve up to the end point
+  const curve = generateMultiplierCurve(endMultiplier, totalFrames);
 
   // Generate frames
   const multiplierHistory = [];
 
   for (let frame = 0; frame <= totalFrames; frame++) {
-    const currentMult = curve[frame] || crashPoint;
+    const currentMult = curve[frame] || endMultiplier;
     multiplierHistory.push(currentMult);
 
-    const reachedCashout = cashedOut && currentMult >= targetMultiplier;
-    const crashed = frame === totalFrames || (!cashedOut && currentMult >= crashPoint);
+    const isLastFrame = frame === totalFrames;
 
     const frameState = {
       ...gameState,
       multiplierHistory: [...multiplierHistory],
       currentMultiplier: currentMult,
-      crashed: crashed && !reachedCashout,
-      cashedOut: reachedCashout,
-      phase: (crashed || reachedCashout) ? "result" : "playing",
+      crashed: isLastFrame && !cashedOut,
+      cashedOut: isLastFrame && cashedOut,
+      phase: isLastFrame ? "result" : "playing",
       won: cashedOut,
       resultMultiplier: resultMultiplier,
       winnings: cashedOut ? Math.floor(gameState.betAmount * targetMultiplier) : 0,
+      totalFrames: totalFrames,
     };
 
     const canvas = await renderCrashFrame(frameState);
@@ -427,10 +435,9 @@ async function generateCrashGIF(gameState, crashPoint, targetMultiplier) {
     encoder.addFrame(ctx);
 
     // Hold on result frame
-    if (crashed || reachedCashout) {
+    if (isLastFrame) {
       encoder.setDelay(2000); // 2 second pause
       encoder.addFrame(ctx);
-      break;
     }
   }
 
