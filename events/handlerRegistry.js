@@ -135,6 +135,9 @@ module.exports = (client, commandRouter, interactionRouter) => {
     // Blackjack handler - !blackjack, !bj, !hit, !stand
     registerCommandHandler(client, commandRouter, interactionRouter, './blackjackHandler');
 
+    // Baccarat handler - !baccarat
+    registerCommandHandler(client, commandRouter, interactionRouter, './baccaratHandler');
+
     // Clip handler - !submitclip, !clips
     registerCommandHandler(client, commandRouter, interactionRouter, './clipHandler');
 

@@ -34,10 +34,11 @@ const blackjackStreaksFilePath = path.join(
 );
 
 // Multi-deck shoe configuration
-const NUM_DECKS = 5; // 3-deck shoe (156 cards)
+const NUM_DECKS = 5; // 5-deck shoe (260 cards)
 let gameShoe = [];
 let runningCount = 0;
 let cardsDealt = 0;
+let pendingShuffleAnnouncement = null; // Store channel for shuffle announcement
 
 // Initialize shoe at startup
 function initShoeAtStartup() {
@@ -391,8 +392,13 @@ module.exports = (client) => {
   }
 
   async function startBlackjackGame(message, guildId, userId, betAmount) {
+    const channel = message.channel;
+
+    // Check for shuffle announcement before game starts
+    await checkShuffleAnnouncement(channel);
+
     // Show processing message
-    const processingMsg = await message.channel.send(
+    const processingMsg = await channel.send(
       processingMessage("we deal the cards")
     );
 
@@ -403,8 +409,11 @@ module.exports = (client) => {
     const currentStreak = getStreak(userId);
     const deckStatus = getDeckStatus();
 
-    const playerHand = [drawCard(gameShoe), drawCard(gameShoe)];
-    const dealerHand = [drawCard(gameShoe), drawCard(gameShoe)];
+    const playerHand = [drawCard(gameShoe, channel), drawCard(gameShoe, channel)];
+    const dealerHand = [drawCard(gameShoe, channel), drawCard(gameShoe, channel)];
+
+    // Check for shuffle announcement after dealing
+    await checkShuffleAnnouncement(channel);
 
     // Delete processing message before showing the game
     await processingMsg.delete().catch(() => {});
@@ -633,7 +642,7 @@ module.exports = (client) => {
     collector.on("collect", async (interaction) => {
       try {
         if (interaction.customId === "hit") {
-          playerHand.push(drawCard(gameShoe));
+          playerHand.push(drawCard(gameShoe, message.channel));
           playerScore = calculateHandValue(playerHand);
 
           if (playerScore > 21) {
@@ -745,7 +754,7 @@ module.exports = (client) => {
           if (interaction.customId === "double") {
             actualBet = betAmount * 2;
             await updateBalance(guildId, userId, -betAmount); // Take the extra bet
-            playerHand.push(drawCard(gameShoe));
+            playerHand.push(drawCard(gameShoe, message.channel));
             playerScore = calculateHandValue(playerHand);
 
             if (playerScore > 21) {
@@ -805,7 +814,7 @@ module.exports = (client) => {
 
           // Dealer plays
           while (dealerScore < 17) {
-            dealerHand.push(drawCard(gameShoe));
+            dealerHand.push(drawCard(gameShoe, message.channel));
             dealerScore = calculateHandValue(dealerHand);
           }
 
@@ -948,8 +957,8 @@ module.exports = (client) => {
           // Split hands - requires additional bet
           await updateBalance(guildId, userId, -betAmount); // Take second bet
 
-          const hand1 = [playerHand[0], drawCard(gameShoe)];
-          const hand2 = [playerHand[1], drawCard(gameShoe)];
+          const hand1 = [playerHand[0], drawCard(gameShoe, message.channel)];
+          const hand2 = [playerHand[1], drawCard(gameShoe, message.channel)];
           const score1 = calculateHandValue(hand1);
           const score2 = calculateHandValue(hand2);
 
@@ -1145,17 +1154,31 @@ module.exports = (client) => {
     }
   }
 
-  function drawCard(shoe) {
-    // Auto-shuffle when shoe is empty
-    if (shoe.length === 0) {
-      console.log("[Blackjack] Shoe exhausted - shuffling new 3-deck shoe");
+  function drawCard(shoe, channel = null) {
+    // Auto-shuffle when shoe is empty or below threshold
+    if (shoe.length < 52) {
+      console.log("[Blackjack] Shoe low - shuffling new 5-deck shoe");
       initializeShoe();
       shoe = gameShoe;
+      if (channel) {
+        pendingShuffleAnnouncement = channel;
+      }
     }
     const card = shoe.pop();
     cardsDealt++;
     updateCount(card);
     return card;
+  }
+
+  // Check and send shuffle announcement
+  async function checkShuffleAnnouncement(channel) {
+    if (pendingShuffleAnnouncement) {
+      const shuffleEmbed = new EmbedBuilder()
+        .setColor("#2ECC71")
+        .setDescription("🔀 The dealer shuffles a fresh 5-deck shoe...");
+      await channel.send({ embeds: [shuffleEmbed] }).catch(() => {});
+      pendingShuffleAnnouncement = null;
+    }
   }
 
   function calculateHandValue(hand) {
@@ -1259,14 +1282,14 @@ module.exports = (client) => {
 
     // Player draws until 17 or bust (simplified for split)
     while (playerScore < 17 && playerScore <= 21) {
-      playerHand.push(drawCard(gameShoe));
+      playerHand.push(drawCard(gameShoe, message.channel));
       playerScore = calculateHandValue(playerHand);
     }
 
     // Dealer plays
     let dealerScore = calculateHandValue(dealerHand);
     while (dealerScore < 17) {
-      dealerHand.push(drawCard(gameShoe));
+      dealerHand.push(drawCard(gameShoe, message.channel));
       dealerScore = calculateHandValue(dealerHand);
     }
 
