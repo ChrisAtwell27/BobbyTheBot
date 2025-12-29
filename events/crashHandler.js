@@ -141,7 +141,7 @@ function drawHeader(ctx, playerName, betAmount, targetMultiplier, currencyEmoji)
   ctx.fillStyle = COLORS.gold;
   ctx.font = "bold 20px Arial";
   ctx.textAlign = "center";
-  ctx.fillText("🚀 CRASH", BOARD_WIDTH / 2, 22);
+  ctx.fillText("CRASH", BOARD_WIDTH / 2, 22);
 
   // Player info
   ctx.fillStyle = COLORS.text;
@@ -150,7 +150,7 @@ function drawHeader(ctx, playerName, betAmount, targetMultiplier, currencyEmoji)
   ctx.fillText(`Player: ${playerName}`, 10, 40);
 
   ctx.textAlign = "center";
-  ctx.fillText(`Bet: ${currencyEmoji}${betAmount.toLocaleString()}`, BOARD_WIDTH / 2, 40);
+  ctx.fillText(`Bet: ${betAmount.toLocaleString()}`, BOARD_WIDTH / 2, 40);
 
   // Target multiplier
   ctx.fillStyle = COLORS.graphLine;
@@ -227,10 +227,23 @@ function drawGraph(ctx, multiplierHistory, currentMultiplier, crashed, graphArea
     const lastMult = multiplierHistory[multiplierHistory.length - 1];
     const lastY = y + height - ((lastMult - 1) / (maxDisplayMult - 1)) * height;
 
-    // Rocket emoji/symbol
-    ctx.font = "24px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(crashed ? "💥" : "🚀", lastX, lastY);
+    // Draw rocket or explosion as a circle
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 8, 0, Math.PI * 2);
+    if (crashed) {
+      // Red explosion
+      ctx.fillStyle = COLORS.crashed;
+    } else {
+      // Blue rocket dot
+      ctx.fillStyle = COLORS.graphLine;
+    }
+    ctx.fill();
+
+    // Glow effect
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 12, 0, Math.PI * 2);
+    ctx.fillStyle = crashed ? "rgba(248, 81, 73, 0.3)" : "rgba(88, 166, 255, 0.3)";
+    ctx.fill();
   }
 }
 
@@ -274,26 +287,26 @@ function drawResultOverlay(ctx, won, multiplier, winnings, betAmount, currencyEm
     // Win display
     ctx.fillStyle = COLORS.win;
     ctx.font = "bold 24px Arial";
-    ctx.fillText("🎉 YOU WON!", BOARD_WIDTH / 2, 235);
+    ctx.fillText("YOU WON!", BOARD_WIDTH / 2, 235);
 
     ctx.font = "bold 18px Arial";
     ctx.fillText(`Cashed out at ${multiplier.toFixed(2)}x`, BOARD_WIDTH / 2, 265);
 
     ctx.fillStyle = COLORS.gold;
     ctx.font = "bold 20px Arial";
-    ctx.fillText(`+${currencyEmoji}${netResult.toLocaleString()}`, BOARD_WIDTH / 2, 300);
+    ctx.fillText(`+${netResult.toLocaleString()}`, BOARD_WIDTH / 2, 300);
   } else {
     // Loss display
     ctx.fillStyle = COLORS.crashed;
     ctx.font = "bold 24px Arial";
-    ctx.fillText("💥 CRASHED!", BOARD_WIDTH / 2, 235);
+    ctx.fillText("CRASHED!", BOARD_WIDTH / 2, 235);
 
     ctx.font = "bold 18px Arial";
     ctx.fillText(`Crashed at ${multiplier.toFixed(2)}x`, BOARD_WIDTH / 2, 265);
 
     ctx.fillStyle = COLORS.crashed;
     ctx.font = "bold 20px Arial";
-    ctx.fillText(`-${currencyEmoji}${betAmount.toLocaleString()}`, BOARD_WIDTH / 2, 300);
+    ctx.fillText(`-${betAmount.toLocaleString()}`, BOARD_WIDTH / 2, 300);
   }
 }
 
