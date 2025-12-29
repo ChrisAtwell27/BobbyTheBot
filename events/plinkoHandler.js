@@ -37,7 +37,7 @@ const VERTICAL_SPACING = 38;
 const START_Y = 90;
 const BUCKET_Y = 420;
 const BUCKET_HEIGHT = 80;
-const DROP_VARIANCE = 25; // ±25px random offset from center
+const DROP_VARIANCE = 12; // ±12px random offset from center
 
 // Payout multipliers by risk level
 const PAYOUTS = {
@@ -47,7 +47,8 @@ const PAYOUTS = {
 };
 
 // Frame timing (respects Discord rate limits ~5 edits per 5 seconds)
-const FRAME_DELAYS = [700, 700, 650, 650, 600, 600, 550, 550, 500, 1200];
+// ~400ms between frames allows for smoother animation while staying safe
+const FRAME_DELAYS = [400, 400, 380, 380, 360, 360, 350, 350, 340, 340, 330, 330, 320, 320, 300, 800];
 
 // Colors
 const COLORS = {
@@ -153,26 +154,28 @@ function simulatePlinko() {
   World.add(world, floor);
 
   // Create ball with slight random offset from center
+  // Drop closer to first peg row (START_Y=90) to reduce momentum buildup
   const dropX =
     BOARD_WIDTH / 2 + (Math.random() - 0.5) * DROP_VARIANCE * 2;
-  const ball = Bodies.circle(dropX, 40, BALL_RADIUS, {
-    restitution: 0.6,
-    friction: 0.05,
-    frictionAir: 0.01,
+  const ball = Bodies.circle(dropX, 72, BALL_RADIUS, {
+    restitution: 0.5,
+    friction: 0.1,
+    frictionAir: 0.02,
     density: 0.001,
     label: "ball",
   });
-  // Add slight random initial velocity
+  // Minimal initial velocity - let gravity and pegs do the work
   Body.setVelocity(ball, {
-    x: (Math.random() - 0.5) * 1.5,
+    x: (Math.random() - 0.5) * 0.3,
     y: 0,
   });
   World.add(world, ball);
 
   // Run simulation and capture frames
   const frames = [];
-  const TOTAL_TICKS = 350;
-  const CAPTURE_INTERVAL = Math.floor(TOTAL_TICKS / 10);
+  const TOTAL_TICKS = 400;
+  const NUM_FRAMES = 16;
+  const CAPTURE_INTERVAL = Math.floor(TOTAL_TICKS / NUM_FRAMES);
 
   for (let tick = 0; tick < TOTAL_TICKS; tick++) {
     Engine.update(engine, 1000 / 60);
