@@ -27,22 +27,22 @@ const { formatCurrency } = require("../utils/currencyHelper");
 
 const BOARD_WIDTH = 400;
 const BOARD_HEIGHT = 520;
-const PEG_RADIUS = 5;
-const BALL_RADIUS = 8;
-const ROWS = 8;
+const PEG_RADIUS = 6;
+const BALL_RADIUS = 7;
+const ROWS = 12; // More rows = better distribution
 const NUM_BUCKETS = 9;
 const BUCKET_WIDTH = BOARD_WIDTH / NUM_BUCKETS;
-const HORIZONTAL_SPACING = 38;
-const VERTICAL_SPACING = 38;
-const START_Y = 90;
+const HORIZONTAL_SPACING = 28; // Tighter spacing so ball must hit pegs
+const VERTICAL_SPACING = 28;
+const START_Y = 75;
 const BUCKET_Y = 420;
 const BUCKET_HEIGHT = 80;
 const DROP_VARIANCE = 12; // ±12px random offset from center
 
-// Payout multipliers by risk level
+// Payout multipliers by risk level (house edge built in - no 1.0x)
 const PAYOUTS = {
-  low:    [1.5, 1.2, 1.1, 1.0, 0.5, 1.0, 1.1, 1.2, 1.5],
-  medium: [5.0, 2.0, 1.5, 1.0, 0.5, 1.0, 1.5, 2.0, 5.0],
+  low:    [1.5, 1.2, 1.1, 0.9, 0.5, 0.9, 1.1, 1.2, 1.5],
+  medium: [5.0, 2.0, 1.4, 0.9, 0.4, 0.9, 1.4, 2.0, 5.0],
   high:   [10.0, 3.0, 1.5, 0.3, 0.0, 0.3, 1.5, 3.0, 10.0],
 };
 
@@ -154,20 +154,20 @@ function simulatePlinko() {
   World.add(world, floor);
 
   // Create ball with slight random offset from center
-  // Drop closer to first peg row (START_Y=90) to reduce momentum buildup
+  // Drop just above first peg row for minimal momentum before first hit
   const dropX =
     BOARD_WIDTH / 2 + (Math.random() - 0.5) * DROP_VARIANCE * 2;
-  const ball = Bodies.circle(dropX, 72, BALL_RADIUS, {
-    restitution: 0.5,
-    friction: 0.1,
-    frictionAir: 0.02,
+  const ball = Bodies.circle(dropX, START_Y - 12, BALL_RADIUS, {
+    restitution: 0.4,  // Slightly less bouncy for more predictable behavior
+    friction: 0.05,
+    frictionAir: 0.015,
     density: 0.001,
     label: "ball",
   });
-  // Minimal initial velocity - let gravity and pegs do the work
+  // Very minimal initial velocity
   Body.setVelocity(ball, {
-    x: (Math.random() - 0.5) * 0.3,
-    y: 0,
+    x: (Math.random() - 0.5) * 0.2,
+    y: 0.5,  // Small downward push
   });
   World.add(world, ball);
 
