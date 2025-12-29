@@ -28,8 +28,8 @@ const { formatCurrency } = require("../utils/currencyHelper");
 
 const BOARD_WIDTH = 400;
 const BOARD_HEIGHT = 520;
-const PEG_RADIUS = 6;
-const BALL_RADIUS = 7;
+const PEG_RADIUS = 4;  // Smaller pegs
+const BALL_RADIUS = 6;
 const ROWS = 12; // More rows = better distribution
 const NUM_BUCKETS = 9;
 const BUCKET_WIDTH = BOARD_WIDTH / NUM_BUCKETS;
@@ -170,12 +170,12 @@ function simulatePlinko() {
   World.add(world, ball);
 
   // Run simulation and capture frames for GIF
-  // Capture at 30fps for ~3 second animation (90 frames)
+  // Capture at 30fps for ~5 second animation (150 frames max)
   const frames = [];
   const PHYSICS_FPS = 120;
-  const TARGET_DURATION_SECS = 3;
-  const TOTAL_TICKS = PHYSICS_FPS * TARGET_DURATION_SECS; // 360 ticks
-  const NUM_FRAMES = GIF_FPS * TARGET_DURATION_SECS; // 90 frames
+  const TARGET_DURATION_SECS = 5;
+  const TOTAL_TICKS = PHYSICS_FPS * TARGET_DURATION_SECS; // 600 ticks
+  const NUM_FRAMES = GIF_FPS * TARGET_DURATION_SECS; // 150 frames
   const CAPTURE_INTERVAL = Math.floor(TOTAL_TICKS / NUM_FRAMES);
 
   for (let tick = 0; tick < TOTAL_TICKS; tick++) {
@@ -191,11 +191,11 @@ function simulatePlinko() {
       });
     }
 
-    // Check if ball has settled in bucket
+    // Check if ball has settled in bucket (must be deep in bucket and nearly stopped)
     if (
-      ball.position.y > BUCKET_Y + 30 &&
-      Math.abs(ball.velocity.y) < 0.3 &&
-      Math.abs(ball.velocity.x) < 0.3
+      ball.position.y > BUCKET_Y + 50 &&
+      Math.abs(ball.velocity.y) < 0.1 &&
+      Math.abs(ball.velocity.x) < 0.1
     ) {
       // Ball has landed - capture final frame
       frames.push({
