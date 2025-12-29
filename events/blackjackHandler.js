@@ -140,8 +140,13 @@ module.exports = (client) => {
     }
   });
 
+  // Helper function for delays
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   // Create visual card representation
-  function createCardImage(card, isHidden = false) {
+  function createCardImage(card, isHidden = false, isNew = false) {
     const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
     const ctx = canvas.getContext("2d");
 
@@ -159,11 +164,16 @@ module.exports = (client) => {
       ctx.lineWidth = 3;
       ctx.strokeRect(3, 3, CARD_WIDTH - 6, CARD_HEIGHT - 6);
 
-      // Pattern
+      // Inner decorative border
+      ctx.strokeStyle = "#ffd700";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(10, 10, CARD_WIDTH - 20, CARD_HEIGHT - 20);
+
+      // Pattern - letter instead of emoji
       ctx.fillStyle = "#ffd700";
-      ctx.font = "20px Arial";
+      ctx.font = "bold 28px Arial";
       ctx.textAlign = "center";
-      ctx.fillText("🎰", CARD_WIDTH / 2, CARD_HEIGHT / 2 + 7);
+      ctx.fillText("BJ", CARD_WIDTH / 2, CARD_HEIGHT / 2 + 10);
 
       return canvas;
     }
@@ -172,10 +182,19 @@ module.exports = (client) => {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
-    // Border
-    ctx.strokeStyle = "#333333";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, CARD_WIDTH - 2, CARD_HEIGHT - 2);
+    // Border - gold glow for new cards
+    if (isNew) {
+      ctx.shadowColor = "#ffd700";
+      ctx.shadowBlur = 15;
+      ctx.strokeStyle = "#ffd700";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(1, 1, CARD_WIDTH - 2, CARD_HEIGHT - 2);
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.strokeStyle = "#333333";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, CARD_WIDTH - 2, CARD_HEIGHT - 2);
+    }
 
     // Card color based on suit
     const isRed = card.suit === "Hearts" || card.suit === "Diamonds";
@@ -220,6 +239,9 @@ module.exports = (client) => {
   }
 
   // Create game table visualization
+  // faceDownCard: { side: 'player'|'dealer', index: number } - which card to show face-down
+  // newCardIndex: { side: 'player'|'dealer', index: number } - which card is newly revealed (gold glow)
+  // dealingStatus: string - status message during dealing phase
   async function createGameTable(
     playerHands,
     dealerHand,
@@ -230,7 +252,10 @@ module.exports = (client) => {
     betAmount,
     isSplit = false,
     streak = 0,
-    deckStatus = "NEUTRAL"
+    deckStatus = "NEUTRAL",
+    faceDownCard = null,
+    newCardIndex = null,
+    dealingStatus = null
   ) {
     // Handle both single hand and split hands
     const hands = Array.isArray(playerHands[0]) ? playerHands : [playerHands];
@@ -279,34 +304,39 @@ module.exports = (client) => {
     ctx.fillStyle = "#ffd700";
     ctx.font = "bold 24px Arial";
     ctx.textAlign = "center";
-    ctx.fillText("🎰 BLACKJACK TABLE 🎰", canvas.width / 2, 30);
+    ctx.fillText("BLACKJACK TABLE", canvas.width / 2, 30);
 
-    // Deck status indicator (Hot/Cold)
+    // Dealing status or Deck status indicator
     ctx.font = "bold 16px Arial";
-    if (deckStatus === "HOT") {
+    if (dealingStatus) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(dealingStatus, canvas.width / 2, 55);
+    } else if (deckStatus === "HOT") {
       ctx.fillStyle = "#ff4444";
-      ctx.fillText("🔥 HOT DECK 🔥", canvas.width / 2, 55);
+      ctx.fillText("** HOT DECK **", canvas.width / 2, 55);
     } else if (deckStatus === "COLD") {
       ctx.fillStyle = "#4444ff";
-      ctx.fillText("❄️ COLD DECK ❄️", canvas.width / 2, 55);
+      ctx.fillText("** COLD DECK **", canvas.width / 2, 55);
     } else {
       ctx.fillStyle = "#888888";
-      ctx.fillText("⚪ NEUTRAL DECK", canvas.width / 2, 55);
+      ctx.fillText("NEUTRAL DECK", canvas.width / 2, 55);
     }
 
-    // Streak indicator
-    if (streak >= 3) {
-      ctx.fillStyle = "#ff6600";
-      ctx.font = "bold 18px Arial";
-      ctx.fillText(
-        `🔥 ${streak} WIN STREAK! (+10% BONUS) 🔥`,
-        canvas.width / 2,
-        78
-      );
-    } else if (streak > 0) {
-      ctx.fillStyle = "#ffaa00";
-      ctx.font = "bold 14px Arial";
-      ctx.fillText(`⭐ ${streak} Win Streak`, canvas.width / 2, 75);
+    // Streak indicator (skip during dealing to avoid clutter)
+    if (!dealingStatus) {
+      if (streak >= 3) {
+        ctx.fillStyle = "#ff6600";
+        ctx.font = "bold 18px Arial";
+        ctx.fillText(
+          `** ${streak} WIN STREAK! (+10% BONUS) **`,
+          canvas.width / 2,
+          78
+        );
+      } else if (streak > 0) {
+        ctx.fillStyle = "#ffaa00";
+        ctx.font = "bold 14px Arial";
+        ctx.fillText(`* ${streak} Win Streak *`, canvas.width / 2, 75);
+      }
     }
 
     // Dealer section
@@ -327,9 +357,15 @@ module.exports = (client) => {
         (dealerHand.length * (CARD_WIDTH + CARD_SPACING) - CARD_SPACING)) /
       2;
     for (let i = 0; i < dealerHand.length; i++) {
+      // Determine if card should be hidden, face-down (dealing), or show with glow
+      const isSecondCardHidden = gameState === "playing" && i === 1;
+      const isFaceDown = faceDownCard && faceDownCard.side === "dealer" && faceDownCard.index === i;
+      const isNew = newCardIndex && newCardIndex.side === "dealer" && newCardIndex.index === i;
+
       const cardCanvas = createCardImage(
         dealerHand[i],
-        gameState === "playing" && i === 1
+        isSecondCardHidden || isFaceDown,
+        isNew
       );
       ctx.drawImage(
         cardCanvas,
@@ -353,7 +389,7 @@ module.exports = (client) => {
         : `${playerName.toUpperCase()}`;
       ctx.fillText(handLabel, 30, yOffset);
       ctx.fillText(`Total: ${score}`, 30, yOffset + 20);
-      ctx.fillText(`Bet: 🍯${betAmount}`, 30, yOffset + 40);
+      ctx.fillText(`Bet: $${betAmount}`, 30, yOffset + 40);
 
       // Draw player cards
       const playerStartX =
@@ -361,7 +397,11 @@ module.exports = (client) => {
           (hand.length * (CARD_WIDTH + CARD_SPACING) - CARD_SPACING)) /
         2;
       for (let i = 0; i < hand.length; i++) {
-        const cardCanvas = createCardImage(hand[i]);
+        // Check if this card should be face-down or have glow
+        const isFaceDown = faceDownCard && faceDownCard.side === "player" && faceDownCard.index === i;
+        const isNew = newCardIndex && newCardIndex.side === "player" && newCardIndex.index === i;
+
+        const cardCanvas = createCardImage(hand[i], isFaceDown, isNew);
         ctx.drawImage(
           cardCanvas,
           playerStartX + i * (CARD_WIDTH + CARD_SPACING),
@@ -391,16 +431,33 @@ module.exports = (client) => {
     return canvas;
   }
 
+  // Helper to create dealing canvas attachment
+  async function createDealingAttachment(playerHand, dealerHand, playerName, betAmount, streak, deckStatus, dealingStatus, faceDownCard = null, newCardIndex = null) {
+    const playerScore = playerHand.length > 0 ? calculateHandValue(playerHand) : 0;
+    const dealerScore = dealerHand.length > 0 ? calculateHandValue(dealerHand) : 0;
+    const canvas = await createGameTable(
+      playerHand,
+      dealerHand,
+      playerScore,
+      dealerScore,
+      "playing",
+      playerName,
+      betAmount,
+      false,
+      streak,
+      deckStatus,
+      faceDownCard,
+      newCardIndex,
+      dealingStatus
+    );
+    return new AttachmentBuilder(canvas.toBuffer(), { name: "blackjack-dealing.png" });
+  }
+
   async function startBlackjackGame(message, guildId, userId, betAmount) {
     const channel = message.channel;
 
     // Check for shuffle announcement before game starts
     await checkShuffleAnnouncement(channel);
-
-    // Show processing message
-    const processingMsg = await channel.send(
-      processingMessage("we deal the cards")
-    );
 
     // CRITICAL FIX: Deduct the initial bet from player's balance when game starts
     await updateBalance(guildId, userId, -betAmount);
@@ -408,15 +465,55 @@ module.exports = (client) => {
     // Get current streak and deck status
     const currentStreak = getStreak(userId);
     const deckStatus = getDeckStatus();
+    const playerName = message.author.username;
 
-    const playerHand = [drawCard(gameShoe, channel), drawCard(gameShoe, channel)];
-    const dealerHand = [drawCard(gameShoe, channel), drawCard(gameShoe, channel)];
+    // Initialize empty hands for cinematic dealing
+    const playerHand = [];
+    const dealerHand = [];
+
+    // Send initial empty table
+    let attachment = await createDealingAttachment(playerHand, dealerHand, playerName, betAmount, currentStreak, deckStatus, "Shuffling cards...");
+    const gameMessage = await channel.send({ files: [attachment] });
+    await delay(600);
+
+    // Deal player's first card - face down first
+    playerHand.push(drawCard(gameShoe, channel));
+    attachment = await createDealingAttachment(playerHand, dealerHand, playerName, betAmount, currentStreak, deckStatus, "Dealing to you...", { side: "player", index: 0 });
+    await gameMessage.edit({ files: [attachment] });
+    await delay(400);
+    // Flip card up with glow
+    attachment = await createDealingAttachment(playerHand, dealerHand, playerName, betAmount, currentStreak, deckStatus, "Dealing to you...", null, { side: "player", index: 0 });
+    await gameMessage.edit({ files: [attachment] });
+    await delay(500);
+
+    // Deal dealer's first card - face down first
+    dealerHand.push(drawCard(gameShoe, channel));
+    attachment = await createDealingAttachment(playerHand, dealerHand, playerName, betAmount, currentStreak, deckStatus, "Dealing to dealer...", { side: "dealer", index: 0 });
+    await gameMessage.edit({ files: [attachment] });
+    await delay(400);
+    // Flip card up with glow
+    attachment = await createDealingAttachment(playerHand, dealerHand, playerName, betAmount, currentStreak, deckStatus, "Dealing to dealer...", null, { side: "dealer", index: 0 });
+    await gameMessage.edit({ files: [attachment] });
+    await delay(500);
+
+    // Deal player's second card - face down first
+    playerHand.push(drawCard(gameShoe, channel));
+    attachment = await createDealingAttachment(playerHand, dealerHand, playerName, betAmount, currentStreak, deckStatus, "Dealing to you...", { side: "player", index: 1 });
+    await gameMessage.edit({ files: [attachment] });
+    await delay(400);
+    // Flip card up with glow
+    attachment = await createDealingAttachment(playerHand, dealerHand, playerName, betAmount, currentStreak, deckStatus, "Dealing to you...", null, { side: "player", index: 1 });
+    await gameMessage.edit({ files: [attachment] });
+    await delay(500);
+
+    // Deal dealer's second card - stays face down (hole card)
+    dealerHand.push(drawCard(gameShoe, channel));
+    attachment = await createDealingAttachment(playerHand, dealerHand, playerName, betAmount, currentStreak, deckStatus, "Dealer's hole card...");
+    await gameMessage.edit({ files: [attachment] });
+    await delay(600);
 
     // Check for shuffle announcement after dealing
     await checkShuffleAnnouncement(channel);
-
-    // Delete processing message before showing the game
-    await processingMsg.delete().catch(() => {});
 
     let playerScore = calculateHandValue(playerHand);
     let dealerScore = calculateHandValue(dealerHand);
@@ -426,7 +523,7 @@ module.exports = (client) => {
       playerHand[0].value === playerHand[1].value &&
       (await getBalance(guildId, userId)) >= betAmount;
 
-    // Create initial game visualization
+    // Create final game visualization (normal state, no dealing status)
     const gameCanvas = await createGameTable(
       playerHand,
       dealerHand,
@@ -440,7 +537,7 @@ module.exports = (client) => {
       deckStatus
     );
 
-    const attachment = new AttachmentBuilder(gameCanvas.toBuffer(), {
+    attachment = new AttachmentBuilder(gameCanvas.toBuffer(), {
       name: "blackjack-table.png",
     });
 
@@ -526,9 +623,10 @@ module.exports = (client) => {
           .setFooter({ text: "Your bet has been returned!" })
           .setTimestamp();
 
-        return message.channel.send({
+        return gameMessage.edit({
           embeds: [gameEmbed],
           files: [finalAttachment],
+          components: [],
         });
       } else {
         // Player blackjack wins - pay 3:2 + streak bonus
@@ -579,9 +677,10 @@ module.exports = (client) => {
           .setFooter({ text: "Blackjack pays 3:2!" })
           .setTimestamp();
 
-        return message.channel.send({
+        return gameMessage.edit({
           embeds: [gameEmbed],
           files: [finalAttachment],
+          components: [],
         });
       }
     }
@@ -626,7 +725,8 @@ module.exports = (client) => {
       surrenderButton
     );
 
-    const gameMessage = await message.channel.send({
+    // Update the existing game message with final state and buttons
+    await gameMessage.edit({
       embeds: [gameEmbed],
       files: [attachment],
       components: [row],

@@ -188,6 +188,14 @@ module.exports = (client, commandRouter, interactionRouter) => {
     "./baccaratHandler"
   );
 
+  // Plinko handler - !plinko
+  registerCommandHandler(
+    client,
+    commandRouter,
+    interactionRouter,
+    "./plinkoHandler"
+  );
+
   // Clip handler - !submitclip, !clips
   registerCommandHandler(
     client,

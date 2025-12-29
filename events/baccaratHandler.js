@@ -314,8 +314,40 @@ module.exports = (client) => {
   // VISUAL RENDERING
   // ==========================================
 
+  // Create card back (face-down card)
+  function createCardBack() {
+    const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
+    const ctx = canvas.getContext("2d");
+
+    // Card back - dark red/maroon pattern
+    const gradient = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT);
+    gradient.addColorStop(0, "#8B0000");
+    gradient.addColorStop(0.5, "#A52A2A");
+    gradient.addColorStop(1, "#8B0000");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
+
+    // Border
+    ctx.strokeStyle = "#ffd700";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(2, 2, CARD_WIDTH - 4, CARD_HEIGHT - 4);
+
+    // Inner decorative border
+    ctx.strokeStyle = "#ffd700";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(8, 8, CARD_WIDTH - 16, CARD_HEIGHT - 16);
+
+    // Diamond pattern in center
+    ctx.fillStyle = "#ffd700";
+    ctx.font = "bold 24px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("B", CARD_WIDTH / 2, CARD_HEIGHT / 2 + 8);
+
+    return canvas;
+  }
+
   // Create visual card representation
-  function createCardImage(card) {
+  function createCardImage(card, isNew = false) {
     const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
     const ctx = canvas.getContext("2d");
 
@@ -323,10 +355,19 @@ module.exports = (client) => {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
-    // Border
-    ctx.strokeStyle = "#333333";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, CARD_WIDTH - 2, CARD_HEIGHT - 2);
+    // Border - gold glow for new cards
+    if (isNew) {
+      ctx.shadowColor = "#ffd700";
+      ctx.shadowBlur = 15;
+      ctx.strokeStyle = "#ffd700";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(1, 1, CARD_WIDTH - 2, CARD_HEIGHT - 2);
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.strokeStyle = "#333333";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, CARD_WIDTH - 2, CARD_HEIGHT - 2);
+    }
 
     // Card color based on suit
     const isRed = card.suit === "Hearts" || card.suit === "Diamonds";
@@ -360,6 +401,8 @@ module.exports = (client) => {
   }
 
   // Create baccarat table visualization
+  // faceDownCard: { side: 'player'|'banker', index: number } - which card to show face-down
+  // newCardIndex: { side: 'player'|'banker', index: number } - which card is newly revealed (gold glow)
   async function createBaccaratTable(
     playerHand,
     bankerHand,
@@ -367,7 +410,10 @@ module.exports = (client) => {
     phase,
     result,
     playerName,
-    streak
+    streak,
+    dealingStatus = null,
+    faceDownCard = null,
+    newCardIndex = null
   ) {
     const canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
     const ctx = canvas.getContext("2d");
@@ -397,8 +443,12 @@ module.exports = (client) => {
     ctx.textAlign = "center";
     ctx.fillText("BACCARAT", CANVAS_WIDTH / 2, 35);
 
-    // Streak indicator
-    if (streak >= 3) {
+    // Dealing status (if provided) takes priority over streak
+    if (dealingStatus) {
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 16px Arial";
+      ctx.fillText(dealingStatus, CANVAS_WIDTH / 2, 58);
+    } else if (streak >= 3) {
       ctx.fillStyle = "#ff6600";
       ctx.font = "bold 16px Arial";
       ctx.fillText(`** ${streak} WIN STREAK! (+10% BONUS) **`, CANVAS_WIDTH / 2, 58);
@@ -417,13 +467,28 @@ module.exports = (client) => {
     ctx.fillText("BANKER", 175, cardsY);
 
     if (bankerHand.length > 0) {
-      const bankerValue = calculateBaccaratValue(bankerHand);
-      ctx.font = "14px Arial";
-      ctx.fillText(`Value: ${bankerValue}`, 175, cardsY + 18);
+      // Only show value if no face-down cards on banker side
+      const hasFaceDown = faceDownCard && faceDownCard.side === "banker";
+      if (!hasFaceDown) {
+        const bankerValue = calculateBaccaratValue(bankerHand);
+        ctx.font = "14px Arial";
+        ctx.fillText(`Value: ${bankerValue}`, 175, cardsY + 18);
+      } else {
+        ctx.font = "14px Arial";
+        ctx.fillText("Value: ?", 175, cardsY + 18);
+      }
 
       const bankerStartX = 175 - ((bankerHand.length * (CARD_WIDTH + CARD_SPACING) - CARD_SPACING) / 2);
       for (let i = 0; i < bankerHand.length; i++) {
-        const cardCanvas = createCardImage(bankerHand[i]);
+        let cardCanvas;
+        // Check if this card should be face-down
+        if (faceDownCard && faceDownCard.side === "banker" && faceDownCard.index === i) {
+          cardCanvas = createCardBack();
+        } else {
+          // Check if this card is newly revealed (gold glow)
+          const isNew = newCardIndex && newCardIndex.side === "banker" && newCardIndex.index === i;
+          cardCanvas = createCardImage(bankerHand[i], isNew);
+        }
         ctx.drawImage(cardCanvas, bankerStartX + i * (CARD_WIDTH + CARD_SPACING), cardsY + 25);
       }
     }
@@ -435,13 +500,28 @@ module.exports = (client) => {
     ctx.fillText("PLAYER", 525, cardsY);
 
     if (playerHand.length > 0) {
-      const playerValue = calculateBaccaratValue(playerHand);
-      ctx.font = "14px Arial";
-      ctx.fillText(`Value: ${playerValue}`, 525, cardsY + 18);
+      // Only show value if no face-down cards on player side
+      const hasFaceDown = faceDownCard && faceDownCard.side === "player";
+      if (!hasFaceDown) {
+        const playerValue = calculateBaccaratValue(playerHand);
+        ctx.font = "14px Arial";
+        ctx.fillText(`Value: ${playerValue}`, 525, cardsY + 18);
+      } else {
+        ctx.font = "14px Arial";
+        ctx.fillText("Value: ?", 525, cardsY + 18);
+      }
 
       const playerStartX = 525 - ((playerHand.length * (CARD_WIDTH + CARD_SPACING) - CARD_SPACING) / 2);
       for (let i = 0; i < playerHand.length; i++) {
-        const cardCanvas = createCardImage(playerHand[i]);
+        let cardCanvas;
+        // Check if this card should be face-down
+        if (faceDownCard && faceDownCard.side === "player" && faceDownCard.index === i) {
+          cardCanvas = createCardBack();
+        } else {
+          // Check if this card is newly revealed (gold glow)
+          const isNew = newCardIndex && newCardIndex.side === "player" && newCardIndex.index === i;
+          cardCanvas = createCardImage(playerHand[i], isNew);
+        }
         ctx.drawImage(cardCanvas, playerStartX + i * (CARD_WIDTH + CARD_SPACING), cardsY + 25);
       }
     }
@@ -776,41 +856,21 @@ module.exports = (client) => {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // Create cinematic dealing embed
-  function createDealingEmbed(playerHand, bankerHand, phase, bets, playerName) {
-    const totalBet = bets.player + bets.banker + bets.tie + bets.playerPair + bets.bankerPair;
-
-    const playerDisplay = playerHand.length > 0
-      ? displayHandEmoji(playerHand) + ` (${calculateBaccaratValue(playerHand)})`
-      : "🎴 ...";
-    const bankerDisplay = bankerHand.length > 0
-      ? displayHandEmoji(bankerHand) + ` (${calculateBaccaratValue(bankerHand)})`
-      : "🎴 ...";
-
-    let phaseText = "";
-    switch (phase) {
-      case "start": phaseText = "🎰 Shuffling and preparing to deal..."; break;
-      case "player1": phaseText = "🃏 Dealing first card to Player..."; break;
-      case "banker1": phaseText = "🃏 Dealing first card to Banker..."; break;
-      case "player2": phaseText = "🃏 Dealing second card to Player..."; break;
-      case "banker2": phaseText = "🃏 Dealing second card to Banker..."; break;
-      case "natural": phaseText = "✨ **NATURAL!** Checking for winner..."; break;
-      case "player3": phaseText = "🃏 Player draws a third card..."; break;
-      case "banker3": phaseText = "🃏 Banker draws a third card..."; break;
-      case "reveal": phaseText = "🎲 Revealing final hands..."; break;
-      default: phaseText = "🎰 Dealing...";
-    }
-
-    return new EmbedBuilder()
-      .setTitle("🎰 Baccarat - Dealing Cards")
-      .setColor("#4a1c2a")
-      .setDescription(`**${playerName}** - ${phaseText}`)
-      .addFields(
-        { name: "🔴 Banker Hand", value: bankerDisplay, inline: true },
-        { name: "🔵 Player Hand", value: playerDisplay, inline: true },
-        { name: "💰 Total Bet", value: `🍯${totalBet}`, inline: true }
-      )
-      .setFooter({ text: "Cards are being dealt..." });
+  // Helper to create dealing canvas with status message and animation state
+  async function createDealingCanvas(playerHand, bankerHand, bets, playerName, streak, statusText, faceDownCard = null, newCardIndex = null) {
+    const canvas = await createBaccaratTable(
+      playerHand,
+      bankerHand,
+      bets,
+      "dealing",
+      null,
+      playerName,
+      streak,
+      statusText,
+      faceDownCard,
+      newCardIndex
+    );
+    return new AttachmentBuilder(canvas.toBuffer(), { name: "baccarat-dealing.png" });
   }
 
   async function executeBaccaratGame(interaction, message, guildId, userId, bets, currentStreak) {
@@ -831,40 +891,54 @@ module.exports = (client) => {
     // Defer the interaction first, then edit
     await interaction.deferUpdate();
 
-    // Show initial dealing message
+    // Show initial dealing message with Canvas
+    let attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Shuffling and preparing to deal...");
     await interaction.editReply({
-      embeds: [createDealingEmbed(playerHand, bankerHand, "start", bets, playerName)],
+      embeds: [],
+      files: [attachment],
       components: [],
     });
+    await delay(600);
+
+    // Deal first card to Player - face down first
+    playerHand.push(drawCard(channel));
+    attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Dealing to Player...", { side: "player", index: 0 });
+    await interaction.editReply({ files: [attachment] });
+    await delay(400);
+    // Flip card face up with glow
+    attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Dealing to Player...", null, { side: "player", index: 0 });
+    await interaction.editReply({ files: [attachment] });
+    await delay(500);
+
+    // Deal first card to Banker - face down first
+    bankerHand.push(drawCard(channel));
+    attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Dealing to Banker...", { side: "banker", index: 0 });
+    await interaction.editReply({ files: [attachment] });
+    await delay(400);
+    // Flip card face up with glow
+    attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Dealing to Banker...", null, { side: "banker", index: 0 });
+    await interaction.editReply({ files: [attachment] });
+    await delay(500);
+
+    // Deal second card to Player - face down first
+    playerHand.push(drawCard(channel));
+    attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Dealing to Player...", { side: "player", index: 1 });
+    await interaction.editReply({ files: [attachment] });
+    await delay(400);
+    // Flip card face up with glow
+    attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Dealing to Player...", null, { side: "player", index: 1 });
+    await interaction.editReply({ files: [attachment] });
+    await delay(500);
+
+    // Deal second card to Banker - face down first
+    bankerHand.push(drawCard(channel));
+    attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Dealing to Banker...", { side: "banker", index: 1 });
+    await interaction.editReply({ files: [attachment] });
+    await delay(400);
+    // Flip card face up with glow
+    attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Checking hands...", null, { side: "banker", index: 1 });
+    await interaction.editReply({ files: [attachment] });
     await delay(800);
-
-    // Deal first card to Player
-    playerHand.push(drawCard(channel));
-    await interaction.editReply({
-      embeds: [createDealingEmbed(playerHand, bankerHand, "player1", bets, playerName)],
-    });
-    await delay(700);
-
-    // Deal first card to Banker
-    bankerHand.push(drawCard(channel));
-    await interaction.editReply({
-      embeds: [createDealingEmbed(playerHand, bankerHand, "banker1", bets, playerName)],
-    });
-    await delay(700);
-
-    // Deal second card to Player
-    playerHand.push(drawCard(channel));
-    await interaction.editReply({
-      embeds: [createDealingEmbed(playerHand, bankerHand, "player2", bets, playerName)],
-    });
-    await delay(700);
-
-    // Deal second card to Banker
-    bankerHand.push(drawCard(channel));
-    await interaction.editReply({
-      embeds: [createDealingEmbed(playerHand, bankerHand, "banker2", bets, playerName)],
-    });
-    await delay(1000);
 
     // Check for naturals
     const playerNatural = isNatural(playerHand);
@@ -875,43 +949,58 @@ module.exports = (client) => {
     if (!playerNatural && !bankerNatural) {
       // Player draws first if needed
       if (shouldPlayerDraw(playerHand)) {
-        await interaction.editReply({
-          embeds: [createDealingEmbed(playerHand, bankerHand, "player3", bets, playerName)],
-        });
-        await delay(800);
+        // Show "drawing" status first
+        attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Player must draw...");
+        await interaction.editReply({ files: [attachment] });
+        await delay(500);
+
+        // Deal face-down
         playerThirdCard = drawCard(channel);
         playerHand.push(playerThirdCard);
-        await interaction.editReply({
-          embeds: [createDealingEmbed(playerHand, bankerHand, "player3", bets, playerName)],
-        });
-        await delay(700);
+        attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Player draws third card...", { side: "player", index: 2 });
+        await interaction.editReply({ files: [attachment] });
+        await delay(400);
+
+        // Flip face-up with glow
+        attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Player draws third card...", null, { side: "player", index: 2 });
+        await interaction.editReply({ files: [attachment] });
+        await delay(600);
       }
 
       // Banker draws based on Player's action
       if (shouldBankerDraw(bankerHand, playerThirdCard)) {
-        await interaction.editReply({
-          embeds: [createDealingEmbed(playerHand, bankerHand, "banker3", bets, playerName)],
-        });
-        await delay(800);
+        // Show "drawing" status first
+        attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Banker must draw...");
+        await interaction.editReply({ files: [attachment] });
+        await delay(500);
+
+        // Deal face-down
         bankerHand.push(drawCard(channel));
-        await interaction.editReply({
-          embeds: [createDealingEmbed(playerHand, bankerHand, "banker3", bets, playerName)],
-        });
-        await delay(700);
+        attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Banker draws third card...", { side: "banker", index: 2 });
+        await interaction.editReply({ files: [attachment] });
+        await delay(400);
+
+        // Flip face-up with glow
+        attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Banker draws third card...", null, { side: "banker", index: 2 });
+        await interaction.editReply({ files: [attachment] });
+        await delay(600);
       }
     } else {
-      // Show natural announcement
-      await interaction.editReply({
-        embeds: [createDealingEmbed(playerHand, bankerHand, "natural", bets, playerName)],
-      });
+      // Show natural announcement with dramatic pause
+      const naturalText = playerNatural && bankerNatural
+        ? "** DOUBLE NATURAL! **"
+        : playerNatural
+        ? "** PLAYER NATURAL! **"
+        : "** BANKER NATURAL! **";
+      attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, naturalText);
+      await interaction.editReply({ files: [attachment] });
       await delay(1200);
     }
 
     // Dramatic pause before reveal
-    await interaction.editReply({
-      embeds: [createDealingEmbed(playerHand, bankerHand, "reveal", bets, playerName)],
-    });
-    await delay(1000);
+    attachment = await createDealingCanvas(playerHand, bankerHand, bets, playerName, currentStreak, "Revealing winner...");
+    await interaction.editReply({ files: [attachment] });
+    await delay(800);
 
     // Determine winner
     const winner = determineWinner(playerHand, bankerHand);
