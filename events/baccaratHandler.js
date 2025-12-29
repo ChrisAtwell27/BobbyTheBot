@@ -734,13 +734,13 @@ module.exports = (client) => {
 
       const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`${gameId}_player`)
-          .setLabel(`Player (1:1)`)
+          .setCustomId(`${gameId}_banker`)
+          .setLabel(`Banker (0.95:1)`)
           .setStyle(ButtonStyle.Primary)
           .setDisabled(!canAddBet),
         new ButtonBuilder()
-          .setCustomId(`${gameId}_banker`)
-          .setLabel(`Banker (0.95:1)`)
+          .setCustomId(`${gameId}_player`)
+          .setLabel(`Player (1:1)`)
           .setStyle(ButtonStyle.Primary)
           .setDisabled(!canAddBet),
         new ButtonBuilder()
