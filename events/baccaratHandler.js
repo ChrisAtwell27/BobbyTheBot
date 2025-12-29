@@ -1047,7 +1047,7 @@ module.exports = (client) => {
       newStreak
     );
 
-    const attachment = new AttachmentBuilder(resultCanvas.toBuffer(), {
+    attachment = new AttachmentBuilder(resultCanvas.toBuffer(), {
       name: "baccarat-result.png",
     });
 

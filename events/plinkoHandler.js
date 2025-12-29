@@ -219,11 +219,8 @@ function simulatePlinko() {
   // Ensure bucket is within valid range
   const validBucket = Math.max(0, Math.min(NUM_BUCKETS - 1, bucketIndex));
 
-  // Clean up physics world properly
+  // Clean up physics world
   World.clear(world, false);
-  // Remove reference to allow garbage collection
-  engine = null;
-  world = null;
 
   return {
     frames,
