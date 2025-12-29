@@ -46,9 +46,9 @@ const PAYOUTS = {
   high:   [10.0, 3.0, 1.5, 0.3, 0.0, 0.3, 1.5, 3.0, 10.0],
 };
 
-// Frame timing (respects Discord rate limits ~5 edits per 5 seconds)
-// ~400ms between frames allows for smoother animation while staying safe
-const FRAME_DELAYS = [400, 400, 380, 380, 360, 360, 350, 350, 340, 340, 330, 330, 320, 320, 300, 800];
+// Frame timing - pushing Discord limits for smooth animation
+// ~250-300ms between frames, 20 frames total
+const FRAME_DELAYS = [300, 280, 270, 260, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 280, 600];
 
 // Colors
 const COLORS = {
@@ -172,13 +172,15 @@ function simulatePlinko() {
   World.add(world, ball);
 
   // Run simulation and capture frames
+  // Higher tick rate = smoother, more accurate physics
   const frames = [];
-  const TOTAL_TICKS = 400;
-  const NUM_FRAMES = 16;
+  const TOTAL_TICKS = 1000;
+  const NUM_FRAMES = 20;
   const CAPTURE_INTERVAL = Math.floor(TOTAL_TICKS / NUM_FRAMES);
 
   for (let tick = 0; tick < TOTAL_TICKS; tick++) {
-    Engine.update(engine, 1000 / 60);
+    // Run at 120fps equivalent for smoother collision detection
+    Engine.update(engine, 1000 / 120);
 
     // Capture frame at intervals
     if (tick % CAPTURE_INTERVAL === 0) {
