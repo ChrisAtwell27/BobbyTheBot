@@ -401,11 +401,11 @@ module.exports = (client) => {
     if (streak >= 3) {
       ctx.fillStyle = "#ff6600";
       ctx.font = "bold 16px Arial";
-      ctx.fillText(`🔥 ${streak} WIN STREAK! (+10% BONUS) 🔥`, CANVAS_WIDTH / 2, 58);
+      ctx.fillText(`** ${streak} WIN STREAK! (+10% BONUS) **`, CANVAS_WIDTH / 2, 58);
     } else if (streak > 0) {
       ctx.fillStyle = "#ffaa00";
       ctx.font = "bold 12px Arial";
-      ctx.fillText(`⭐ ${streak} Win Streak`, CANVAS_WIDTH / 2, 55);
+      ctx.fillText(`* ${streak} Win Streak *`, CANVAS_WIDTH / 2, 55);
     }
 
     const cardsY = 80;
@@ -479,7 +479,7 @@ module.exports = (client) => {
       if (zone.bet > 0) {
         ctx.fillStyle = "#ffd700";
         ctx.font = "bold 14px Arial";
-        ctx.fillText(`🍯${zone.bet}`, zone.x + 50, betY + 60);
+        ctx.fillText(`$${zone.bet}`, zone.x + 50, betY + 60);
       }
     }
 
@@ -494,7 +494,7 @@ module.exports = (client) => {
 
     const totalBet = (bets.player || 0) + (bets.banker || 0) + (bets.tie || 0) + (bets.playerPair || 0) + (bets.bankerPair || 0);
     ctx.textAlign = "center";
-    ctx.fillText(`Total Bet: 🍯${totalBet}`, CANVAS_WIDTH / 2, 410);
+    ctx.fillText(`Total Bet: $${totalBet}`, CANVAS_WIDTH / 2, 410);
 
     // Result overlay
     if (phase === "result" && result) {
@@ -771,8 +771,51 @@ module.exports = (client) => {
     });
   }
 
+  // Helper function for delays
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Create cinematic dealing embed
+  function createDealingEmbed(playerHand, bankerHand, phase, bets, playerName) {
+    const totalBet = bets.player + bets.banker + bets.tie + bets.playerPair + bets.bankerPair;
+
+    const playerDisplay = playerHand.length > 0
+      ? displayHandEmoji(playerHand) + ` (${calculateBaccaratValue(playerHand)})`
+      : "🎴 ...";
+    const bankerDisplay = bankerHand.length > 0
+      ? displayHandEmoji(bankerHand) + ` (${calculateBaccaratValue(bankerHand)})`
+      : "🎴 ...";
+
+    let phaseText = "";
+    switch (phase) {
+      case "start": phaseText = "🎰 Shuffling and preparing to deal..."; break;
+      case "player1": phaseText = "🃏 Dealing first card to Player..."; break;
+      case "banker1": phaseText = "🃏 Dealing first card to Banker..."; break;
+      case "player2": phaseText = "🃏 Dealing second card to Player..."; break;
+      case "banker2": phaseText = "🃏 Dealing second card to Banker..."; break;
+      case "natural": phaseText = "✨ **NATURAL!** Checking for winner..."; break;
+      case "player3": phaseText = "🃏 Player draws a third card..."; break;
+      case "banker3": phaseText = "🃏 Banker draws a third card..."; break;
+      case "reveal": phaseText = "🎲 Revealing final hands..."; break;
+      default: phaseText = "🎰 Dealing...";
+    }
+
+    return new EmbedBuilder()
+      .setTitle("🎰 Baccarat - Dealing Cards")
+      .setColor("#4a1c2a")
+      .setDescription(`**${playerName}** - ${phaseText}`)
+      .addFields(
+        { name: "🔴 Banker Hand", value: bankerDisplay, inline: true },
+        { name: "🔵 Player Hand", value: playerDisplay, inline: true },
+        { name: "💰 Total Bet", value: `🍯${totalBet}`, inline: true }
+      )
+      .setFooter({ text: "Cards are being dealt..." });
+  }
+
   async function executeBaccaratGame(interaction, message, guildId, userId, bets, currentStreak) {
     const channel = message.channel;
+    const playerName = message.author.username;
 
     // Calculate total bet and deduct from balance
     const totalBet = bets.player + bets.banker + bets.tie + bets.playerPair + bets.bankerPair;
@@ -781,9 +824,47 @@ module.exports = (client) => {
     // Check for shuffle announcement
     await checkShuffleAnnouncement(channel);
 
-    // Deal initial cards
-    const playerHand = [drawCard(channel), drawCard(channel)];
-    const bankerHand = [drawCard(channel), drawCard(channel)];
+    // Initialize hands
+    const playerHand = [];
+    const bankerHand = [];
+
+    // Defer the interaction first, then edit
+    await interaction.deferUpdate();
+
+    // Show initial dealing message
+    await interaction.editReply({
+      embeds: [createDealingEmbed(playerHand, bankerHand, "start", bets, playerName)],
+      components: [],
+    });
+    await delay(800);
+
+    // Deal first card to Player
+    playerHand.push(drawCard(channel));
+    await interaction.editReply({
+      embeds: [createDealingEmbed(playerHand, bankerHand, "player1", bets, playerName)],
+    });
+    await delay(700);
+
+    // Deal first card to Banker
+    bankerHand.push(drawCard(channel));
+    await interaction.editReply({
+      embeds: [createDealingEmbed(playerHand, bankerHand, "banker1", bets, playerName)],
+    });
+    await delay(700);
+
+    // Deal second card to Player
+    playerHand.push(drawCard(channel));
+    await interaction.editReply({
+      embeds: [createDealingEmbed(playerHand, bankerHand, "player2", bets, playerName)],
+    });
+    await delay(700);
+
+    // Deal second card to Banker
+    bankerHand.push(drawCard(channel));
+    await interaction.editReply({
+      embeds: [createDealingEmbed(playerHand, bankerHand, "banker2", bets, playerName)],
+    });
+    await delay(1000);
 
     // Check for naturals
     const playerNatural = isNatural(playerHand);
@@ -792,17 +873,45 @@ module.exports = (client) => {
     // Apply third card rules if no naturals
     let playerThirdCard = null;
     if (!playerNatural && !bankerNatural) {
-      // Player draws first
+      // Player draws first if needed
       if (shouldPlayerDraw(playerHand)) {
+        await interaction.editReply({
+          embeds: [createDealingEmbed(playerHand, bankerHand, "player3", bets, playerName)],
+        });
+        await delay(800);
         playerThirdCard = drawCard(channel);
         playerHand.push(playerThirdCard);
+        await interaction.editReply({
+          embeds: [createDealingEmbed(playerHand, bankerHand, "player3", bets, playerName)],
+        });
+        await delay(700);
       }
 
       // Banker draws based on Player's action
       if (shouldBankerDraw(bankerHand, playerThirdCard)) {
+        await interaction.editReply({
+          embeds: [createDealingEmbed(playerHand, bankerHand, "banker3", bets, playerName)],
+        });
+        await delay(800);
         bankerHand.push(drawCard(channel));
+        await interaction.editReply({
+          embeds: [createDealingEmbed(playerHand, bankerHand, "banker3", bets, playerName)],
+        });
+        await delay(700);
       }
+    } else {
+      // Show natural announcement
+      await interaction.editReply({
+        embeds: [createDealingEmbed(playerHand, bankerHand, "natural", bets, playerName)],
+      });
+      await delay(1200);
     }
+
+    // Dramatic pause before reveal
+    await interaction.editReply({
+      embeds: [createDealingEmbed(playerHand, bankerHand, "reveal", bets, playerName)],
+    });
+    await delay(1000);
 
     // Determine winner
     const winner = determineWinner(playerHand, bankerHand);
@@ -929,7 +1038,7 @@ module.exports = (client) => {
       .setFooter({ text: "🔵 Player | 🔴 Banker | 🟢 Tie • Pays 1:1, 0.95:1, 8:1, Pairs 11:1" })
       .setTimestamp();
 
-    await interaction.update({
+    await interaction.editReply({
       embeds: [resultEmbed],
       files: [attachment],
       components: [],
