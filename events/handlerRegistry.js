@@ -196,6 +196,16 @@ module.exports = (client, commandRouter, interactionRouter) => {
     "./plinkoHandler"
   );
 
+  // Crash handler - !crash (with button interactions for cash-out selection)
+  const crashHandler = require("./crashHandler");
+  const crashWrapper = createHandlerWrapper(client, () => crashHandler);
+  if (crashWrapper.messageHandler) {
+    commandRouter.registerMessageProcessor(crashWrapper.messageHandler);
+  }
+  if (crashWrapper.interactionHandler) {
+    interactionRouter.registerButton("crash_", crashWrapper.interactionHandler);
+  }
+
   // Clip handler - !submitclip, !clips
   registerCommandHandler(
     client,
