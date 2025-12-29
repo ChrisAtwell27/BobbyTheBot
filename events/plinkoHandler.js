@@ -3,6 +3,7 @@ const {
   AttachmentBuilder,
 } = require("discord.js");
 const { createCanvas } = require("canvas");
+const GIFEncoder = require("gif-encoder-2");
 const Matter = require("matter-js");
 const { Engine, World, Bodies, Body } = Matter;
 const {
@@ -46,9 +47,10 @@ const PAYOUTS = {
   high:   [10.0, 3.0, 1.5, 0.3, 0.0, 0.3, 1.5, 3.0, 10.0],
 };
 
-// Frame timing - pushing Discord limits for smooth animation
-// ~250-300ms between frames, 20 frames total
-const FRAME_DELAYS = [300, 280, 270, 260, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 280, 600];
+// GIF animation settings - smooth 30fps animation
+const GIF_FPS = 30;
+const GIF_FRAME_DELAY = Math.floor(1000 / GIF_FPS); // ~33ms per frame
+const GIF_QUALITY = 10; // 1-30, lower = better quality but slower
 
 // Colors
 const COLORS = {
@@ -72,10 +74,6 @@ const COLORS = {
 // ==========================================
 // HELPER FUNCTIONS
 // ==========================================
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 // Generate triangular peg layout
 function generatePegPositions() {
@@ -171,11 +169,13 @@ function simulatePlinko() {
   });
   World.add(world, ball);
 
-  // Run simulation and capture frames
-  // Higher tick rate = smoother, more accurate physics
+  // Run simulation and capture frames for GIF
+  // Capture at 30fps for ~3 second animation (90 frames)
   const frames = [];
-  const TOTAL_TICKS = 1000;
-  const NUM_FRAMES = 20;
+  const PHYSICS_FPS = 120;
+  const TARGET_DURATION_SECS = 3;
+  const TOTAL_TICKS = PHYSICS_FPS * TARGET_DURATION_SECS; // 360 ticks
+  const NUM_FRAMES = GIF_FPS * TARGET_DURATION_SECS; // 90 frames
   const CAPTURE_INTERVAL = Math.floor(TOTAL_TICKS / NUM_FRAMES);
 
   for (let tick = 0; tick < TOTAL_TICKS; tick++) {
@@ -499,6 +499,9 @@ async function startPlinkoGame(message, guildId, userId, betAmount, risk) {
     str.replace(/[0-9,]/g, "").trim() || "🍯"
   );
 
+  // Send "generating" message
+  const loadingMsg = await channel.send("🎰 Generating Plinko animation...");
+
   // Deduct bet
   await updateBalance(guildId, userId, -betAmount);
 
@@ -507,21 +510,25 @@ async function startPlinkoGame(message, guildId, userId, betAmount, risk) {
     const simulation = simulatePlinko();
     const { frames, finalBucket, pegPositions } = simulation;
 
-    // Calculate winnings (total payout, includes returned bet for multiplier >= 1.0)
+    // Calculate winnings
     const multiplier = PAYOUTS[risk][finalBucket];
     const winnings = Math.floor(betAmount * multiplier);
-    // For balance calculations: only add the profit portion (winnings - betAmount)
     const profit = winnings - betAmount;
 
-    // Generate all frame images upfront
-    const frameImages = [];
+    // Create GIF encoder
+    const encoder = new GIFEncoder(BOARD_WIDTH, BOARD_HEIGHT);
+    encoder.setDelay(GIF_FRAME_DELAY);
+    encoder.setQuality(GIF_QUALITY);
+    encoder.setRepeat(-1); // No repeat (play once)
+    encoder.start();
 
+    // Generate and add each frame to GIF
     for (let i = 0; i < frames.length; i++) {
       const frame = frames[i];
       const isLastFrame = frame.landed === true;
 
-      // Build trail from previous frames
-      const trailStart = Math.max(0, i - 4);
+      // Build trail from previous frames (last 8 positions for smoother trail)
+      const trailStart = Math.max(0, i - 8);
       const trail = frames.slice(trailStart, i);
 
       const gameState = {
@@ -539,33 +546,31 @@ async function startPlinkoGame(message, guildId, userId, betAmount, risk) {
       };
 
       const canvas = await renderPlinkoBoard(gameState);
-      frameImages.push(canvas.toBuffer());
-    }
+      const ctx = canvas.getContext("2d");
+      encoder.addFrame(ctx);
 
-    // Send initial frame
-    const initialAttachment = new AttachmentBuilder(frameImages[0], {
-      name: "plinko.png",
-    });
-    const gameMessage = await channel.send({
-      files: [initialAttachment],
-    });
-
-    // Edit message with each subsequent frame
-    for (let i = 1; i < frameImages.length; i++) {
-      await delay(FRAME_DELAYS[Math.min(i - 1, FRAME_DELAYS.length - 1)]);
-
-      const attachment = new AttachmentBuilder(frameImages[i], {
-        name: "plinko.png",
-      });
-
-      try {
-        await gameMessage.edit({ files: [attachment] });
-      } catch (editError) {
-        // Handle rate limit or edit errors gracefully
-        console.log(`[Plinko] Frame edit error (frame ${i}):`, editError.message);
-        await delay(1000); // Wait a bit longer and continue
+      // Hold on the final frame longer (show result)
+      if (isLastFrame) {
+        encoder.setDelay(1500); // 1.5 second pause on result
+        encoder.addFrame(ctx);
       }
     }
+
+    encoder.finish();
+
+    // Get the GIF buffer
+    const gifBuffer = encoder.out.getData();
+
+    // Delete loading message and send GIF
+    await loadingMsg.delete().catch(() => {});
+
+    const gifAttachment = new AttachmentBuilder(gifBuffer, {
+      name: "plinko.gif",
+    });
+
+    await channel.send({
+      files: [gifAttachment],
+    });
 
     // Update balance with profit (already deducted bet at start)
     // Profit can be negative (loss), zero (break even), or positive (win)
@@ -625,6 +630,8 @@ async function startPlinkoGame(message, guildId, userId, betAmount, risk) {
     await channel.send({ embeds: [resultEmbed] });
   } catch (error) {
     console.error("[Plinko] Game error:", error);
+    // Clean up loading message
+    await loadingMsg.delete().catch(() => {});
     // Refund bet on error
     await updateBalance(guildId, userId, betAmount);
     await channel.send({
