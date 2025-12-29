@@ -258,6 +258,45 @@ export default defineSchema({
     .index("by_guild_and_month", ["guildId", "month"]),
 
   // ============================================================================
+  // WORDLE YEARLY WINNER TABLE
+  // ============================================================================
+  wordleYearlyWinners: defineTable({
+    guildId: v.string(),
+    year: v.string(), // Format: "YYYY"
+
+    winner: v.object({
+      userId: v.string(),
+      username: v.string(),
+      stats: v.object({
+        totalGames: v.number(),
+        avgScore: v.number(),
+        bestScore: v.number(),
+        weightedScore: v.number(),
+        totalHoney: v.number(),
+      }),
+    }),
+
+    topTen: v.array(v.object({
+      userId: v.string(),
+      username: v.string(),
+      totalGames: v.number(),
+      avgScore: v.number(),
+      bestScore: v.number(),
+      weightedScore: v.number(),
+      totalHoney: v.number(),
+      position: v.number(),
+    })),
+
+    announcedAt: v.optional(v.number()),
+    totalPlayers: v.number(),
+    totalGamesPlayed: v.number(),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_guild_and_year", ["guildId", "year"]),
+
+  // ============================================================================
   // SHOP ITEMS TABLE
   // ============================================================================
   shopItems: defineTable({

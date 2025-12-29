@@ -140,6 +140,23 @@ function getMonthBounds(monthStr = null) {
   return { start, end };
 }
 
+// Get the start and end dates for a specific year (YYYY format)
+function getYearBounds(yearStr = null) {
+  const now = new Date();
+  let year;
+
+  if (yearStr) {
+    year = parseInt(yearStr);
+  } else {
+    year = now.getFullYear();
+  }
+
+  const start = new Date(year, 0, 1); // January 1st
+  const end = new Date(year, 11, 31, 23, 59, 59, 999); // December 31st
+
+  return { start, end };
+}
+
 // Force end the current month and declare winner
 async function forceEndCurrentMonth(channel) {
   try {
@@ -436,6 +453,165 @@ async function checkAndAnnounceMonthlyWinner(channel) {
   }
 }
 
+// Check if we need to announce a yearly winner and reset the scoreboard
+async function checkAndAnnounceYearlyWinner(channel) {
+  try {
+    const client = getConvexClient();
+    if (!client) return false;
+
+    const now = new Date();
+    const lastYear = now.getFullYear() - 1;
+    const lastYearStr = lastYear.toString();
+
+    // Check if we've already announced this year's winner
+    const existingWinner = await client.query(api.wordle.getYearlyWinner, {
+      guildId: channel.guild.id,
+      year: lastYearStr,
+    });
+
+    if (existingWinner && existingWinner.announcedAt) {
+      return false; // Already announced
+    }
+
+    // Calculate stats for last year
+    const yearBounds = getYearBounds(lastYearStr);
+    const stats = await calculateStats(channel.guild.id, yearBounds);
+
+    if (Object.keys(stats).length === 0) {
+      return false; // No games played last year
+    }
+
+    // Sort users by weighted score (lower is better)
+    const sortedUsers = Object.entries(stats).sort(
+      (a, b) => a[1].weightedScore - b[1].weightedScore
+    );
+    const [winnerId, winnerStats] = sortedUsers[0];
+
+    // Get winner's username
+    const guild = channel.guild;
+    await guild.members.fetch();
+    const winnerMember = guild.members.cache.get(winnerId);
+    const winnerUsername = winnerMember
+      ? winnerMember.user.username
+      : `Unknown User (${winnerId})`;
+
+    // Prepare top ten data
+    const topTen = sortedUsers.slice(0, 10).map((entry, index) => {
+      const [userId, userStats] = entry;
+      const member = guild.members.cache.get(userId);
+      return {
+        userId,
+        username: member ? member.user.username : `Unknown User (${userId})`,
+        totalGames: userStats.totalGames,
+        avgScore: userStats.avgScore,
+        bestScore: userStats.bestScore,
+        weightedScore: userStats.weightedScore,
+        totalHoney: userStats.totalHoney || 0,
+        position: index + 1,
+      };
+    });
+
+    // Save yearly winner
+    await client.mutation(api.wordle.saveYearlyWinner, {
+      guildId: channel.guild.id,
+      year: lastYearStr,
+      winner: {
+        userId: winnerId,
+        username: winnerUsername,
+        stats: {
+          totalGames: winnerStats.totalGames,
+          avgScore: winnerStats.avgScore,
+          bestScore: winnerStats.bestScore,
+          weightedScore: winnerStats.weightedScore,
+          totalHoney: winnerStats.totalHoney || 0,
+        },
+      },
+      topTen,
+      totalPlayers: Object.keys(stats).length,
+      totalGamesPlayed: Object.values(stats).reduce(
+        (sum, s) => sum + s.totalGames,
+        0
+      ),
+    });
+
+    // Create announcement embed
+    const { EmbedBuilder } = require("discord.js");
+
+    const embed = new EmbedBuilder()
+      .setTitle(`🎆 ${lastYear} Wordle Champion of the Year! 🎆`)
+      .setColor("#FFD700")
+      .setDescription(
+        `# Congratulations <@${winnerId}>! 👑🏆\n\nYou are the **${lastYear} Wordle Champion of the Year** with an outstanding performance throughout the entire year!`
+      )
+      .addFields(
+        {
+          name: "📊 Champion Stats",
+          value: `Average: **${winnerStats.avgScore.toFixed(2)}**\nGames Played: **${winnerStats.totalGames}**\nBest Score: **${winnerStats.bestScore}/6**`,
+          inline: true,
+        },
+        {
+          name: "🏅 Year in Review",
+          value: `Total Players: **${Object.keys(stats).length}**\nTotal Games: **${Object.values(stats).reduce((sum, s) => sum + s.totalGames, 0)}**`,
+          inline: true,
+        }
+      )
+      .setFooter({
+        text: `Happy New Year! The scoreboard has been reset for ${now.getFullYear()}!`,
+      })
+      .setTimestamp();
+
+    await channel.send({ embeds: [embed] });
+
+    // Send top 10 summary
+    let summaryText = `**${lastYear} Final Yearly Rankings:**\n\n`;
+    topTen.forEach((player, index) => {
+      const medal =
+        index === 0
+          ? "🥇"
+          : index === 1
+            ? "🥈"
+            : index === 2
+              ? "🥉"
+              : `${index + 1}.`;
+      summaryText += `${medal} **${player.username}** - Avg: ${player.avgScore.toFixed(2)}, Games: ${player.totalGames}\n`;
+    });
+
+    const summaryEmbed = new EmbedBuilder()
+      .setTitle("📋 Final Yearly Leaderboard")
+      .setColor("#FFD700")
+      .setDescription(summaryText)
+      .setTimestamp();
+
+    await channel.send({ embeds: [summaryEmbed] });
+
+    // Clear all scores for the new year
+    const clearedCount = await client.mutation(api.wordle.clearAllScores, {
+      guildId: channel.guild.id,
+    });
+
+    console.log(
+      `[WORDLE] Yearly reset complete. Cleared ${clearedCount} user score records for guild ${channel.guild.id}`
+    );
+
+    // Send reset confirmation
+    const resetEmbed = new EmbedBuilder()
+      .setTitle("🔄 Scoreboard Reset Complete")
+      .setColor("#00FF00")
+      .setDescription(
+        `The Wordle scoreboard has been completely reset for ${now.getFullYear()}!\n\nAll scores have been cleared. Time to start fresh and compete for this year's championship!`
+      )
+      .setFooter({ text: "Good luck to all players!" })
+      .setTimestamp();
+
+    await channel.send({ embeds: [resetEmbed] });
+
+    return true;
+  } catch (error) {
+    console.error("Error checking/announcing yearly winner:", error);
+    return false;
+  }
+}
+
 // Calculate statistics for leaderboard
 // timeFilter: optional object with { start: Date, end: Date } to filter by time range
 async function calculateStats(guildId, timeFilter = null) {
@@ -626,9 +802,13 @@ module.exports = (client) => {
         await message.channel.send({ embeds: [honeyEmbed] });
       }
 
-      // Check if we need to announce monthly winner (first of the month)
+      // Check if we need to announce yearly winner and reset (January 1st)
       const now = new Date();
-      if (now.getDate() === 1) {
+      if (now.getMonth() === 0 && now.getDate() === 1) {
+        // January 1st - announce yearly winner and reset scoreboard
+        await checkAndAnnounceYearlyWinner(message.channel);
+      } else if (now.getDate() === 1) {
+        // Other months - just announce monthly winner
         await checkAndAnnounceMonthlyWinner(message.channel);
       }
 

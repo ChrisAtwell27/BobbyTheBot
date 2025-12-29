@@ -82,6 +82,37 @@ export const getAllMonthlyWinners = query({
   },
 });
 
+/**
+ * Get yearly winner
+ */
+export const getYearlyWinner = query({
+  args: { guildId: v.string(), year: v.string() },
+  handler: async (ctx, args) => {
+    const winner = await ctx.db
+      .query("wordleYearlyWinners")
+      .withIndex("by_guild_and_year", (q) =>
+        q.eq("guildId", args.guildId).eq("year", args.year)
+      )
+      .first();
+    return winner;
+  },
+});
+
+/**
+ * Get all yearly winners for a guild
+ */
+export const getAllYearlyWinners = query({
+  args: { guildId: v.string() },
+  handler: async (ctx, args) => {
+    const winners = await ctx.db
+      .query("wordleYearlyWinners")
+      .withIndex("by_guild_and_year", (q) => q.eq("guildId", args.guildId))
+      .order("desc")
+      .collect();
+    return winners;
+  },
+});
+
 // ============================================================================
 // MUTATIONS
 // ============================================================================
@@ -253,6 +284,55 @@ export const saveMonthlyWinner = mutation({
       const newWinner = await ctx.db.insert("wordleMonthlyWinners", {
         guildId: args.guildId,
         month: args.month,
+        winner: args.winner,
+        topTen: args.topTen,
+        totalPlayers: args.totalPlayers,
+        totalGamesPlayed: args.totalGamesPlayed,
+        announcedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return newWinner;
+    }
+  },
+});
+
+/**
+ * Save yearly winner
+ */
+export const saveYearlyWinner = mutation({
+  args: {
+    guildId: v.string(),
+    year: v.string(),
+    winner: v.any(),
+    topTen: v.array(v.any()),
+    totalPlayers: v.number(),
+    totalGamesPlayed: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("wordleYearlyWinners")
+      .withIndex("by_guild_and_year", (q) =>
+        q.eq("guildId", args.guildId).eq("year", args.year)
+      )
+      .first();
+
+    const now = Date.now();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        winner: args.winner,
+        topTen: args.topTen,
+        totalPlayers: args.totalPlayers,
+        totalGamesPlayed: args.totalGamesPlayed,
+        announcedAt: now,
+        updatedAt: now,
+      });
+      return existing._id;
+    } else {
+      const newWinner = await ctx.db.insert("wordleYearlyWinners", {
+        guildId: args.guildId,
+        year: args.year,
         winner: args.winner,
         topTen: args.topTen,
         totalPlayers: args.totalPlayers,
