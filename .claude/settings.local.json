@@ -22,7 +22,8 @@
       "Bash(del \"d:\\TestDCBot\\BobbyTheBot\\events\\setupReminderHandler.js\")",
       "Bash(npx convex import:*)",
       "Bash(node craftle/scripts/parseMinecraftRecipes.js:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(tree:*)"
     ],
     "deny": []
   }

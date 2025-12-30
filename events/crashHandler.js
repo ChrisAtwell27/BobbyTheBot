@@ -398,9 +398,9 @@ async function generateCrashGIF(gameState, crashPoint, targetMultiplier) {
   const cashedOut = targetMultiplier <= crashPoint;
   const resultMultiplier = cashedOut ? targetMultiplier : crashPoint;
 
-  // Calculate animation duration - use the result multiplier for timing
-  // This ensures the animation always goes to the end point (cashout or crash)
-  const endMultiplier = cashedOut ? targetMultiplier : crashPoint;
+  // Calculate animation duration - always animate to the crash point
+  // This shows where the rocket actually crashed, regardless of outcome
+  const endMultiplier = crashPoint;
   const baseDuration = 50; // frames
   const durationMultiplier = Math.log(endMultiplier + 1) / Math.log(2);
   const totalFrames = Math.max(30, Math.min(Math.floor(baseDuration * durationMultiplier), 80));
