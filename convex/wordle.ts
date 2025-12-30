@@ -113,6 +113,42 @@ export const getAllYearlyWinners = query({
   },
 });
 
+/**
+ * Get users who played exactly 2 days ago but haven't played since
+ * Used for sending reminders to inactive players
+ */
+export const getInactiveUsers = query({
+  args: { guildId: v.string() },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const twoDaysAgo = now - 2 * 24 * 60 * 60 * 1000; // 48 hours ago
+    const threeDaysAgo = now - 3 * 24 * 60 * 60 * 1000; // 72 hours ago
+
+    // Get all users in this guild
+    const allUsers = await ctx.db
+      .query("wordleScores")
+      .withIndex("by_guild_and_user", (q) => q.eq("guildId", args.guildId))
+      .collect();
+
+    // Filter to users whose last play was between 48-72 hours ago
+    const inactiveUsers = allUsers.filter((user) => {
+      if (user.scores.length === 0) return false;
+
+      // Find the most recent score timestamp
+      const lastPlayTimestamp = Math.max(...user.scores.map((s) => s.timestamp));
+
+      // Check if last play was between 48 and 72 hours ago
+      return lastPlayTimestamp <= twoDaysAgo && lastPlayTimestamp > threeDaysAgo;
+    });
+
+    return inactiveUsers.map((user) => ({
+      userId: user.userId,
+      lastPlayTimestamp: Math.max(...user.scores.map((s) => s.timestamp)),
+      totalGames: user.totalGames,
+    }));
+  },
+});
+
 // ============================================================================
 // MUTATIONS
 // ============================================================================

@@ -695,6 +695,46 @@ async function calculateStats(guildId, timeFilter = null) {
   }
 }
 
+// Check for users who played 2 days ago but haven't played since, and send a reminder
+async function checkAndSendReminders(channel) {
+  try {
+    const client = getConvexClient();
+    if (!client) return;
+
+    const guildId = channel.guild.id;
+
+    // Get users who last played 2 days ago (48-72 hours ago)
+    const inactiveUsers = await client.query(api.wordle.getInactiveUsers, {
+      guildId,
+    });
+
+    if (inactiveUsers.length === 0) return;
+
+    // Build consolidated reminder message
+    const { EmbedBuilder } = require("discord.js");
+
+    // Create mentions for all inactive users
+    const mentions = inactiveUsers.map((u) => `<@${u.userId}>`).join(" ");
+
+    const embed = new EmbedBuilder()
+      .setTitle("🔔 Wordle Reminder")
+      .setColor("#FFD93D")
+      .setDescription(
+        `Hey ${mentions}!\n\nWe noticed you haven't played Wordle in a couple of days. Don't break your streak - come back and play today!`
+      )
+      .setFooter({ text: `${inactiveUsers.length} player${inactiveUsers.length > 1 ? "s" : ""} reminded` })
+      .setTimestamp();
+
+    await channel.send({ embeds: [embed] });
+
+    console.log(
+      `[WORDLE] Sent reminder to ${inactiveUsers.length} inactive users in guild ${guildId}`
+    );
+  } catch (error) {
+    console.error("Error sending wordle reminders:", error);
+  }
+}
+
 module.exports = (client) => {
   // Listen for messages from the Wordle bot
   client.on("messageCreate", async (message) => {
@@ -881,6 +921,9 @@ module.exports = (client) => {
 
         await message.channel.send({ embeds: [embed] });
       }
+
+      // Check for inactive users and send reminders
+      await checkAndSendReminders(message.channel);
     }
 
     // Handle !wordletop command
