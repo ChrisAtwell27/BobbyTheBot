@@ -715,176 +715,60 @@ module.exports = (client) => {
       "Features: 10-player matches, automatic team balancing, rank-based MMR system"
     );
 
-    // Track resend operations to prevent overlap (per-inhouse)
-    const resendInProgress = new Map(); // Track per-inhouse resend state
-
-    // Function to resend in-house message to keep it at the bottom of chat
-    async function resendInhouseMessage(inhouseId) {
+    /**
+     * Update in-house message in place (no delete/recreate)
+     * This matches the pattern from working team handlers
+     */
+    async function updateInhouseMessage(inhouseId) {
       const inhouse = activeInhouses.get(inhouseId);
-      if (!inhouse) {
-        // Clean up resend flag if inhouse no longer exists
-        resendInProgress.delete(inhouseId);
-        return;
-      }
-
-      // Prevent multiple resends from happening simultaneously for this specific inhouse
-      if (resendInProgress.get(inhouseId)) {
-        console.log(
-          `[INHOUSE] Resend already in progress, skipping inhouseId: ${inhouseId}`
-        );
-        // Reschedule for later
-        if (inhouse.resendTimer) clearTimeout(inhouse.resendTimer);
-        inhouse.resendTimer = setTimeout(
-          () => resendInhouseMessage(inhouseId),
-          RESEND_INTERVAL
-        );
-        return;
-      }
-
-      const startTime = Date.now();
-      resendInProgress.set(inhouseId, true);
+      if (!inhouse) return;
 
       try {
-        console.log(`[INHOUSE] Starting resend for inhouseId: ${inhouseId}`);
-
-        // Get the channel with error handling
-        let channel;
-        try {
-          channel = await client.channels.fetch(inhouse.channelId);
-          if (!channel) {
-            console.error(
-              `[INHOUSE] Channel not found (null) for inhouseId: ${inhouseId}, channelId: ${inhouse.channelId}`
-            );
-            // Channel no longer exists, clean up inhouse
-            activeInhouses.delete(inhouseId);
-            decrementUserInhouseCount(inhouse.leader.id);
-            return;
-          }
-        } catch (fetchError) {
-          console.error(
-            `[INHOUSE] Failed to fetch channel ${inhouse.channelId} for inhouseId: ${inhouseId}:`,
-            fetchError.message
-          );
-          if (fetchError.code === 10003) {
-            // Unknown Channel - channel was deleted
-            console.error(`[INHOUSE] Channel ${inhouse.channelId} was deleted, cleaning up inhouse`);
-            activeInhouses.delete(inhouseId);
-            decrementUserInhouseCount(inhouse.leader.id);
-          }
+        const channel = await client.channels.fetch(inhouse.channelId);
+        if (!channel) {
+          activeInhouses.delete(inhouseId);
+          decrementUserInhouseCount(inhouse.leader.id);
           return;
         }
 
-        // Create updated embed and components
-        const isFull = getTotalMembers(inhouse) >= 10;
+        const message = await channel.messages
+          .fetch(inhouse.messageId)
+          .catch(() => null);
+        if (!message) {
+          activeInhouses.delete(inhouseId);
+          decrementUserInhouseCount(inhouse.leader.id);
+          return;
+        }
 
-        console.log(`[INHOUSE] Creating embed (this may take a moment)...`);
-        const embedStartTime = Date.now();
+        const isFull = getTotalMembers(inhouse) >= INHOUSE_SIZE;
         const updatedEmbed = await createInhouseEmbed(inhouse);
-        const embedDuration = Date.now() - embedStartTime;
+        const updatedComponents = createInhouseButtons(inhouseId, isFull, isFull);
 
-        if (embedDuration > EMBED_PERF_THRESHOLD) {
-          console.warn(
-            `[INHOUSE] ⚠️ Embed creation took ${embedDuration}ms (>${EMBED_PERF_THRESHOLD}ms threshold)`
-          );
-        } else {
-          console.log(`[INHOUSE] Embed created in ${embedDuration}ms`);
-        }
+        await message.edit({
+          embeds: [updatedEmbed.embed],
+          files: updatedEmbed.files,
+          components: [updatedComponents],
+        });
 
-        const updatedComponents = createInhouseButtons(
-          inhouseId,
-          isFull,
-          isFull
-        );
-
-        // Delete the old message if it exists
-        try {
-          const oldMessage = await channel.messages.fetch(inhouse.messageId);
-          if (oldMessage) {
-            await oldMessage.delete();
-          }
-        } catch (deleteError) {
-          console.log(
-            `[INHOUSE] Couldn't delete old message ${inhouse.messageId}: ${deleteError.message}`
-          );
-          if (deleteError.code === 10008) {
-            // Unknown Message - already deleted
-            console.log(`[INHOUSE] Old message ${inhouse.messageId} was already deleted`);
-          } else if (deleteError.code === 50001) {
-            // Missing Access
-            console.error(`[INHOUSE] Bot lacks permission to delete message in channel ${inhouse.channelId}`);
-          }
-          // Continue anyway - we'll send a new message
-        }
-
-        // Send a new message with error handling
-        let newMessage;
-        try {
-          newMessage = await channel.send({
-            embeds: [updatedEmbed.embed],
-            files: updatedEmbed.files,
-            components: [updatedComponents],
-          });
-        } catch (sendError) {
-          console.error(
-            `[INHOUSE] Failed to send message to channel ${inhouse.channelId}:`,
-            sendError.message
-          );
-          if (sendError.code === 50001) {
-            // Missing Access
-            console.error(`[INHOUSE] Bot lacks permission to send messages in channel ${inhouse.channelId}`);
-            // Clean up since we can't post to this channel
-            activeInhouses.delete(inhouseId);
-            decrementUserInhouseCount(inhouse.leader.id);
-          } else if (sendError.code === 50013) {
-            // Missing Permissions
-            console.error(`[INHOUSE] Bot lacks required permissions in channel ${inhouse.channelId}`);
-            activeInhouses.delete(inhouseId);
-            decrementUserInhouseCount(inhouse.leader.id);
-          }
-          return;
-        }
-
-        // Update the in-house with the new message ID
-        inhouse.messageId = newMessage.id;
-
-        const totalDuration = Date.now() - startTime;
-        console.log(
-          `[INHOUSE] Resend complete for inhouseId: ${inhouseId} (total: ${totalDuration}ms)`
-        );
-
-        // Set up the next resend timer if in-house isn't full
+        // Schedule next update if not full
         if (!isFull) {
-          // Clear any existing timer
           if (inhouse.resendTimer) clearTimeout(inhouse.resendTimer);
-
-          // Set new timer
           inhouse.resendTimer = setTimeout(
-            () => resendInhouseMessage(inhouseId),
+            () => updateInhouseMessage(inhouseId),
             RESEND_INTERVAL
-          );
-          console.log(
-            `[INHOUSE] Next resend scheduled in ${RESEND_INTERVAL / 1000 / 60} minutes`
           );
         }
       } catch (error) {
-        console.error(
-          `[INHOUSE] Unexpected error resending in-house message for ${inhouseId}:`,
-          error.message,
-          error.stack
-        );
-        // On unexpected errors, consider cleaning up
-        if (activeInhouses.has(inhouseId)) {
-          console.error(`[INHOUSE] Cleaning up inhouse ${inhouseId} due to repeated errors`);
-          const inhouseData = activeInhouses.get(inhouseId);
-          if (inhouseData) {
-            decrementUserInhouseCount(inhouseData.leader.id);
-          }
+        if (error.code === 10008) {
+          // Unknown Message - clean up
           activeInhouses.delete(inhouseId);
+          decrementUserInhouseCount(inhouse.leader.id);
         }
-      } finally {
-        resendInProgress.delete(inhouseId);
       }
     }
+
+    // Store pending in-house creations
+    const pendingInhouseCreations = new Map();
 
     client.on("messageCreate", async (message) => {
       if (message.author.bot) return;
@@ -913,7 +797,7 @@ module.exports = (client) => {
       }
 
       // Check if message is the !valinhouse command
-      const isInhouseCommand = message.content.toLowerCase() === "!valinhouse";
+      const isInhouseCommand = message.content.toLowerCase() === "!valinhouse" || message.content.toLowerCase() === "!inhouse";
 
       if (isInhouseCommand) {
         console.log("Valorant in-house creation triggered!");
@@ -932,119 +816,220 @@ module.exports = (client) => {
           }
         }
 
-        // Always use a unique and consistent inhouseId
-        const inhouseId = `valinhouse_${message.id}`;
+        // Create confirmation prompt
+        const confirmationId = `${message.id}_${Date.now()}`;
+        const confirmEmbed = new EmbedBuilder()
+          .setTitle("🏆 Create Valorant In-House?")
+          .setColor("#ff4654")
+          .setDescription(
+            `**${message.author.displayName}**, would you like to create a Valorant in-house match?\n\n` +
+            `This will create a 10-player match lobby with automatic team balancing.`
+          )
+          .setFooter({ text: "This prompt will expire in 60 seconds" })
+          .setTimestamp();
 
-        // Create new in-house with the message author as leader
-        const inhouse = {
-          id: inhouseId,
-          guildId: message.guild.id,
-          leader: {
-            id: message.author.id,
-            username: message.author.username,
-            displayName: message.author.displayName || message.author.username,
-            avatarURL: message.author.displayAvatarURL({
-              extension: "png",
-              size: 128,
-            }),
-          },
-          members: [],
+        const yesButton = new ButtonBuilder()
+          .setCustomId(`valinhouse_confirm_yes_${confirmationId}`)
+          .setLabel("Yes, Create Match")
+          .setStyle(ButtonStyle.Success)
+          .setEmoji("✅");
+
+        const noButton = new ButtonBuilder()
+          .setCustomId(`valinhouse_confirm_no_${confirmationId}`)
+          .setLabel("No, Cancel")
+          .setStyle(ButtonStyle.Danger)
+          .setEmoji("❌");
+
+        const row = new ActionRowBuilder().addComponents(yesButton, noButton);
+
+        const confirmMessage = await message.channel.send({
+          embeds: [confirmEmbed],
+          components: [row],
+        });
+
+        // Store pending creation data
+        pendingInhouseCreations.set(confirmationId, {
+          userId: message.author.id,
+          messageId: message.id,
           channelId: message.channel.id,
-          messageId: null,
-          resendTimer: null,
-          createdAt: new Date().toISOString(),
-          teamsBalanced: false,
-        };
+          guildId: message.guild.id,
+          author: message.author,
+          confirmMessageId: confirmMessage.id,
+        });
 
-        // Create the in-house embed and buttons
-        try {
-          const embed = await createInhouseEmbed(inhouse);
-          const components = createInhouseButtons(inhouseId, false, false);
+        // Auto-expire after 60 seconds
+        setTimeout(() => {
+          if (pendingInhouseCreations.has(confirmationId)) {
+            pendingInhouseCreations.delete(confirmationId);
+            const expiredEmbed = new EmbedBuilder()
+              .setTitle("⏱️ In-House Creation Expired")
+              .setColor("#ffaa00")
+              .setDescription("The in-house creation prompt has expired.");
+            confirmMessage.edit({ embeds: [expiredEmbed], components: [] }).catch(() => {});
+          }
+        }, 60000); // 60 seconds
 
-          const inhouseMessage = await message.channel.send({
-            embeds: [embed.embed],
-            files: embed.files,
-            components: [components],
-          });
-
-          // Store the in-house with message ID immediately after sending
-          inhouse.messageId = inhouseMessage.id;
-          activeInhouses.set(inhouseId, inhouse);
-
-          // Increment user's active in-house count
-          incrementUserInhouseCount(message.author.id);
-
-          console.log(
-            `✅ In-house created successfully: ${inhouseId} by ${message.author.username}`
-          );
-
-          // Set up the resend timer to keep message at bottom of chat
-          inhouse.resendTimer = setTimeout(
-            () => resendInhouseMessage(inhouseId),
-            RESEND_INTERVAL
-          );
-
-          // Delete after 30 minutes if in-house isn't full
-          inhouse.expiryTimer = setTimeout(async () => {
-            try {
-              const currentInhouse = activeInhouses.get(inhouseId);
-              if (
-                currentInhouse &&
-                getTotalMembers(currentInhouse) < INHOUSE_SIZE
-              ) {
-                // Clear the resend timer before removing
-                if (currentInhouse.resendTimer) {
-                  clearTimeout(currentInhouse.resendTimer);
-                }
-
-                // Clean up resend flag
-                resendInProgress.delete(inhouseId);
-
-                // Decrement user's active in-house count
-                decrementUserInhouseCount(currentInhouse.leader.id);
-
-                activeInhouses.delete(inhouseId);
-
-                // Attempt to delete the most recent message with proper error handling
-                try {
-                  const channel = await client.channels.fetch(currentInhouse.channelId);
-                  if (channel) {
-                    try {
-                      const msg = await channel.messages.fetch(currentInhouse.messageId);
-                      if (msg) {
-                        await msg.delete();
-                        console.log(`[INHOUSE] Expired message ${currentInhouse.messageId} deleted`);
-                      }
-                    } catch (msgError) {
-                      console.log(`[INHOUSE] Could not delete expired message: ${msgError.message}`);
-                    }
-                  }
-                } catch (channelError) {
-                  console.log(`[INHOUSE] Could not fetch channel for expired inhouse: ${channelError.message}`);
-                }
-
-                console.log(
-                  `⏰ In-house ${inhouseId} expired after 30 minutes`
-                );
-              }
-            } catch (error) {
-              console.error(`[INHOUSE] Error in expiry timer for ${inhouseId}:`, error.message);
-            }
-          }, INHOUSE_EXPIRY_TIME); // 30 minutes
-        } catch (error) {
-          console.error("❌ Error creating in-house message:", error);
-          message
-            .reply(
-              `❌ There was an error creating the in-house match: ${error.message}\nPlease try again in a moment.`
-            )
-            .catch(console.error);
-        }
+        return;
       }
     });
 
     // Handle button interactions
     client.on("interactionCreate", async (interaction) => {
       if (!interaction.isButton()) return;
+
+      // Handle confirmation buttons first
+      if (interaction.customId.startsWith("valinhouse_confirm_yes_")) {
+        const confirmationId = interaction.customId.replace("valinhouse_confirm_yes_", "");
+        const pending = pendingInhouseCreations.get(confirmationId);
+
+        if (!pending) {
+          return interaction.reply({
+            content: "❌ This confirmation has expired.",
+            ephemeral: true,
+          });
+        }
+
+        if (interaction.user.id !== pending.userId) {
+          return interaction.reply({
+            content: "❌ Only the person who triggered this can confirm.",
+            ephemeral: true,
+          });
+        }
+
+        // Delete pending creation
+        pendingInhouseCreations.delete(confirmationId);
+
+        // Update confirmation message
+        await interaction.update({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("✅ Creating In-House...")
+              .setColor("#00ff00")
+              .setDescription("Setting up your Valorant in-house match...")
+          ],
+          components: [],
+        });
+
+        // Create the in-house
+        const inhouseId = `valinhouse_${pending.messageId}`;
+        const inhouse = {
+          id: inhouseId,
+          guildId: pending.guildId,
+          leader: {
+            id: pending.author.id,
+            username: pending.author.username,
+            displayName: pending.author.displayName || pending.author.username,
+            avatarURL: pending.author.displayAvatarURL({
+              extension: "png",
+              size: 128,
+            }),
+          },
+          members: [],
+          channelId: pending.channelId,
+          messageId: null,
+          resendTimer: null,
+          createdAt: new Date().toISOString(),
+          teamsBalanced: false,
+        };
+
+        try {
+          const embed = await createInhouseEmbed(inhouse);
+          const components = createInhouseButtons(inhouseId, false, false);
+
+          const inhouseMessage = await interaction.channel.send({
+            embeds: [embed.embed],
+            files: embed.files,
+            components: [components],
+          });
+
+          inhouse.messageId = inhouseMessage.id;
+          activeInhouses.set(inhouseId, inhouse);
+
+          incrementUserInhouseCount(pending.author.id);
+
+          console.log(`✅ In-house created successfully: ${inhouseId} by ${pending.author.username}`);
+
+          // Set up the update timer
+          inhouse.resendTimer = setTimeout(
+            () => updateInhouseMessage(inhouseId),
+            RESEND_INTERVAL
+          );
+
+          // Delete after 30 minutes if not full
+          inhouse.expiryTimer = setTimeout(async () => {
+            try {
+              const currentInhouse = activeInhouses.get(inhouseId);
+              if (currentInhouse && getTotalMembers(currentInhouse) < INHOUSE_SIZE) {
+                if (currentInhouse.resendTimer) {
+                  clearTimeout(currentInhouse.resendTimer);
+                }
+                decrementUserInhouseCount(currentInhouse.leader.id);
+                activeInhouses.delete(inhouseId);
+
+                try {
+                  const channel = await client.channels.fetch(currentInhouse.channelId);
+                  if (channel) {
+                    const msg = await channel.messages.fetch(currentInhouse.messageId).catch(() => null);
+                    if (msg) await msg.delete().catch(() => {});
+                  }
+                } catch {}
+
+                console.log(`⏰ In-house ${inhouseId} expired after 30 minutes`);
+              }
+            } catch (error) {
+              console.error(`[INHOUSE] Error in expiry timer:`, error.message);
+            }
+          }, INHOUSE_EXPIRY_TIME);
+
+          // Delete confirmation message
+          setTimeout(() => {
+            interaction.message?.delete().catch(() => {});
+          }, 2000);
+        } catch (error) {
+          console.error("❌ Error creating in-house:", error);
+          await interaction.followUp({
+            content: `❌ Failed to create in-house: ${error.message}`,
+            ephemeral: true,
+          });
+        }
+
+        return;
+      } else if (interaction.customId.startsWith("valinhouse_confirm_no_")) {
+        const confirmationId = interaction.customId.replace("valinhouse_confirm_no_", "");
+        const pending = pendingInhouseCreations.get(confirmationId);
+
+        if (!pending) {
+          return interaction.reply({
+            content: "❌ This confirmation has expired.",
+            ephemeral: true,
+          });
+        }
+
+        if (interaction.user.id !== pending.userId) {
+          return interaction.reply({
+            content: "❌ Only the person who triggered this can cancel.",
+            ephemeral: true,
+          });
+        }
+
+        pendingInhouseCreations.delete(confirmationId);
+
+        await interaction.update({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("❌ In-House Creation Cancelled")
+              .setColor("#ff0000")
+              .setDescription("In-house creation has been cancelled.")
+          ],
+          components: [],
+        });
+
+        setTimeout(() => {
+          interaction.message?.delete().catch(() => {});
+        }, 3000);
+
+        return;
+      }
 
       // Only handle in-house buttons
       if (!interaction.customId.startsWith("valinhouse_")) {
@@ -1225,6 +1210,14 @@ module.exports = (client) => {
             files: updatedEmbed.files,
             components: [updatedComponents],
           });
+
+          // Restart update timer if needed
+          if (!isFull && !inhouse.resendTimer) {
+            inhouse.resendTimer = setTimeout(
+              () => updateInhouseMessage(fullInhouseId),
+              RESEND_INTERVAL
+            );
+          }
         } catch (error) {
           console.error("Error updating in-house after leave:", error);
           // If interaction is already acknowledged, we can't reply again
@@ -1289,7 +1282,6 @@ module.exports = (client) => {
           // Auto-delete in-house after 10 minutes
           inhouse.deleteTimer = setTimeout(async () => {
             try {
-              resendInProgress.delete(fullInhouseId);
               activeInhouses.delete(fullInhouseId);
 
               // Check if message exists before deleting
@@ -1345,9 +1337,6 @@ module.exports = (client) => {
           if (inhouse.deleteTimer) {
             clearTimeout(inhouse.deleteTimer);
           }
-
-          // Clean up resend flag
-          resendInProgress.delete(fullInhouseId);
 
           // Decrement user's active in-house count
           decrementUserInhouseCount(inhouse.leader.id);
@@ -1418,9 +1407,6 @@ module.exports = (client) => {
           if (inhouse.resendTimer) clearTimeout(inhouse.resendTimer);
           if (inhouse.expiryTimer) clearTimeout(inhouse.expiryTimer);
           if (inhouse.deleteTimer) clearTimeout(inhouse.deleteTimer);
-
-          // Clean up resend flag
-          resendInProgress.delete(inhouseId);
 
           // Decrement user's active in-house count
           decrementUserInhouseCount(inhouse.leader.id);

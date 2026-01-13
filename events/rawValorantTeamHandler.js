@@ -542,6 +542,9 @@ module.exports = (client) => {
     }
   }
 
+  // Store pending team creations (auto-cleanup after 2 minutes)
+  const pendingRawTeamCreations = new Map();
+
   // Message handler for team creation
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
@@ -570,70 +573,58 @@ module.exports = (client) => {
       return;
     }
 
-    const teamId = `raw_valorant_team_${message.id}`;
-    const team = {
-      id: teamId,
-      guildId: message.guild.id,
-      leader: {
-        id: message.author.id,
-        username: message.author.username,
-        displayName: message.author.displayName || message.author.username,
-        avatarURL: message.author.displayAvatarURL({
-          extension: "png",
-          size: 128,
-        }),
-      },
-      members: [],
+    // Create confirmation prompt
+    const confirmationId = `${message.id}_${Date.now()}`;
+    const confirmEmbed = new EmbedBuilder()
+      .setTitle("🎮 Create RaW Valorant Team?")
+      .setColor("#ff4654")
+      .setDescription(
+        `**${message.author.displayName}**, would you like to create a RaW Valorant team builder?\n\n` +
+        `This will create a 5-player team lobby for RaW members.`
+      )
+      .setFooter({ text: "This prompt will expire in 60 seconds" })
+      .setTimestamp();
+
+    const yesButton = new ButtonBuilder()
+      .setCustomId(`raw_valorant_confirm_yes_${confirmationId}`)
+      .setLabel("Yes, Create Team")
+      .setStyle(ButtonStyle.Success)
+      .setEmoji("✅");
+
+    const noButton = new ButtonBuilder()
+      .setCustomId(`raw_valorant_confirm_no_${confirmationId}`)
+      .setLabel("No, Cancel")
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji("❌");
+
+    const row = new ActionRowBuilder().addComponents(yesButton, noButton);
+
+    const confirmMessage = await message.channel.send({
+      embeds: [confirmEmbed],
+      components: [row],
+    });
+
+    // Store pending creation data
+    pendingRawTeamCreations.set(confirmationId, {
+      userId: message.author.id,
+      messageId: message.id,
       channelId: message.channel.id,
-      messageId: null,
-      resendTimer: null,
-      name: TEAM_NAME,
-      createdAt: new Date(),
-    };
+      guildId: message.guild.id,
+      author: message.author,
+      confirmMessageId: confirmMessage.id,
+    });
 
-    try {
-      // Send "Creating team..." message for immediate feedback
-      const loadingMsg = await message.channel.send("⏳ Creating RaW team...");
-
-      const embed = await createTeamEmbed(team);
-      const components = createTeamButtons(teamId, false, team);
-
-      const teamMessage = await message.channel.send({
-        embeds: [embed.embed],
-        files: embed.files,
-        components,
-      });
-
-      // Delete loading message
-      loadingMsg.delete().catch(() => {});
-
-      team.messageId = teamMessage.id;
-      activeTeams.set(teamId, team);
-
-      // Set up periodic refresh
-      team.resendTimer = setTimeout(
-        () => updateTeamMessage(teamId),
-        RESEND_INTERVAL
-      );
-
-      // Auto-disband after 4 hours
-      team.deleteTimer = setTimeout(async () => {
-        const currentTeam = activeTeams.get(teamId);
-        if (currentTeam) {
-          activeTeams.delete(teamId);
-          try {
-            const ch = await client.channels.fetch(currentTeam.channelId);
-            const msg = await ch.messages
-              .fetch(currentTeam.messageId)
-              .catch(() => null);
-            if (msg) await msg.delete().catch(() => {});
-          } catch {}
-        }
-      }, TEAM_LIFETIME);
-    } catch (error) {
-      console.error("[RaW Team] Creation error:", error);
-      message.reply("❌ Failed to create team. Try again.").catch(() => {});
-    }
+    // Auto-expire after 60 seconds
+    setTimeout(() => {
+      if (pendingRawTeamCreations.has(confirmationId)) {
+        pendingRawTeamCreations.delete(confirmationId);
+        const expiredEmbed = new EmbedBuilder()
+          .setTitle("⏱️ Team Creation Expired")
+          .setColor("#ffaa00")
+          .setDescription("The team creation prompt has expired.");
+        confirmMessage.edit({ embeds: [expiredEmbed], components: [] }).catch(() => {});
+      }
+    }, 60000); // 60 seconds
   });
 
   // Interaction handler
@@ -644,6 +635,150 @@ module.exports = (client) => {
         TextInputBuilder,
         TextInputStyle,
       } = require("discord.js");
+
+      // Handle confirmation buttons
+      if (interaction.isButton()) {
+        if (interaction.customId.startsWith("raw_valorant_confirm_yes_")) {
+          const confirmationId = interaction.customId.replace("raw_valorant_confirm_yes_", "");
+          const pending = pendingRawTeamCreations.get(confirmationId);
+
+          if (!pending) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ This confirmation has expired.",
+              ephemeral: true,
+            });
+          }
+
+          if (interaction.user.id !== pending.userId) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Only the person who triggered this can confirm.",
+              ephemeral: true,
+            });
+          }
+
+          // Delete pending creation
+          pendingRawTeamCreations.delete(confirmationId);
+
+          // Update confirmation message
+          await interaction.update({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle("✅ Creating RaW Team...")
+                .setColor("#00ff00")
+                .setDescription("Setting up your RaW Valorant team builder...")
+            ],
+            components: [],
+          });
+
+          // Create the team
+          const teamId = `raw_valorant_team_${pending.messageId}`;
+          const team = {
+            id: teamId,
+            guildId: pending.guildId,
+            leader: {
+              id: pending.author.id,
+              username: pending.author.username,
+              displayName: pending.author.displayName || pending.author.username,
+              avatarURL: pending.author.displayAvatarURL({
+                extension: "png",
+                size: 128,
+              }),
+            },
+            members: [],
+            channelId: pending.channelId,
+            messageId: null,
+            resendTimer: null,
+            name: TEAM_NAME,
+            createdAt: new Date(),
+          };
+
+          try {
+            const embed = await createTeamEmbed(team);
+            const components = createTeamButtons(teamId, false, team);
+
+            const teamMessage = await interaction.channel.send({
+              embeds: [embed.embed],
+              files: embed.files,
+              components,
+            });
+
+            team.messageId = teamMessage.id;
+            activeTeams.set(teamId, team);
+
+            // Set up periodic refresh
+            team.resendTimer = setTimeout(
+              () => updateTeamMessage(teamId),
+              RESEND_INTERVAL
+            );
+
+            // Auto-disband after 4 hours
+            team.deleteTimer = setTimeout(async () => {
+              const currentTeam = activeTeams.get(teamId);
+              if (currentTeam) {
+                activeTeams.delete(teamId);
+                try {
+                  const ch = await client.channels.fetch(currentTeam.channelId);
+                  const msg = await ch.messages
+                    .fetch(currentTeam.messageId)
+                    .catch(() => null);
+                  if (msg) await msg.delete().catch(() => {});
+                } catch {}
+              }
+            }, TEAM_LIFETIME);
+
+            // Delete confirmation message after a short delay
+            setTimeout(() => {
+              interaction.message?.delete().catch(() => {});
+            }, 2000);
+          } catch (error) {
+            console.error("[RaW Team] Creation error:", error);
+            await interaction.followUp({
+              content: "❌ Failed to create team. Try again.",
+              ephemeral: true,
+            });
+          }
+
+          return;
+        } else if (interaction.customId.startsWith("raw_valorant_confirm_no_")) {
+          const confirmationId = interaction.customId.replace("raw_valorant_confirm_no_", "");
+          const pending = pendingRawTeamCreations.get(confirmationId);
+
+          if (!pending) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ This confirmation has expired.",
+              ephemeral: true,
+            });
+          }
+
+          if (interaction.user.id !== pending.userId) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Only the person who triggered this can cancel.",
+              ephemeral: true,
+            });
+          }
+
+          // Delete pending creation
+          pendingRawTeamCreations.delete(confirmationId);
+
+          // Update message
+          await interaction.update({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle("❌ Team Creation Cancelled")
+                .setColor("#ff0000")
+                .setDescription("Team creation has been cancelled.")
+            ],
+            components: [],
+          });
+
+          // Delete message after a short delay
+          setTimeout(() => {
+            interaction.message?.delete().catch(() => {});
+          }, 3000);
+
+          return;
+        }
+      }
 
       // Handle leader selection menu
       if (

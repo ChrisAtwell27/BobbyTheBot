@@ -933,6 +933,9 @@ module.exports = (client) => {
     }
   };
 
+  // Store pending team creations (auto-cleanup after 2 minutes)
+  const pendingTeamCreations = new Map();
+
   // Message handler for team creation
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
@@ -974,15 +977,58 @@ module.exports = (client) => {
       timerHours = parseFloat(timerMatch[1]);
     }
 
-    const success = await client.createValorantTeam({
+    // Create confirmation prompt
+    const confirmationId = `${message.id}_${Date.now()}`;
+    const confirmEmbed = new EmbedBuilder()
+      .setTitle("🎮 Create Valorant Team?")
+      .setColor("#ff4654")
+      .setDescription(
+        `**${message.author.displayName}**, would you like to create a Valorant team builder?\n\n` +
+        `This will create a 5-player team lobby that others can join.` +
+        (timerHours ? `\n\n⏱️ **Timer:** ${timerHours} hours` : "")
+      )
+      .setFooter({ text: "This prompt will expire in 60 seconds" })
+      .setTimestamp();
+
+    const yesButton = new ButtonBuilder()
+      .setCustomId(`valorant_confirm_yes_${confirmationId}`)
+      .setLabel("Yes, Create Team")
+      .setStyle(ButtonStyle.Success)
+      .setEmoji("✅");
+
+    const noButton = new ButtonBuilder()
+      .setCustomId(`valorant_confirm_no_${confirmationId}`)
+      .setLabel("No, Cancel")
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji("❌");
+
+    const row = new ActionRowBuilder().addComponents(yesButton, noButton);
+
+    const confirmMessage = await message.channel.send({
+      embeds: [confirmEmbed],
+      components: [row],
+    });
+
+    // Store pending creation data
+    pendingTeamCreations.set(confirmationId, {
+      userId: message.author.id,
       leader: message.author,
       channel: message.channel,
       timerHours,
+      messageId: confirmMessage.id,
     });
 
-    if (!success) {
-      message.reply("❌ Failed to create team. Try again.").catch(() => {});
-    }
+    // Auto-expire after 60 seconds
+    setTimeout(() => {
+      if (pendingTeamCreations.has(confirmationId)) {
+        pendingTeamCreations.delete(confirmationId);
+        const expiredEmbed = new EmbedBuilder()
+          .setTitle("⏱️ Team Creation Expired")
+          .setColor("#ffaa00")
+          .setDescription("The team creation prompt has expired.");
+        confirmMessage.edit({ embeds: [expiredEmbed], components: [] }).catch(() => {});
+      }
+    }, 60000); // 60 seconds
   });
 
   // Interaction handler
@@ -993,6 +1039,101 @@ module.exports = (client) => {
         TextInputBuilder,
         TextInputStyle,
       } = require("discord.js");
+
+      // Handle confirmation buttons
+      if (interaction.isButton()) {
+        if (interaction.customId.startsWith("valorant_confirm_yes_")) {
+          const confirmationId = interaction.customId.replace("valorant_confirm_yes_", "");
+          const pending = pendingTeamCreations.get(confirmationId);
+
+          if (!pending) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ This confirmation has expired.",
+              ephemeral: true,
+            });
+          }
+
+          if (interaction.user.id !== pending.userId) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Only the person who triggered this can confirm.",
+              ephemeral: true,
+            });
+          }
+
+          // Delete pending creation
+          pendingTeamCreations.delete(confirmationId);
+
+          // Update confirmation message
+          await interaction.update({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle("✅ Creating Team...")
+                .setColor("#00ff00")
+                .setDescription("Setting up your Valorant team builder...")
+            ],
+            components: [],
+          });
+
+          // Create the team
+          const success = await client.createValorantTeam({
+            leader: pending.leader,
+            channel: pending.channel,
+            timerHours: pending.timerHours,
+          });
+
+          if (!success) {
+            await interaction.followUp({
+              content: "❌ Failed to create team. Try again.",
+              ephemeral: true,
+            });
+          }
+
+          // Delete confirmation message after a short delay
+          setTimeout(() => {
+            interaction.message?.delete().catch(() => {});
+          }, 2000);
+
+          return;
+        } else if (interaction.customId.startsWith("valorant_confirm_no_")) {
+          const confirmationId = interaction.customId.replace("valorant_confirm_no_", "");
+          const pending = pendingTeamCreations.get(confirmationId);
+
+          if (!pending) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ This confirmation has expired.",
+              ephemeral: true,
+            });
+          }
+
+          if (interaction.user.id !== pending.userId) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Only the person who triggered this can cancel.",
+              ephemeral: true,
+            });
+          }
+
+          // Delete pending creation
+          pendingTeamCreations.delete(confirmationId);
+
+          // Update message
+          await interaction.update({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle("❌ Team Creation Cancelled")
+                .setColor("#ff0000")
+                .setDescription("Team creation has been cancelled.")
+            ],
+            components: [],
+          });
+
+          // Delete message after a short delay
+          setTimeout(() => {
+            interaction.message?.delete().catch(() => {});
+          }, 3000);
+
+          return;
+        }
+      }
 
       // Handle Modal Submits
       if (
