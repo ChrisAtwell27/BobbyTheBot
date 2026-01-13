@@ -842,20 +842,42 @@ module.exports = (client) => {
 
         const row = new ActionRowBuilder().addComponents(yesButton, noButton);
 
-        const confirmMessage = await message.channel.send({
-          embeds: [confirmEmbed],
-          components: [row],
-        });
+        // Send confirmation via DM
+        try {
+          const confirmMessage = await message.author.send({
+            embeds: [confirmEmbed],
+            components: [row],
+          });
 
-        // Store pending creation data
-        pendingInhouseCreations.set(confirmationId, {
-          userId: message.author.id,
-          messageId: message.id,
-          channelId: message.channel.id,
-          guildId: message.guild.id,
-          author: message.author,
-          confirmMessageId: confirmMessage.id,
-        });
+          // Store pending creation data
+          pendingInhouseCreations.set(confirmationId, {
+            userId: message.author.id,
+            messageId: message.id,
+            channelId: message.channel.id,
+            guildId: message.guild.id,
+            author: message.author,
+            confirmMessageId: confirmMessage.id,
+          });
+
+          // React to the original message to acknowledge
+          await message.react('✅').catch(() => {});
+        } catch (dmError) {
+          // User has DMs disabled, send message in channel
+          const confirmMessage = await message.reply({
+            embeds: [confirmEmbed],
+            components: [row],
+          });
+
+          // Store pending creation data
+          pendingInhouseCreations.set(confirmationId, {
+            userId: message.author.id,
+            messageId: message.id,
+            channelId: message.channel.id,
+            guildId: message.guild.id,
+            author: message.author,
+            confirmMessageId: confirmMessage.id,
+          });
+        }
 
         // Auto-expire after 60 seconds
         setTimeout(() => {
@@ -1014,19 +1036,8 @@ module.exports = (client) => {
 
         pendingInhouseCreations.delete(confirmationId);
 
-        await interaction.update({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("❌ In-House Creation Cancelled")
-              .setColor("#ff0000")
-              .setDescription("In-house creation has been cancelled.")
-          ],
-          components: [],
-        });
-
-        setTimeout(() => {
-          interaction.message?.delete().catch(() => {});
-        }, 3000);
+        // Just delete the message
+        await interaction.message?.delete().catch(() => {});
 
         return;
       }
@@ -1344,46 +1355,12 @@ module.exports = (client) => {
           // Remove in-house from active in-houses
           activeInhouses.delete(fullInhouseId);
 
-          const disbandEmbed = new EmbedBuilder()
-            .setColor("#ff0000")
-            .setTitle("❌ Match Disbanded")
-            .setDescription(
-              "This in-house match has been disbanded by the host."
-            )
-            .addFields({
-              name: "📊 Match Stats",
-              value: `**Duration:** <t:${Math.floor(new Date(inhouse.createdAt).getTime() / 1000)}:R>\n**Players:** ${getTotalMembers(inhouse)}/${INHOUSE_SIZE}`,
-              inline: false,
-            })
-            .setTimestamp();
-
-          await interaction.update({
-            embeds: [disbandEmbed],
-            components: [],
-          });
-
           console.log(
             `🗑️ In-house ${fullInhouseId} disbanded by ${interaction.user.username}`
           );
 
-          // Delete the message after 5 seconds with proper error handling
-          setTimeout(async () => {
-            try {
-              if (interaction.message) {
-                await interaction.message.delete();
-                console.log(`[INHOUSE] Disbanded message deleted for ${fullInhouseId}`);
-              } else {
-                console.log(`[INHOUSE] No message to delete for disbanded ${fullInhouseId}`);
-              }
-            } catch (deleteError) {
-              console.log(
-                `[INHOUSE] Could not delete disbanded message: ${deleteError.message}`
-              );
-              if (deleteError.code === 10008) {
-                console.log(`[INHOUSE] Message already deleted`);
-              }
-            }
-          }, 5000);
+          // Just delete the message
+          await interaction.message?.delete().catch(() => {});
         } catch (error) {
           console.error("❌ Error disbanding in-house:", error);
           await interaction

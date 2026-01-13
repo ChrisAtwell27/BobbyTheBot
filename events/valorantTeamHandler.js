@@ -1004,19 +1004,40 @@ module.exports = (client) => {
 
     const row = new ActionRowBuilder().addComponents(yesButton, noButton);
 
-    const confirmMessage = await message.channel.send({
-      embeds: [confirmEmbed],
-      components: [row],
-    });
+    // Send confirmation via DM
+    try {
+      const confirmMessage = await message.author.send({
+        embeds: [confirmEmbed],
+        components: [row],
+      });
 
-    // Store pending creation data
-    pendingTeamCreations.set(confirmationId, {
-      userId: message.author.id,
-      leader: message.author,
-      channel: message.channel,
-      timerHours,
-      messageId: confirmMessage.id,
-    });
+      // Store pending creation data
+      pendingTeamCreations.set(confirmationId, {
+        userId: message.author.id,
+        leader: message.author,
+        channel: message.channel,
+        timerHours,
+        messageId: confirmMessage.id,
+      });
+
+      // React to the original message to acknowledge
+      await message.react('✅').catch(() => {});
+    } catch (dmError) {
+      // User has DMs disabled, send ephemeral-like message in channel
+      const confirmMessage = await message.reply({
+        embeds: [confirmEmbed],
+        components: [row],
+      });
+
+      // Store pending creation data
+      pendingTeamCreations.set(confirmationId, {
+        userId: message.author.id,
+        leader: message.author,
+        channel: message.channel,
+        timerHours,
+        messageId: confirmMessage.id,
+      });
+    }
 
     // Auto-expire after 60 seconds
     setTimeout(() => {
@@ -1115,21 +1136,8 @@ module.exports = (client) => {
           // Delete pending creation
           pendingTeamCreations.delete(confirmationId);
 
-          // Update message
-          await interaction.update({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle("❌ Team Creation Cancelled")
-                .setColor("#ff0000")
-                .setDescription("Team creation has been cancelled.")
-            ],
-            components: [],
-          });
-
-          // Delete message after a short delay
-          setTimeout(() => {
-            interaction.message?.delete().catch(() => {});
-          }, 3000);
+          // Just delete the message
+          await interaction.message?.delete().catch(() => {});
 
           return;
         }
@@ -2129,16 +2137,8 @@ module.exports = (client) => {
 
         activeTeams.delete(fullTeamId);
 
-        await safeInteractionResponse(interaction, "update", {
-          embeds: [createDisbandedEmbed()],
-          components: [],
-          files: [],
-        });
-
-        // Delete after short delay
-        setTimeout(() => {
-          interaction.message?.delete().catch(() => {});
-        }, DISBAND_DELETE_DELAY);
+        // Just delete the message
+        await interaction.message?.delete().catch(() => {});
       }
     } catch (error) {
       console.error("[Team] Handler error:", error);
