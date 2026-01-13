@@ -987,7 +987,7 @@ module.exports = (client) => {
         `This will create a 5-player team lobby that others can join.` +
         (timerHours ? `\n\n⏱️ **Timer:** ${timerHours} hours` : "")
       )
-      .setFooter({ text: "This prompt will expire in 60 seconds" })
+      .setFooter({ text: "This prompt will expire in 5 seconds" })
       .setTimestamp();
 
     const yesButton = new ButtonBuilder()
@@ -1004,52 +1004,28 @@ module.exports = (client) => {
 
     const row = new ActionRowBuilder().addComponents(yesButton, noButton);
 
-    // Send confirmation via DM
-    try {
-      const confirmMessage = await message.author.send({
-        embeds: [confirmEmbed],
-        components: [row],
-      });
+    // Send confirmation in channel
+    const confirmMessage = await message.reply({
+      embeds: [confirmEmbed],
+      components: [row],
+    });
 
-      // Store pending creation data
-      pendingTeamCreations.set(confirmationId, {
-        userId: message.author.id,
-        leader: message.author,
-        channel: message.channel,
-        timerHours,
-        messageId: confirmMessage.id,
-      });
+    // Store pending creation data
+    pendingTeamCreations.set(confirmationId, {
+      userId: message.author.id,
+      leader: message.author,
+      channel: message.channel,
+      timerHours,
+      messageId: confirmMessage.id,
+    });
 
-      // React to the original message to acknowledge
-      await message.react('✅').catch(() => {});
-    } catch (dmError) {
-      // User has DMs disabled, send ephemeral-like message in channel
-      const confirmMessage = await message.reply({
-        embeds: [confirmEmbed],
-        components: [row],
-      });
-
-      // Store pending creation data
-      pendingTeamCreations.set(confirmationId, {
-        userId: message.author.id,
-        leader: message.author,
-        channel: message.channel,
-        timerHours,
-        messageId: confirmMessage.id,
-      });
-    }
-
-    // Auto-expire after 60 seconds
+    // Auto-delete after 5 seconds
     setTimeout(() => {
       if (pendingTeamCreations.has(confirmationId)) {
         pendingTeamCreations.delete(confirmationId);
-        const expiredEmbed = new EmbedBuilder()
-          .setTitle("⏱️ Team Creation Expired")
-          .setColor("#ffaa00")
-          .setDescription("The team creation prompt has expired.");
-        confirmMessage.edit({ embeds: [expiredEmbed], components: [] }).catch(() => {});
+        confirmMessage.delete().catch(() => {});
       }
-    }, 60000); // 60 seconds
+    }, 5000); // 5 seconds
   });
 
   // Interaction handler

@@ -582,7 +582,7 @@ module.exports = (client) => {
         `**${message.author.displayName}**, would you like to create a RaW Valorant team builder?\n\n` +
         `This will create a 5-player team lobby for RaW members.`
       )
-      .setFooter({ text: "This prompt will expire in 60 seconds" })
+      .setFooter({ text: "This prompt will expire in 5 seconds" })
       .setTimestamp();
 
     const yesButton = new ButtonBuilder()
@@ -599,54 +599,29 @@ module.exports = (client) => {
 
     const row = new ActionRowBuilder().addComponents(yesButton, noButton);
 
-    // Send confirmation via DM
-    try {
-      const confirmMessage = await message.author.send({
-        embeds: [confirmEmbed],
-        components: [row],
-      });
+    // Send confirmation in channel
+    const confirmMessage = await message.reply({
+      embeds: [confirmEmbed],
+      components: [row],
+    });
 
-      // Store pending creation data
-      pendingRawTeamCreations.set(confirmationId, {
-        userId: message.author.id,
-        messageId: message.id,
-        channelId: message.channel.id,
-        guildId: message.guild.id,
-        author: message.author,
-        confirmMessageId: confirmMessage.id,
-      });
+    // Store pending creation data
+    pendingRawTeamCreations.set(confirmationId, {
+      userId: message.author.id,
+      messageId: message.id,
+      channelId: message.channel.id,
+      guildId: message.guild.id,
+      author: message.author,
+      confirmMessageId: confirmMessage.id,
+    });
 
-      // React to the original message to acknowledge
-      await message.react('✅').catch(() => {});
-    } catch (dmError) {
-      // User has DMs disabled, send message in channel
-      const confirmMessage = await message.reply({
-        embeds: [confirmEmbed],
-        components: [row],
-      });
-
-      // Store pending creation data
-      pendingRawTeamCreations.set(confirmationId, {
-        userId: message.author.id,
-        messageId: message.id,
-        channelId: message.channel.id,
-        guildId: message.guild.id,
-        author: message.author,
-        confirmMessageId: confirmMessage.id,
-      });
-    }
-
-    // Auto-expire after 60 seconds
+    // Auto-delete after 5 seconds
     setTimeout(() => {
       if (pendingRawTeamCreations.has(confirmationId)) {
         pendingRawTeamCreations.delete(confirmationId);
-        const expiredEmbed = new EmbedBuilder()
-          .setTitle("⏱️ Team Creation Expired")
-          .setColor("#ffaa00")
-          .setDescription("The team creation prompt has expired.");
-        confirmMessage.edit({ embeds: [expiredEmbed], components: [] }).catch(() => {});
+        confirmMessage.delete().catch(() => {});
       }
-    }, 60000); // 60 seconds
+    }, 5000); // 5 seconds
   });
 
   // Interaction handler
