@@ -462,6 +462,8 @@ class SettingsServer {
             "shop_notifications",
             "lottery",
             "betting",
+            "verification",
+            "verification_log",
           ];
 
           if (!validTypes.includes(channelType)) {
@@ -575,6 +577,8 @@ class SettingsServer {
             "valorant_team",
             "valorant_inhouse",
             "shop_notifications",
+            "unverified",
+            "quarantine",
           ];
 
           if (!validTypes.includes(roleType)) {
@@ -787,6 +791,7 @@ class SettingsServer {
             "custom_branding",
             "lottery",
             "betting",
+            "verification",
           ];
 
           if (!validFeatures.includes(featureName)) {

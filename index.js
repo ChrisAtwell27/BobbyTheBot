@@ -449,12 +449,12 @@ if (process.env.SETTINGS_API_ENABLED !== "false") {
   });
 }
 
-// Start the bot
+// Start the bot - Enhanced Verification System
 const {
   setupVerificationChannel,
   handleMemberJoin,
-  handleReactionAdd,
-} = require("./verification");
+  handleVerificationInteraction,
+} = require("./events/enhancedVerification");
 
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user.tag}`);
@@ -468,7 +468,7 @@ client.once("ready", async () => {
   }
   console.log("==============================\n");
 
-  // Setup verification channels for all guilds
+  // Setup verification channels for all guilds (enhanced verification with button-based system)
   for (const guild of client.guilds.cache.values()) {
     try {
       await setupVerificationChannel(guild);
@@ -481,6 +481,7 @@ client.once("ready", async () => {
   }
 });
 
+// Handle new member joins with enhanced security checks (raid detection, suspicious patterns)
 client.on("guildMemberAdd", async (member) => {
   try {
     await handleMemberJoin(member);
@@ -489,11 +490,22 @@ client.on("guildMemberAdd", async (member) => {
   }
 });
 
-client.on("messageReactionAdd", async (reaction, user) => {
+// Handle verification button interactions
+client.on("interactionCreate", async (interaction) => {
+  // Only handle verification-related button interactions
+  if (!interaction.isButton()) return;
+  if (!interaction.customId.startsWith("verify_")) return;
+
   try {
-    await handleReactionAdd(reaction, user);
+    await handleVerificationInteraction(interaction);
   } catch (error) {
-    console.error("Error handling reaction add:", error);
+    console.error("Error handling verification interaction:", error);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: "An error occurred during verification. Please try again.",
+        ephemeral: true,
+      }).catch(() => {});
+    }
   }
 });
 
