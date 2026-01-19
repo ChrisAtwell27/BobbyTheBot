@@ -105,17 +105,17 @@ async function handleEnable(interaction) {
       });
     }
 
-    // Save settings
-    await setSetting(interaction.guild.id, 'verification.enabled', true);
-    await setSetting(interaction.guild.id, 'verification.channelId', channel.id);
-    await setSetting(interaction.guild.id, 'verification.unverifiedRoleId', unverifiedRole.id);
+    // Save settings (using standard paths that match the Settings API)
+    await setSetting(interaction.guild.id, 'features.verification', true);
+    await setSetting(interaction.guild.id, 'channels.verification', channel.id);
+    await setSetting(interaction.guild.id, 'roles.unverified', unverifiedRole.id);
 
     if (quarantineRole) {
-      await setSetting(interaction.guild.id, 'verification.quarantineRoleId', quarantineRole.id);
+      await setSetting(interaction.guild.id, 'roles.quarantine', quarantineRole.id);
     }
 
     if (logChannel) {
-      await setSetting(interaction.guild.id, 'verification.logChannelId', logChannel.id);
+      await setSetting(interaction.guild.id, 'channels.verification_log', logChannel.id);
     }
 
     // Setup verification channel
@@ -152,7 +152,7 @@ async function handleDisable(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   try {
-    await setSetting(interaction.guild.id, 'verification.enabled', false);
+    await setSetting(interaction.guild.id, 'features.verification', false);
 
     await interaction.editReply({
       content: '✅ **Verification System Disabled**\n\nNew members will no longer be assigned the Unverified role.\n\nTo re-enable, use `/verification-setup enable`',
@@ -169,11 +169,11 @@ async function handleStatus(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   try {
-    const enabled = await getSetting(interaction.guild.id, 'verification.enabled', false);
-    const channelId = await getSetting(interaction.guild.id, 'verification.channelId');
-    const unverifiedRoleId = await getSetting(interaction.guild.id, 'verification.unverifiedRoleId');
-    const quarantineRoleId = await getSetting(interaction.guild.id, 'verification.quarantineRoleId');
-    const logChannelId = await getSetting(interaction.guild.id, 'verification.logChannelId');
+    const enabled = await getSetting(interaction.guild.id, 'features.verification', false);
+    const channelId = await getSetting(interaction.guild.id, 'channels.verification');
+    const unverifiedRoleId = await getSetting(interaction.guild.id, 'roles.unverified');
+    const quarantineRoleId = await getSetting(interaction.guild.id, 'roles.quarantine');
+    const logChannelId = await getSetting(interaction.guild.id, 'channels.verification_log');
 
     let response = '**🛡️ Verification System Status**\n\n';
 
