@@ -145,7 +145,7 @@ function hasSuspiciousPatterns(member) {
  * Log verification event
  */
 async function logVerification(guild, member, status, reason = "") {
-  const logChannelId = await getSetting(guild.id, "verification.logChannelId");
+  const logChannelId = await getSetting(guild.id, "channels.verification_log");
   if (!logChannelId) return;
 
   const logChannel = guild.channels.cache.get(logChannelId);
@@ -182,12 +182,12 @@ async function handleMemberJoin(member) {
   const guild = member.guild;
 
   // Check if enhanced verification is enabled
-  const verificationEnabled = await getSetting(guild.id, "verification.enabled");
+  const verificationEnabled = await getSetting(guild.id, "features.verification");
   if (!verificationEnabled) return;
 
-  const verifyChannelId = await getSetting(guild.id, "verification.channelId");
-  const unverifiedRoleId = await getSetting(guild.id, "verification.unverifiedRoleId");
-  const quarantineRoleId = await getSetting(guild.id, "verification.quarantineRoleId");
+  const verifyChannelId = await getSetting(guild.id, "channels.verification");
+  const unverifiedRoleId = await getSetting(guild.id, "roles.unverified");
+  const quarantineRoleId = await getSetting(guild.id, "roles.quarantine");
 
   if (!verifyChannelId || !unverifiedRoleId) {
     console.log("Enhanced verification not fully configured");
@@ -278,11 +278,11 @@ async function handleMemberJoin(member) {
  * Setup verification message in channel
  */
 async function setupVerificationChannel(guild) {
-  const verificationEnabled = await getSetting(guild.id, "verification.enabled");
+  const verificationEnabled = await getSetting(guild.id, "features.verification");
   if (!verificationEnabled) return null;
 
-  const verifyChannelId = await getSetting(guild.id, "verification.channelId");
-  const unverifiedRoleId = await getSetting(guild.id, "verification.unverifiedRoleId");
+  const verifyChannelId = await getSetting(guild.id, "channels.verification");
+  const unverifiedRoleId = await getSetting(guild.id, "roles.unverified");
 
   if (!verifyChannelId || !unverifiedRoleId) return null;
 
@@ -437,7 +437,7 @@ async function handleVerificationInteraction(interaction) {
     }
 
     // SUCCESS! Remove unverified role
-    const unverifiedRoleId = await getSetting(guild.id, "verification.unverifiedRoleId");
+    const unverifiedRoleId = await getSetting(guild.id, "roles.unverified");
     const unverifiedRole = guild.roles.cache.get(unverifiedRoleId);
 
     if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
