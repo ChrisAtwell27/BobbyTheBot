@@ -348,6 +348,13 @@ module.exports = (client, interactionRouter) => {
     });
   });
 
+  // ADMIN/SETUP COMMANDS
+  const verificationSetup = require("./verification-setup");
+  interactionRouter.registerSlashCommand(
+    "verification-setup",
+    verificationSetup.execute
+  );
+
   console.log("✅ Slash Command Handler initialized");
   console.log("   Commands are registered and ready to use!");
   console.log("   Note: Full handler integration is a work in progress.");

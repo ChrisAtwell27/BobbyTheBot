@@ -477,5 +477,60 @@ commands.push({
   category: "utility",
 });
 
+// ==========================================
+// ADMIN/SETUP COMMANDS
+// ==========================================
+
+const { PermissionFlagsBits, ChannelType } = require("discord.js");
+
+commands.push({
+  data: new SlashCommandBuilder()
+    .setName("verification-setup")
+    .setDescription("Configure the enhanced verification system")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("enable")
+        .setDescription("Enable the verification system")
+        .addChannelOption((option) =>
+          option
+            .setName("channel")
+            .setDescription("Verification channel (where users verify)")
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(true)
+        )
+        .addRoleOption((option) =>
+          option
+            .setName("unverified-role")
+            .setDescription("Role assigned to unverified users")
+            .setRequired(true)
+        )
+        .addRoleOption((option) =>
+          option
+            .setName("quarantine-role")
+            .setDescription("Role for suspicious users (optional)")
+            .setRequired(false)
+        )
+        .addChannelOption((option) =>
+          option
+            .setName("log-channel")
+            .setDescription("Channel for logging verification events (optional)")
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(false)
+        )
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("disable")
+        .setDescription("Disable the verification system")
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("status")
+        .setDescription("View current verification configuration")
+    ),
+  category: "admin",
+});
+
 // Export all commands
 module.exports = commands;
