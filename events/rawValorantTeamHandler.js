@@ -234,22 +234,49 @@ async function createTeamVisualization(team) {
 }
 
 /**
- * Draw availability grid for Phase 1
+ * Draw availability grid for Phase 1 - properly centered
  */
 async function drawAvailabilityGrid(ctx, team, rankInfoMap, avatars, canvasWidth, startY) {
   const players = team.availablePlayers;
   const slotWidth = 100;
   const slotHeight = 110;
-  const slotsPerRow = 4;
-  const xSpacing = 180;
+  const xGap = 20; // Gap between slots horizontally
   const ySpacing = 125;
-  const startX = (canvasWidth - (Math.min(players.length, slotsPerRow) * xSpacing - (xSpacing - slotWidth))) / 2;
 
+  // Layout: Row 1 = 4 slots, Row 2 = 3 slots (centered independently)
+  const row1Count = Math.min(4, MAX_PLAYERS);
+  const row2Count = MAX_PLAYERS - row1Count; // 3 slots
+
+  // Calculate X positions for each row (centered)
+  const getRowStartX = (slotsInRow) => {
+    const totalRowWidth = slotsInRow * slotWidth + (slotsInRow - 1) * xGap;
+    return (canvasWidth - totalRowWidth) / 2;
+  };
+
+  const row1StartX = getRowStartX(row1Count);
+  const row2StartX = getRowStartX(row2Count);
+
+  // Helper to get slot position
+  const getSlotPosition = (index) => {
+    if (index < row1Count) {
+      // Row 1
+      return {
+        x: row1StartX + index * (slotWidth + xGap),
+        y: startY
+      };
+    } else {
+      // Row 2
+      const col = index - row1Count;
+      return {
+        x: row2StartX + col * (slotWidth + xGap),
+        y: startY + ySpacing
+      };
+    }
+  };
+
+  // Draw filled slots
   for (let i = 0; i < Math.min(players.length, MAX_PLAYERS); i++) {
-    const row = Math.floor(i / slotsPerRow);
-    const col = i % slotsPerRow;
-    const x = startX + col * xSpacing;
-    const y = startY + row * ySpacing;
+    const { x, y } = getSlotPosition(i);
     const player = players[i];
     const isHost = player.id === team.host.id;
 
@@ -331,10 +358,7 @@ async function drawAvailabilityGrid(ctx, team, rankInfoMap, avatars, canvasWidth
 
   // Draw empty slots if < 7 players
   for (let i = players.length; i < MAX_PLAYERS; i++) {
-    const row = Math.floor(i / slotsPerRow);
-    const col = i % slotsPerRow;
-    const x = startX + col * xSpacing;
-    const y = startY + row * ySpacing;
+    const { x, y } = getSlotPosition(i);
 
     drawPlayerSlotBackground(ctx, x, y, slotWidth, slotHeight, false, "#ff4654");
     ctx.fillStyle = "#555";
@@ -355,10 +379,12 @@ async function drawAvailabilityGrid(ctx, team, rankInfoMap, avatars, canvasWidth
 }
 
 /**
- * Draw active roster for Phase 2/3
+ * Draw active roster for Phase 2/3 - properly centered
  */
 async function drawActiveRoster(ctx, team, rankInfoMap, avatars, canvasWidth, startY, slotWidth, slotHeight, spacing) {
-  const startX = (canvasWidth - (5 * spacing - (spacing - slotWidth))) / 2;
+  const xGap = spacing - slotWidth; // Gap between slots
+  const totalWidth = 5 * slotWidth + 4 * xGap;
+  const startX = (canvasWidth - totalWidth) / 2;
 
   for (let i = 0; i < 5; i++) {
     const x = startX + i * spacing;
@@ -520,14 +546,16 @@ function drawRoleCompositionBar(ctx, activeRoster, agentAssignments, canvasWidth
 }
 
 /**
- * Draw bench section
+ * Draw bench section - properly centered
  */
 async function drawBenchSection(ctx, team, rankInfoMap, avatars, canvasWidth, startY) {
   const benchPlayers = team.bench;
   const slotWidth = 90;
   const slotHeight = 90;
-  const spacing = 120;
-  const startX = (canvasWidth - (benchPlayers.length * spacing - (spacing - slotWidth))) / 2;
+  const xGap = 30; // Gap between bench slots
+  const numSlots = Math.max(benchPlayers.length, 2); // Always show at least 2 slots for visual balance
+  const totalWidth = numSlots * slotWidth + (numSlots - 1) * xGap;
+  const startX = (canvasWidth - totalWidth) / 2;
 
   // Section label
   ctx.font = "bold 12px Arial";
@@ -536,7 +564,7 @@ async function drawBenchSection(ctx, team, rankInfoMap, avatars, canvasWidth, st
   ctx.fillText(`BENCH (${benchPlayers.length}/2)`, canvasWidth / 2, startY - 5);
 
   for (let i = 0; i < benchPlayers.length; i++) {
-    const x = startX + i * spacing;
+    const x = startX + i * (slotWidth + xGap);
     const y = startY + 5;
     const player = benchPlayers[i];
 

@@ -1,4 +1,4 @@
-const convex = require('../../utils/convexClient');
+const { client: convex } = require('../../utils/convexClient');
 const { api } = require('../../convex/_generated/api');
 
 /**

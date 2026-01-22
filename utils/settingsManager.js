@@ -1,4 +1,4 @@
-const convex = require("./convexClient");
+const { client: convex } = require("./convexClient");
 // api import removed to avoid ESM issues in Node.js environment
 const { CleanupMap } = require("./memoryUtils");
 

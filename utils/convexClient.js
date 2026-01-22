@@ -40,5 +40,9 @@ if (process.env.CONVEX_URL) {
 }
 
 // Export both the client directly (for backward compatibility) and the getter function
-module.exports = client;
-module.exports.getConvexClient = getConvexClient;
+module.exports = {
+  client,
+  getConvexClient,
+};
+// Allow direct access for backward compatibility
+module.exports.default = client;
