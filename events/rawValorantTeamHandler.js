@@ -7,7 +7,6 @@ const {
   StringSelectMenuBuilder,
 } = require("discord.js");
 const { createCanvas } = require("canvas");
-// TARGET_GUILD_ID removed for multi-guild support
 const { LimitedMap } = require("../utils/memoryUtils");
 const {
   loadImageFromURL,
@@ -16,17 +15,19 @@ const {
   drawGlowText,
   drawPlayerSlotBackground,
   getRankColor,
+  getRankAbbreviation,
 } = require("../utils/valorantCanvasUtils");
 
 // Import functions from the API handler (with persistent storage)
 const apiHandler = require("./valorantApiHandler");
 const { saveTeamToHistory } = require("../database/helpers/teamHistoryHelpers");
 const { getSetting } = require("../utils/settingsManager");
-const { getAgentById } = require("../valorantApi/agentUtils");
+const { getAgentById, getAgentsByRole, getAllRoles, ROLE_EMOJIS, ROLE_COLORS } = require("../valorantApi/agentUtils");
 
 // Configuration - legacy fallback ID
 const DEFAULT_RAW_VALORANT_ROLE_ID = "1166209212418904145";
-const TEAM_NAME = "RaW Valorant";
+const TEAM_NAME = "RaW Premiere";
+const MAX_PLAYERS = 7; // 5 active + 2 bench
 
 // Helper to get RaW Valorant role from settings
 async function getRawValorantRoleId(guildId) {
@@ -43,6 +44,13 @@ const RANK_CACHE_TTL = 5 * 60 * 1000;
 // Resend interval in milliseconds (10 minutes)
 const RESEND_INTERVAL = 10 * 60 * 1000;
 const TEAM_LIFETIME = 4 * 60 * 60 * 1000; // 4 hours
+
+// Phase constants
+const PHASES = {
+  AVAILABILITY: "availability",
+  TEAM_BUILDING: "team_building",
+  READY: "ready",
+};
 
 /**
  * Batch fetch rank info for multiple users with caching
@@ -113,57 +121,91 @@ async function batchGetUserRankInfo(guildId, userIds) {
 }
 
 /**
- * Get total team members count
+ * Get total available players count
  */
-function getTotalMembers(team) {
-  return 1 + team.members.length;
+function getTotalAvailable(team) {
+  return team.availablePlayers.length;
+}
+
+/**
+ * Calculate role composition from active roster
+ */
+function calculateRoleComposition(activeRoster, agentAssignments) {
+  const comp = { Controller: 0, Duelist: 0, Initiator: 0, Sentinel: 0 };
+  for (const player of activeRoster) {
+    const agentId = agentAssignments.get(player.id) || player.preferredAgents?.[0];
+    if (agentId) {
+      const agent = getAgentById(agentId);
+      if (agent) comp[agent.role]++;
+    }
+  }
+  return comp;
 }
 
 /**
  * Create optimized team visualization with batch rank loading
  */
 async function createTeamVisualization(team) {
-  const canvas = createCanvas(700, 220);
+  const showBench = team.phase === PHASES.TEAM_BUILDING || team.phase === PHASES.READY;
+  const canvasWidth = 800;
+  const canvasHeight = showBench ? 420 : 320;
+
+  const canvas = createCanvas(canvasWidth, canvasHeight);
   const ctx = canvas.getContext("2d");
 
   // Use shared background utility
-  createValorantBackground(ctx, 700, 220);
-  createAccentBorder(ctx, 700, 220, "#ff4654", 6);
+  createValorantBackground(ctx, canvasWidth, canvasHeight);
+  createAccentBorder(ctx, canvasWidth, canvasHeight, "#ff4654", 6);
 
-  // Title with glow
-  const titleText = `🎯 ${team.name.toUpperCase()}`;
-  drawGlowText(ctx, titleText, 350, 40, {
-    font: "bold 28px Arial",
+  // Phase-specific title
+  const phaseTitle = {
+    [PHASES.AVAILABILITY]: "AVAILABILITY",
+    [PHASES.TEAM_BUILDING]: "TEAM BUILDING",
+    [PHASES.READY]: "READY TO PLAY",
+  };
+
+  const titleText = `🎯 ${team.name.toUpperCase()} - ${phaseTitle[team.phase]}`;
+  drawGlowText(ctx, titleText, canvasWidth / 2, 35, {
+    font: "bold 24px Arial",
     glowColor: "#ff4654",
   });
 
-  // Team status
-  const totalMembers = getTotalMembers(team);
-  const isFull = totalMembers >= 5;
-  ctx.font = "bold 16px Arial";
-  ctx.fillStyle = isFull ? "#00ff88" : "#ffaa00";
+  // Status line
+  const totalAvailable = getTotalAvailable(team);
+  ctx.font = "bold 14px Arial";
   ctx.textAlign = "center";
-  ctx.fillText(
-    `${totalMembers}/5 PLAYERS ${isFull ? "READY" : "NEEDED"}`,
-    350,
-    65
-  );
+
+  if (team.phase === PHASES.AVAILABILITY) {
+    ctx.fillStyle = totalAvailable >= 5 ? "#00ff88" : "#ffaa00";
+    ctx.fillText(
+      `${totalAvailable}/${MAX_PLAYERS} Available ${totalAvailable >= 5 ? "- Ready to Build!" : "- Need 5+ to Build"}`,
+      canvasWidth / 2,
+      58
+    );
+  } else {
+    ctx.fillStyle = team.activeRoster.length >= 5 ? "#00ff88" : "#ffaa00";
+    ctx.fillText(
+      `Active: ${team.activeRoster.length}/5 | Bench: ${team.bench.length}/2`,
+      canvasWidth / 2,
+      58
+    );
+  }
 
   // Layout constants
-  const slotWidth = 120;
-  const slotHeight = 120;
-  const startX = 40;
+  const slotWidth = 130;
+  const slotHeight = 130;
   const startY = 75;
-  const spacing = 130;
+  const spacing = 145;
 
-  const allMembers = [team.leader, ...team.members];
-
-  // Batch fetch all rank info upfront
-  const userIds = allMembers.filter((m) => m).map((m) => m.id);
+  // Get all player IDs for rank fetch
+  const allPlayers = team.phase === PHASES.AVAILABILITY
+    ? team.availablePlayers
+    : [...team.activeRoster, ...team.bench];
+  const userIds = allPlayers.map((m) => m.id);
   const rankInfoMap = await batchGetUserRankInfo(team.guildId, userIds);
 
   // Batch load all avatars in parallel
-  const avatarPromises = allMembers.map(async (member) => {
+  const avatarPromises = allPlayers.slice(0, 7).map(async (member) => {
     if (!member) return null;
     const avatarURL =
       member.avatarURL ||
@@ -176,35 +218,173 @@ async function createTeamVisualization(team) {
   });
   const avatars = await Promise.all(avatarPromises);
 
-  // Draw all slots
+  if (team.phase === PHASES.AVAILABILITY) {
+    // Availability phase: Show all available players in a grid
+    await drawAvailabilityGrid(ctx, team, rankInfoMap, avatars, canvasWidth, startY);
+  } else {
+    // Team building / Ready phase: Show active roster + bench
+    await drawActiveRoster(ctx, team, rankInfoMap, avatars.slice(0, 5), canvasWidth, startY, slotWidth, slotHeight, spacing);
+
+    // Role composition bar
+    const roleY = startY + slotHeight + 50;
+    drawRoleCompositionBar(ctx, team.activeRoster, team.agentAssignments, canvasWidth, roleY);
+
+    // Bench section
+    if (showBench && team.bench.length > 0) {
+      const benchY = roleY + 40;
+      await drawBenchSection(ctx, team, rankInfoMap, avatars.slice(5, 7), canvasWidth, benchY);
+    }
+  }
+
+  return canvas.toBuffer();
+}
+
+/**
+ * Draw availability grid for Phase 1
+ */
+async function drawAvailabilityGrid(ctx, team, rankInfoMap, avatars, canvasWidth, startY) {
+  const players = team.availablePlayers;
+  const slotWidth = 100;
+  const slotHeight = 110;
+  const slotsPerRow = 4;
+  const xSpacing = 180;
+  const ySpacing = 125;
+  const startX = (canvasWidth - (Math.min(players.length, slotsPerRow) * xSpacing - (xSpacing - slotWidth))) / 2;
+
+  for (let i = 0; i < Math.min(players.length, MAX_PLAYERS); i++) {
+    const row = Math.floor(i / slotsPerRow);
+    const col = i % slotsPerRow;
+    const x = startX + col * xSpacing;
+    const y = startY + row * ySpacing;
+    const player = players[i];
+    const isHost = player.id === team.host.id;
+
+    // Slot background
+    drawPlayerSlotBackground(ctx, x, y, slotWidth, slotHeight, true, isHost ? "#ffd700" : "#ff4654");
+
+    // Avatar
+    const avatar = avatars[i];
+    if (avatar) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x + slotWidth / 2, y + 35, 25, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(avatar, x + slotWidth / 2 - 25, y + 10, 50, 50);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#5865f2";
+      ctx.beginPath();
+      ctx.arc(x + slotWidth / 2, y + 35, 25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "24px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("👤", x + slotWidth / 2, y + 43);
+    }
+
+    // Host crown
+    if (isHost) {
+      ctx.font = "18px Arial";
+      ctx.fillStyle = "#ffd700";
+      ctx.shadowColor = "#ffd700";
+      ctx.shadowBlur = 5;
+      ctx.textAlign = "center";
+      ctx.fillText("👑", x + slotWidth / 2, y - 2);
+      ctx.shadowBlur = 0;
+    }
+
+    // Username
+    ctx.font = "bold 11px Arial";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    const displayName = player.displayName || player.username;
+    const truncatedName = displayName.length > 14 ? displayName.substring(0, 13) + "…" : displayName;
+    ctx.fillText(truncatedName, x + slotWidth / 2, y + 72);
+
+    // Rank info
+    const userRankInfo = rankInfoMap.get(player.id);
+    if (userRankInfo) {
+      const rankColor = userRankInfo.color || getRankColor(userRankInfo.tier);
+      ctx.font = "bold 9px Arial";
+      ctx.fillStyle = rankColor;
+      ctx.fillText(`${userRankInfo.name} (${userRankInfo.rr} RR)`, x + slotWidth / 2, y + 86);
+
+      // Preferred agents
+      if (userRankInfo.preferredAgents && userRankInfo.preferredAgents.length > 0) {
+        ctx.font = "9px Arial";
+        ctx.fillStyle = "#aaaaaa";
+        const agentText = userRankInfo.preferredAgents
+          .slice(0, 3)
+          .map(id => {
+            const agent = getAgentById(id);
+            return agent ? agent.name.substring(0, 4) : id.substring(0, 4);
+          })
+          .join("/");
+        ctx.fillText(agentText, x + slotWidth / 2, y + 100);
+      }
+    } else {
+      ctx.font = "bold 9px Arial";
+      ctx.fillStyle = "#666";
+      ctx.fillText("!valstats", x + slotWidth / 2, y + 86);
+    }
+
+    // Slot number
+    ctx.fillStyle = "#aaa";
+    ctx.font = "bold 10px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(`${i + 1}`, x + slotWidth / 2, y + slotHeight + 12);
+  }
+
+  // Draw empty slots if < 7 players
+  for (let i = players.length; i < MAX_PLAYERS; i++) {
+    const row = Math.floor(i / slotsPerRow);
+    const col = i % slotsPerRow;
+    const x = startX + col * xSpacing;
+    const y = startY + row * ySpacing;
+
+    drawPlayerSlotBackground(ctx, x, y, slotWidth, slotHeight, false, "#ff4654");
+    ctx.fillStyle = "#555";
+    ctx.font = "bold 12px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("OPEN", x + slotWidth / 2, y + slotHeight / 2 - 5);
+    ctx.font = "10px Arial";
+    ctx.fillStyle = "#888";
+    ctx.fillText("Click Available", x + slotWidth / 2, y + slotHeight / 2 + 10);
+
+    // Dashed border
+    ctx.strokeStyle = "rgba(255, 70, 84, 0.4)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(x + 5, y + 5, slotWidth - 10, slotHeight - 10);
+    ctx.setLineDash([]);
+  }
+}
+
+/**
+ * Draw active roster for Phase 2/3
+ */
+async function drawActiveRoster(ctx, team, rankInfoMap, avatars, canvasWidth, startY, slotWidth, slotHeight, spacing) {
+  const startX = (canvasWidth - (5 * spacing - (spacing - slotWidth))) / 2;
+
   for (let i = 0; i < 5; i++) {
     const x = startX + i * spacing;
     const y = startY;
-    const member = allMembers[i];
-    const isFilled = !!member;
+    const player = team.activeRoster[i];
+    const isFilled = !!player;
 
-    // Draw slot background
-    drawPlayerSlotBackground(
-      ctx,
-      x,
-      y,
-      slotWidth,
-      slotHeight,
-      isFilled,
-      "#ff4654"
-    );
+    drawPlayerSlotBackground(ctx, x, y, slotWidth, slotHeight, isFilled, "#ff4654");
 
-    if (member) {
+    if (player) {
       const avatar = avatars[i];
-      const isLeader = i === 0;
+      const isHost = player.id === team.host.id;
 
-      // Leader glow
-      if (isLeader) {
+      // Host glow
+      if (isHost) {
         ctx.shadowColor = "#ffd700";
         ctx.shadowBlur = 15;
       }
 
-      // Draw avatar
+      // Avatar
       if (avatar) {
         ctx.save();
         ctx.beginPath();
@@ -213,7 +393,6 @@ async function createTeamVisualization(team) {
         ctx.drawImage(avatar, x + slotWidth / 2 - 30, y + 10, 60, 60);
         ctx.restore();
       } else {
-        // Fallback avatar
         ctx.fillStyle = "#5865f2";
         ctx.beginPath();
         ctx.arc(x + slotWidth / 2, y + 40, 30, 0, Math.PI * 2);
@@ -225,75 +404,67 @@ async function createTeamVisualization(team) {
       }
       ctx.shadowBlur = 0;
 
-      // Leader crown
-      if (isLeader) {
-        ctx.font = "22px Arial";
+      // Host crown
+      if (isHost) {
+        ctx.font = "20px Arial";
         ctx.fillStyle = "#ffd700";
         ctx.shadowColor = "#ffd700";
         ctx.shadowBlur = 5;
         ctx.textAlign = "center";
-        ctx.fillText("👑", x + slotWidth / 2, y - 5);
+        ctx.fillText("👑", x + slotWidth / 2, y - 3);
         ctx.shadowBlur = 0;
       }
 
       // Username
-      ctx.font = "bold 12px Arial";
+      ctx.font = "bold 11px Arial";
       ctx.fillStyle = "#ffffff";
       ctx.textAlign = "center";
-      const displayName = member.displayName || member.username;
-      const truncatedName =
-        displayName.length > 12
-          ? displayName.substring(0, 11) + "…"
-          : displayName;
-      ctx.fillText(truncatedName, x + slotWidth / 2, y + 85);
+      const displayName = player.displayName || player.username;
+      const truncatedName = displayName.length > 14 ? displayName.substring(0, 13) + "…" : displayName;
+      ctx.fillText(truncatedName, x + slotWidth / 2, y + 82);
 
-      // Rank info (from batch fetch)
-      const userRankInfo = rankInfoMap.get(member.id);
+      // Assigned agent (highlighted) or preferred agent
+      const assignedAgent = team.agentAssignments.get(player.id);
+      const userRankInfo = rankInfoMap.get(player.id);
+
+      if (assignedAgent) {
+        const agent = getAgentById(assignedAgent);
+        if (agent) {
+          ctx.fillStyle = ROLE_COLORS[agent.role] || "#ffffff";
+          ctx.font = "bold 10px Arial";
+          ctx.fillText(`${agent.emoji} ${agent.name}`, x + slotWidth / 2, y + 96);
+        }
+      } else if (userRankInfo && userRankInfo.preferredAgents && userRankInfo.preferredAgents.length > 0) {
+        ctx.font = "9px Arial";
+        ctx.fillStyle = "#aaaaaa";
+        const agentText = userRankInfo.preferredAgents
+          .slice(0, 2)
+          .map(id => {
+            const agent = getAgentById(id);
+            return agent ? agent.name.substring(0, 5) : id.substring(0, 5);
+          })
+          .join("/");
+        ctx.fillText(agentText, x + slotWidth / 2, y + 96);
+      }
+
+      // Rank indicator
       if (userRankInfo) {
-        // Draw rank indicator
         const rankColor = userRankInfo.color || getRankColor(userRankInfo.tier);
         ctx.fillStyle = rankColor;
         ctx.beginPath();
-        ctx.arc(x + slotWidth - 20, y + slotHeight - 20, 12, 0, Math.PI * 2);
+        ctx.arc(x + slotWidth - 18, y + slotHeight - 18, 12, 0, Math.PI * 2);
         ctx.fill();
 
-        // Rank text
         ctx.font = "bold 8px Arial";
         ctx.fillStyle = "#fff";
         ctx.textAlign = "center";
-        const rankAbbr = userRankInfo.name
-          .split(" ")[0]
-          .substring(0, 3)
-          .toUpperCase();
-        ctx.fillText(rankAbbr, x + slotWidth - 20, y + slotHeight - 17);
+        const rankAbbr = getRankAbbreviation(userRankInfo.tier);
+        ctx.fillText(rankAbbr, x + slotWidth - 18, y + slotHeight - 15);
 
         // RR display
-        if (userRankInfo.rr !== undefined) {
-          ctx.font = "bold 10px Arial";
-          ctx.fillStyle = rankColor;
-          ctx.fillText(`${userRankInfo.rr} RR`, x + slotWidth / 2, y + 102);
-        }
-
-        // Preferred agents display (below RR)
-        if (userRankInfo.preferredAgents && userRankInfo.preferredAgents.length > 0) {
-          ctx.font = "9px Arial";
-          ctx.fillStyle = "#aaaaaa";
-          ctx.textAlign = "center";
-          const agentText = userRankInfo.preferredAgents
-            .slice(0, 3)
-            .map(id => {
-              const agent = getAgentById(id);
-              return agent ? agent.name.substring(0, 4) : id.substring(0, 4);
-            })
-            .join("/");
-          ctx.fillText(agentText, x + slotWidth / 2, y + 113);
-        }
-      } else {
-        // Not registered indicator
         ctx.font = "bold 9px Arial";
-        ctx.fillStyle = "#666";
-        ctx.textAlign = "center";
-        ctx.fillText("!valstats", x + slotWidth / 2, y + 102);
+        ctx.fillStyle = rankColor;
+        ctx.fillText(`${userRankInfo.rr} RR`, x + slotWidth / 2, y + 110);
       }
     } else {
       // Empty slot
@@ -303,9 +474,8 @@ async function createTeamVisualization(team) {
       ctx.fillText("OPEN", x + slotWidth / 2, y + slotHeight / 2 - 5);
       ctx.font = "11px Arial";
       ctx.fillStyle = "#888";
-      ctx.fillText("Click Join", x + slotWidth / 2, y + slotHeight / 2 + 12);
+      ctx.fillText("Select Player", x + slotWidth / 2, y + slotHeight / 2 + 12);
 
-      // Dashed border for empty
       ctx.strokeStyle = "rgba(255, 70, 84, 0.4)";
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]);
@@ -319,125 +489,273 @@ async function createTeamVisualization(team) {
     ctx.textAlign = "center";
     ctx.fillText(`${i + 1}`, x + slotWidth / 2, y + slotHeight + 15);
   }
+}
 
-  return canvas.toBuffer();
+/**
+ * Draw role composition bar
+ */
+function drawRoleCompositionBar(ctx, activeRoster, agentAssignments, canvasWidth, y) {
+  const comp = calculateRoleComposition(activeRoster, agentAssignments);
+  const roles = getAllRoles();
+  const barWidth = 600;
+  const startX = (canvasWidth - barWidth) / 2;
+
+  ctx.font = "bold 12px Arial";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#888";
+  ctx.fillText("ROLE COMPOSITION", canvasWidth / 2, y - 5);
+
+  let currentX = startX;
+  const segmentWidth = barWidth / 4;
+
+  for (const role of roles) {
+    const count = comp[role];
+    const color = ROLE_COLORS[role];
+    const emoji = ROLE_EMOJIS[role];
+
+    ctx.fillStyle = count > 0 ? color : "#333";
+    ctx.fillRect(currentX, y + 5, segmentWidth - 5, 20);
+
+    ctx.fillStyle = count > 0 ? "#fff" : "#666";
+    ctx.font = "bold 10px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(`${emoji} ${role.substring(0, 4)}: ${count}`, currentX + (segmentWidth - 5) / 2, y + 19);
+
+    currentX += segmentWidth;
+  }
+}
+
+/**
+ * Draw bench section
+ */
+async function drawBenchSection(ctx, team, rankInfoMap, avatars, canvasWidth, startY) {
+  const benchPlayers = team.bench;
+  const slotWidth = 90;
+  const slotHeight = 90;
+  const spacing = 120;
+  const startX = (canvasWidth - (benchPlayers.length * spacing - (spacing - slotWidth))) / 2;
+
+  // Section label
+  ctx.font = "bold 12px Arial";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#888";
+  ctx.fillText(`BENCH (${benchPlayers.length}/2)`, canvasWidth / 2, startY - 5);
+
+  for (let i = 0; i < benchPlayers.length; i++) {
+    const x = startX + i * spacing;
+    const y = startY + 5;
+    const player = benchPlayers[i];
+
+    // Dimmed slot background
+    ctx.globalAlpha = 0.7;
+    drawPlayerSlotBackground(ctx, x, y, slotWidth, slotHeight, true, "#666");
+    ctx.globalAlpha = 1.0;
+
+    // Avatar (smaller)
+    const avatar = avatars[i];
+    if (avatar) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x + slotWidth / 2, y + 28, 20, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(avatar, x + slotWidth / 2 - 20, y + 8, 40, 40);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#5865f2";
+      ctx.beginPath();
+      ctx.arc(x + slotWidth / 2, y + 28, 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "20px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("👤", x + slotWidth / 2, y + 35);
+    }
+
+    // Username
+    ctx.font = "bold 10px Arial";
+    ctx.fillStyle = "#cccccc";
+    ctx.textAlign = "center";
+    const displayName = player.displayName || player.username;
+    const truncatedName = displayName.length > 12 ? displayName.substring(0, 11) + "…" : displayName;
+    ctx.fillText(truncatedName, x + slotWidth / 2, y + 58);
+
+    // Rank
+    const userRankInfo = rankInfoMap.get(player.id);
+    if (userRankInfo) {
+      ctx.font = "bold 8px Arial";
+      ctx.fillStyle = userRankInfo.color || getRankColor(userRankInfo.tier);
+      ctx.fillText(`${userRankInfo.name}`, x + slotWidth / 2, y + 72);
+    }
+
+    // "BENCH" label
+    ctx.font = "bold 8px Arial";
+    ctx.fillStyle = "#ff9900";
+    ctx.fillText("BENCH", x + slotWidth / 2, y + 85);
+  }
 }
 
 /**
  * Create team embed with visual display
  */
 async function createTeamEmbed(team) {
-  const totalMembers = getTotalMembers(team);
-  const isFull = totalMembers >= 5;
+  const totalAvailable = getTotalAvailable(team);
+  const canBuild = totalAvailable >= 5;
 
   const teamImageBuffer = await createTeamVisualization(team);
   const attachment = new AttachmentBuilder(teamImageBuffer, {
     name: "team.png",
   });
 
-  // Get leader rank from cache
+  // Get host rank from cache
   const rankInfoMap = await batchGetUserRankInfo(
     team.guildId,
-    [team.leader, ...team.members].map((m) => m.id)
+    team.availablePlayers.map((m) => m.id)
   );
-  const leaderRankInfo = rankInfoMap.get(team.leader.id);
-  const leaderRankText = leaderRankInfo
-    ? `${leaderRankInfo.name} (${leaderRankInfo.rr ?? 0} RR)`
+  const hostRankInfo = rankInfoMap.get(team.host.id);
+  const hostRankText = hostRankInfo
+    ? `${hostRankInfo.name} (${hostRankInfo.rr ?? 0} RR)`
     : "❓ Use !valstats to register";
 
-  // Calculate average rank
-  let totalTier = 0;
-  let rankedCount = 0;
-  for (const member of [team.leader, ...team.members]) {
-    const rank = rankInfoMap.get(member.id);
-    if (rank) {
-      totalTier += rank.tier;
-      rankedCount++;
-    }
+  let description, footerText;
+  let color = "#ff4654";
+
+  if (team.phase === PHASES.AVAILABILITY) {
+    description = [
+      `**Host:** ${team.host.displayName}`,
+      `**Host Rank:** ${hostRankText}`,
+      `**Status:** ${totalAvailable}/${MAX_PLAYERS} Players Available`,
+      canBuild ? "\n✅ **Ready to build team!** Host can click 'Build Team'" : "",
+    ].filter(Boolean).join("\n");
+
+    footerText = canBuild
+      ? "Host: Click 'Build Team' to select your roster"
+      : `💡 Need ${5 - totalAvailable} more players | Click 'I'm Available' to join`;
+
+    color = canBuild ? "#00ff88" : "#ffaa00";
+  } else if (team.phase === PHASES.TEAM_BUILDING) {
+    description = [
+      `**Host:** ${team.host.displayName}`,
+      `**Active Roster:** ${team.activeRoster.length}/5`,
+      `**Bench:** ${team.bench.length}/2`,
+    ].join("\n");
+
+    footerText = "Host: Select players for roster, then assign agents";
+    color = "#3498db";
+  } else {
+    description = [
+      `**Host:** ${team.host.displayName}`,
+      `**Status:** Team Ready! 🎮`,
+      `**Active:** ${team.activeRoster.length}/5 | **Bench:** ${team.bench.length}/2`,
+    ].join("\n");
+
+    footerText = "GLHF! 🎯";
+    color = "#00ff88";
   }
-  const avgRank =
-    rankedCount > 0
-      ? apiHandler.RANK_MAPPING[Math.round(totalTier / rankedCount)]?.name ||
-        "Unknown"
-      : "N/A";
 
   const embed = new EmbedBuilder()
-    .setColor(isFull ? "#00ff88" : "#ff4654")
+    .setColor(color)
     .setTitle(`🎯 ${team.name}`)
-    .setDescription(
-      [
-        `**Leader:** ${team.leader.displayName}`,
-        `**Rank:** ${leaderRankText}`,
-        `**Avg Rank:** ${avgRank}`,
-        `**Status:** ${totalMembers}/5 Players`,
-      ].join("\n")
-    )
+    .setDescription(description)
     .setImage("attachment://team.png")
-    .setFooter({
-      text: isFull
-        ? "✅ Team complete! Queue up!"
-        : "💡 Click Join to fill the team (RaW Role Required)",
-    })
+    .setFooter({ text: footerText })
     .setTimestamp();
 
   return { embed, files: [attachment] };
 }
 
 /**
- * Create team action buttons - simplified layout
+ * Create team action buttons based on phase
  */
-function createTeamButtons(teamId, isFull, team = null) {
-  const messageId = teamId.replace("raw_valorant_team_", "");
-  const teamCount = team ? getTotalMembers(team) : "?";
+function createTeamButtons(teamId, team) {
+  const messageId = teamId.replace("raw_premiere_team_", "");
+  const totalAvailable = getTotalAvailable(team);
+  const canBuild = totalAvailable >= 5;
+  const isFull = totalAvailable >= MAX_PLAYERS;
 
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`raw_valorant_join_${messageId}`)
-      .setLabel(isFull ? "Full (5/5)" : `Join (${teamCount}/5)`)
-      .setStyle(isFull ? ButtonStyle.Secondary : ButtonStyle.Success)
-      .setEmoji(isFull ? "✅" : "➕")
-      .setDisabled(isFull),
-    new ButtonBuilder()
-      .setCustomId(`raw_valorant_leave_${messageId}`)
-      .setLabel("Leave")
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji("🚪")
-  );
-
-  // Add Close button if 2-4 players
-  if (teamCount >= 2 && teamCount < 5) {
-    row1.addComponents(
+  if (team.phase === PHASES.AVAILABILITY) {
+    const row1 = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(`raw_valorant_close_${messageId}`)
-        .setLabel("Close Team")
+        .setCustomId(`raw_premiere_available_${messageId}`)
+        .setLabel(isFull ? `Full (${totalAvailable}/${MAX_PLAYERS})` : `I'm Available (${totalAvailable}/${MAX_PLAYERS})`)
+        .setStyle(isFull ? ButtonStyle.Secondary : ButtonStyle.Success)
+        .setEmoji(isFull ? "✅" : "➕")
+        .setDisabled(isFull),
+      new ButtonBuilder()
+        .setCustomId(`raw_premiere_unavailable_${messageId}`)
+        .setLabel("Can't Make It")
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji("🚪"),
+      new ButtonBuilder()
+        .setCustomId(`raw_premiere_buildteam_${messageId}`)
+        .setLabel("Build Team")
         .setStyle(ButtonStyle.Primary)
-        .setEmoji("🔒")
+        .setEmoji("🔧")
+        .setDisabled(!canBuild)
     );
+
+    const row2 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`raw_premiere_disband_${messageId}`)
+        .setLabel("Disband")
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji("🗑️")
+    );
+
+    return [row1, row2];
+  } else if (team.phase === PHASES.TEAM_BUILDING) {
+    const row1 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`raw_premiere_addtoroster_${messageId}`)
+        .setLabel("Add to Roster")
+        .setStyle(ButtonStyle.Success)
+        .setEmoji("➕")
+        .setDisabled(team.activeRoster.length >= 5 || team.bench.length === 0),
+      new ButtonBuilder()
+        .setCustomId(`raw_premiere_movetobench_${messageId}`)
+        .setLabel("Move to Bench")
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji("📥")
+        .setDisabled(team.bench.length >= 2 || team.activeRoster.length === 0),
+      new ButtonBuilder()
+        .setCustomId(`raw_premiere_assignagent_${messageId}`)
+        .setLabel("Assign Agents")
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji("🎮")
+        .setDisabled(team.activeRoster.length === 0)
+    );
+
+    const row2 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`raw_premiere_confirmroster_${messageId}`)
+        .setLabel("Confirm & Ready")
+        .setStyle(ButtonStyle.Success)
+        .setEmoji("✅")
+        .setDisabled(team.activeRoster.length < 5),
+      new ButtonBuilder()
+        .setCustomId(`raw_premiere_backtoavail_${messageId}`)
+        .setLabel("Back")
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji("↩️")
+    );
+
+    return [row1, row2];
+  } else {
+    // READY phase
+    const row1 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`raw_premiere_editroster_${messageId}`)
+        .setLabel("Edit Roster")
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji("✏️"),
+      new ButtonBuilder()
+        .setCustomId(`raw_premiere_disband_${messageId}`)
+        .setLabel("Disband")
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji("🗑️")
+    );
+
+    return [row1];
   }
-
-  // Add Disband button
-  row1.addComponents(
-    new ButtonBuilder()
-      .setCustomId(`raw_valorant_disband_${messageId}`)
-      .setLabel("Disband")
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji("🗑️")
-  );
-
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`raw_valorant_reassign_${messageId}`)
-      .setLabel("Transfer")
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji("👑"),
-    new ButtonBuilder()
-      .setCustomId(`raw_valorant_invite_${messageId}`)
-      .setLabel("Invite")
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji("📨")
-  );
-
-  return [row1, row2];
 }
 
 /**
@@ -446,7 +764,7 @@ function createTeamButtons(teamId, isFull, team = null) {
 function createDisbandedEmbed() {
   return new EmbedBuilder()
     .setColor("#ff0000")
-    .setTitle("❌ RaW Team Disbanded")
+    .setTitle("❌ RaW Premiere Disbanded")
     .setDescription(
       "This team has been disbanded.\n\n**Create a new team:** `!rawteam` or mention @RaW Valorant"
     )
@@ -483,9 +801,59 @@ async function safeInteractionResponse(interaction, type, data) {
     }
     return true;
   } catch (error) {
-    console.error("[RaW Team] Interaction error:", error.message);
+    console.error("[RaW Premiere] Interaction error:", error.message);
     return false;
   }
+}
+
+/**
+ * Create player select menu for roster management
+ */
+function createPlayerSelectMenu(teamId, players, placeholder, customIdPrefix) {
+  const messageId = teamId.replace("raw_premiere_team_", "");
+
+  if (players.length === 0) {
+    return null;
+  }
+
+  const options = players.slice(0, 25).map((player, index) => ({
+    label: player.displayName || player.username,
+    value: player.id,
+    description: `Player ${index + 1}`,
+    emoji: player.id === players[0]?.id ? "👑" : "👤",
+  }));
+
+  return new StringSelectMenuBuilder()
+    .setCustomId(`${customIdPrefix}_${messageId}`)
+    .setPlaceholder(placeholder)
+    .addOptions(options);
+}
+
+/**
+ * Create agent select menu for a player
+ */
+function createAgentSelectMenu(teamId, userId, currentAgent = null) {
+  const messageId = teamId.replace("raw_premiere_team_", "");
+  const options = [];
+
+  // Group by role for better UX
+  for (const role of getAllRoles()) {
+    const roleAgents = getAgentsByRole(role);
+    for (const agent of roleAgents) {
+      options.push({
+        label: agent.name,
+        value: `${userId}_${agent.id}`,
+        description: `${role} ${ROLE_EMOJIS[role]}`,
+        emoji: agent.emoji,
+        default: agent.id === currentAgent,
+      });
+    }
+  }
+
+  return new StringSelectMenuBuilder()
+    .setCustomId(`raw_premiere_agentselect_${messageId}`)
+    .setPlaceholder("Select agent to assign")
+    .addOptions(options.slice(0, 25)); // Discord limit
 }
 
 module.exports = (client) => {
@@ -493,7 +861,7 @@ module.exports = (client) => {
 
   if (client._rawValorantTeamHandlerInitialized) return;
 
-  console.log("[RaW Valorant Team] Handler initialized");
+  console.log("[RaW Premiere] Handler initialized");
 
   /**
    * Update team message in place
@@ -517,9 +885,8 @@ module.exports = (client) => {
         return;
       }
 
-      const isFull = getTotalMembers(team) >= 5;
       const updatedEmbed = await createTeamEmbed(team);
-      const updatedComponents = createTeamButtons(teamId, isFull, team);
+      const updatedComponents = createTeamButtons(teamId, team);
 
       await message.edit({
         embeds: [updatedEmbed.embed],
@@ -527,8 +894,8 @@ module.exports = (client) => {
         components: updatedComponents,
       });
 
-      // Schedule next update if not full
-      if (!isFull) {
+      // Schedule next update if in availability phase
+      if (team.phase === PHASES.AVAILABILITY) {
         if (team.resendTimer) clearTimeout(team.resendTimer);
         team.resendTimer = setTimeout(
           () => updateTeamMessage(teamId),
@@ -567,7 +934,7 @@ module.exports = (client) => {
     if (!member.roles.cache.has(rawValorantRoleId)) {
       if (isCommand) {
         message
-          .reply("❌ You need the **RaW Valorant** role to create a RaW team!")
+          .reply("❌ You need the **RaW Valorant** role to create a RaW Premiere team!")
           .catch(() => {});
       }
       return;
@@ -576,23 +943,25 @@ module.exports = (client) => {
     // Create confirmation prompt
     const confirmationId = `${message.id}_${Date.now()}`;
     const confirmEmbed = new EmbedBuilder()
-      .setTitle("🎮 Create RaW Valorant Team?")
+      .setTitle("🎮 Create RaW Premiere Team?")
       .setColor("#ff4654")
       .setDescription(
-        `**${message.author.displayName}**, would you like to create a RaW Valorant team builder?\n\n` +
-        `This will create a 5-player team lobby for RaW members.`
+        `**${message.author.displayName}**, would you like to create a RaW Premiere availability check?\n\n` +
+        `• Players can sign up as available (up to ${MAX_PLAYERS})\n` +
+        `• At 5+ players, you can build your team\n` +
+        `• Assign agents and manage roster/bench`
       )
-      .setFooter({ text: "This prompt will expire in 5 seconds" })
+      .setFooter({ text: "This prompt will expire in 10 seconds" })
       .setTimestamp();
 
     const yesButton = new ButtonBuilder()
-      .setCustomId(`raw_valorant_confirm_yes_${confirmationId}`)
-      .setLabel("Yes, Create Team")
+      .setCustomId(`raw_premiere_confirm_yes_${confirmationId}`)
+      .setLabel("Yes, Create")
       .setStyle(ButtonStyle.Success)
       .setEmoji("✅");
 
     const noButton = new ButtonBuilder()
-      .setCustomId(`raw_valorant_confirm_no_${confirmationId}`)
+      .setCustomId(`raw_premiere_confirm_no_${confirmationId}`)
       .setLabel("No, Cancel")
       .setStyle(ButtonStyle.Danger)
       .setEmoji("❌");
@@ -615,28 +984,22 @@ module.exports = (client) => {
       confirmMessageId: confirmMessage.id,
     });
 
-    // Auto-delete after 5 seconds
+    // Auto-delete after 10 seconds
     setTimeout(() => {
       if (pendingRawTeamCreations.has(confirmationId)) {
         pendingRawTeamCreations.delete(confirmationId);
         confirmMessage.delete().catch(() => {});
       }
-    }, 5000); // 5 seconds
+    }, 10000);
   });
 
   // Interaction handler
   client.on("interactionCreate", async (interaction) => {
     try {
-      const {
-        ModalBuilder,
-        TextInputBuilder,
-        TextInputStyle,
-      } = require("discord.js");
-
       // Handle confirmation buttons
       if (interaction.isButton()) {
-        if (interaction.customId.startsWith("raw_valorant_confirm_yes_")) {
-          const confirmationId = interaction.customId.replace("raw_valorant_confirm_yes_", "");
+        if (interaction.customId.startsWith("raw_premiere_confirm_yes_")) {
+          const confirmationId = interaction.customId.replace("raw_premiere_confirm_yes_", "");
           const pending = pendingRawTeamCreations.get(confirmationId);
 
           if (!pending) {
@@ -660,19 +1023,36 @@ module.exports = (client) => {
           await interaction.update({
             embeds: [
               new EmbedBuilder()
-                .setTitle("✅ Creating RaW Team...")
+                .setTitle("✅ Creating RaW Premiere...")
                 .setColor("#00ff00")
-                .setDescription("Setting up your RaW Valorant team builder...")
+                .setDescription("Setting up your RaW Premiere availability check...")
             ],
             components: [],
           });
 
-          // Create the team
-          const teamId = `raw_valorant_team_${pending.messageId}`;
+          // Get user's rank info
+          const rankInfoMap = await batchGetUserRankInfo(pending.guildId, [pending.author.id]);
+          const hostRankInfo = rankInfoMap.get(pending.author.id);
+
+          // Create the team with new structure
+          const teamId = `raw_premiere_team_${pending.messageId}`;
+          const hostPlayer = {
+            id: pending.author.id,
+            username: pending.author.username,
+            displayName: pending.author.displayName || pending.author.username,
+            avatarURL: pending.author.displayAvatarURL({
+              extension: "png",
+              size: 128,
+            }),
+            joinedAt: new Date(),
+            preferredAgents: hostRankInfo?.preferredAgents || [],
+            rank: hostRankInfo ? { tier: hostRankInfo.tier, rr: hostRankInfo.rr, name: hostRankInfo.name } : null,
+          };
+
           const team = {
             id: teamId,
             guildId: pending.guildId,
-            leader: {
+            host: {
               id: pending.author.id,
               username: pending.author.username,
               displayName: pending.author.displayName || pending.author.username,
@@ -681,17 +1061,22 @@ module.exports = (client) => {
                 size: 128,
               }),
             },
-            members: [],
             channelId: pending.channelId,
             messageId: null,
-            resendTimer: null,
             name: TEAM_NAME,
             createdAt: new Date(),
+            phase: PHASES.AVAILABILITY,
+            availablePlayers: [hostPlayer], // Host is automatically available
+            activeRoster: [],
+            bench: [],
+            agentAssignments: new Map(),
+            resendTimer: null,
+            deleteTimer: null,
           };
 
           try {
             const embed = await createTeamEmbed(team);
-            const components = createTeamButtons(teamId, false, team);
+            const components = createTeamButtons(teamId, team);
 
             const teamMessage = await interaction.channel.send({
               embeds: [embed.embed],
@@ -728,7 +1113,7 @@ module.exports = (client) => {
               interaction.message?.delete().catch(() => {});
             }, 2000);
           } catch (error) {
-            console.error("[RaW Team] Creation error:", error);
+            console.error("[RaW Premiere] Creation error:", error);
             await interaction.followUp({
               content: "❌ Failed to create team. Try again.",
               ephemeral: true,
@@ -736,8 +1121,8 @@ module.exports = (client) => {
           }
 
           return;
-        } else if (interaction.customId.startsWith("raw_valorant_confirm_no_")) {
-          const confirmationId = interaction.customId.replace("raw_valorant_confirm_no_", "");
+        } else if (interaction.customId.startsWith("raw_premiere_confirm_no_")) {
+          const confirmationId = interaction.customId.replace("raw_premiere_confirm_no_", "");
           const pending = pendingRawTeamCreations.get(confirmationId);
 
           if (!pending) {
@@ -764,74 +1149,217 @@ module.exports = (client) => {
         }
       }
 
-      // Handle leader selection menu
-      if (
-        interaction.isStringSelectMenu() &&
-        interaction.customId.startsWith("raw_valorant_selectleader_")
-      ) {
-        const teamId = interaction.customId.split("_").slice(3).join("_");
-        const fullTeamId = `raw_valorant_team_${teamId}`;
-        const team = activeTeams.get(fullTeamId);
+      // Handle select menus
+      if (interaction.isStringSelectMenu()) {
+        // Player selection for roster management
+        if (interaction.customId.startsWith("raw_premiere_rosterselect_")) {
+          const messageId = interaction.customId.replace("raw_premiere_rosterselect_", "");
+          const teamId = `raw_premiere_team_${messageId}`;
+          const team = activeTeams.get(teamId);
 
-        if (!team) {
-          return safeInteractionResponse(interaction, "reply", {
-            content: "❌ Team no longer exists.",
-            ephemeral: true,
-          });
-        }
+          if (!team) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Team no longer exists.",
+              ephemeral: true,
+            });
+          }
 
-        const newLeaderId = interaction.values[0];
-        const memberIndex = team.members.findIndex((m) => m.id === newLeaderId);
+          if (interaction.user.id !== team.host.id) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Only the host can manage the roster.",
+              ephemeral: true,
+            });
+          }
 
-        if (memberIndex === -1) {
-          return safeInteractionResponse(interaction, "reply", {
-            content: "❌ Player not found in team.",
-            ephemeral: true,
-          });
-        }
+          const selectedUserId = interaction.values[0];
+          const playerIndex = team.bench.findIndex(p => p.id === selectedUserId);
 
-        // Swap leader
-        const newLeader = team.members[memberIndex];
-        team.members[memberIndex] = team.leader;
-        team.leader = newLeader;
+          if (playerIndex === -1) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Player not found on bench.",
+              ephemeral: true,
+            });
+          }
 
-        try {
-          const isFull = getTotalMembers(team) >= 5;
+          if (team.activeRoster.length >= 5) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Roster is full. Move someone to bench first.",
+              ephemeral: true,
+            });
+          }
+
+          // Move player from bench to roster
+          const [player] = team.bench.splice(playerIndex, 1);
+          team.activeRoster.push(player);
+
+          await interaction.deferUpdate().catch(() => {});
+
           const updatedEmbed = await createTeamEmbed(team);
-          const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
+          const updatedComponents = createTeamButtons(teamId, team);
 
-          const channel = await client.channels.fetch(team.channelId);
-          const message = await channel.messages.fetch(team.messageId);
-          await message.edit({
+          await interaction.editReply({
             embeds: [updatedEmbed.embed],
             files: updatedEmbed.files,
             components: updatedComponents,
           });
 
-          await safeInteractionResponse(interaction, "reply", {
-            content: `✅ ${newLeader.displayName} is now team leader!`,
-            ephemeral: true,
+          return;
+        }
+
+        // Bench selection
+        if (interaction.customId.startsWith("raw_premiere_benchselect_")) {
+          const messageId = interaction.customId.replace("raw_premiere_benchselect_", "");
+          const teamId = `raw_premiere_team_${messageId}`;
+          const team = activeTeams.get(teamId);
+
+          if (!team) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Team no longer exists.",
+              ephemeral: true,
+            });
+          }
+
+          if (interaction.user.id !== team.host.id) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Only the host can manage the roster.",
+              ephemeral: true,
+            });
+          }
+
+          const selectedUserId = interaction.values[0];
+          const playerIndex = team.activeRoster.findIndex(p => p.id === selectedUserId);
+
+          if (playerIndex === -1) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Player not found on roster.",
+              ephemeral: true,
+            });
+          }
+
+          if (team.bench.length >= 2) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Bench is full (max 2).",
+              ephemeral: true,
+            });
+          }
+
+          // Move player from roster to bench
+          const [player] = team.activeRoster.splice(playerIndex, 1);
+          team.agentAssignments.delete(player.id); // Clear agent assignment
+          team.bench.push(player);
+
+          await interaction.deferUpdate().catch(() => {});
+
+          const updatedEmbed = await createTeamEmbed(team);
+          const updatedComponents = createTeamButtons(teamId, team);
+
+          await interaction.editReply({
+            embeds: [updatedEmbed.embed],
+            files: updatedEmbed.files,
+            components: updatedComponents,
           });
-        } catch (error) {
-          console.error("[RaW Team] Leader transfer error:", error);
-          await safeInteractionResponse(interaction, "reply", {
-            content: "❌ Failed to transfer leadership.",
+
+          return;
+        }
+
+        // Agent selection for a player
+        if (interaction.customId.startsWith("raw_premiere_agentselect_")) {
+          const messageId = interaction.customId.replace("raw_premiere_agentselect_", "");
+          const teamId = `raw_premiere_team_${messageId}`;
+          const team = activeTeams.get(teamId);
+
+          if (!team) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Team no longer exists.",
+              ephemeral: true,
+            });
+          }
+
+          if (interaction.user.id !== team.host.id) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Only the host can assign agents.",
+              ephemeral: true,
+            });
+          }
+
+          const [userId, agentId] = interaction.values[0].split("_");
+
+          if (!team.activeRoster.some(p => p.id === userId)) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Player not on roster.",
+              ephemeral: true,
+            });
+          }
+
+          // Assign agent
+          team.agentAssignments.set(userId, agentId);
+
+          await interaction.deferUpdate().catch(() => {});
+
+          const updatedEmbed = await createTeamEmbed(team);
+          const updatedComponents = createTeamButtons(teamId, team);
+
+          await interaction.editReply({
+            embeds: [updatedEmbed.embed],
+            files: updatedEmbed.files,
+            components: updatedComponents,
+          });
+
+          return;
+        }
+
+        // Player selection for agent assignment
+        if (interaction.customId.startsWith("raw_premiere_playerforagent_")) {
+          const messageId = interaction.customId.replace("raw_premiere_playerforagent_", "");
+          const teamId = `raw_premiere_team_${messageId}`;
+          const team = activeTeams.get(teamId);
+
+          if (!team) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Team no longer exists.",
+              ephemeral: true,
+            });
+          }
+
+          if (interaction.user.id !== team.host.id) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Only the host can assign agents.",
+              ephemeral: true,
+            });
+          }
+
+          const selectedUserId = interaction.values[0];
+          const player = team.activeRoster.find(p => p.id === selectedUserId);
+
+          if (!player) {
+            return safeInteractionResponse(interaction, "reply", {
+              content: "❌ Player not on roster.",
+              ephemeral: true,
+            });
+          }
+
+          // Show agent select menu for this player
+          const currentAgent = team.agentAssignments.get(selectedUserId);
+          const agentMenu = createAgentSelectMenu(teamId, selectedUserId, currentAgent);
+
+          return safeInteractionResponse(interaction, "reply", {
+            content: `🎮 Select agent for **${player.displayName}**:`,
+            components: [new ActionRowBuilder().addComponents(agentMenu)],
             ephemeral: true,
           });
         }
-        return;
       }
 
       // Handle button interactions
       if (!interaction.isButton()) return;
-      if (!interaction.customId.startsWith("raw_valorant_")) return;
+      if (!interaction.customId.startsWith("raw_premiere_")) return;
 
       const parts = interaction.customId.split("_");
-      const action = parts[2]; // raw_valorant_ACTION_id
-      const teamId = parts.slice(3).join("_");
-      const fullTeamId = `raw_valorant_team_${teamId}`;
+      const action = parts[2]; // raw_premiere_ACTION_id
+      const messageId = parts.slice(3).join("_");
+      const teamId = `raw_premiere_team_${messageId}`;
 
-      const team = activeTeams.get(fullTeamId);
+      const team = activeTeams.get(teamId);
 
       if (!team) {
         return safeInteractionResponse(interaction, "reply", {
@@ -841,141 +1369,32 @@ module.exports = (client) => {
       }
 
       const userId = interaction.user.id;
-      const userInfo = {
-        id: userId,
-        username: interaction.user.username,
-        displayName: interaction.user.displayName || interaction.user.username,
-        avatarURL: interaction.user.displayAvatarURL({
-          extension: "png",
-          size: 128,
-        }),
-      };
+      const isHost = userId === team.host.id;
 
-      // JOIN
-      if (action === "join") {
-        // Check for RaW Role (dynamically from settings)
+      // AVAILABLE - Join availability pool
+      if (action === "available") {
+        // Check for RaW Role
         const rawValorantRoleId = await getRawValorantRoleId(interaction.guild.id);
         const member = await interaction.guild.members.fetch(userId);
         if (!member.roles.cache.has(rawValorantRoleId)) {
           return safeInteractionResponse(interaction, "reply", {
-            content: "❌ You need the **RaW Valorant** role to join this team!",
+            content: "❌ You need the **RaW Valorant** role to join!",
             ephemeral: true,
           });
         }
 
-        if (
-          userId === team.leader.id ||
-          team.members.some((m) => m.id === userId)
-        ) {
+        // Check if already in pool
+        if (team.availablePlayers.some(p => p.id === userId)) {
           return safeInteractionResponse(interaction, "reply", {
-            content: "❌ You're already in this team!",
+            content: "❌ You're already marked as available!",
             ephemeral: true,
           });
         }
 
-        if (getTotalMembers(team) >= 5) {
+        // Check if full
+        if (getTotalAvailable(team) >= MAX_PLAYERS) {
           return safeInteractionResponse(interaction, "reply", {
-            content: "❌ Team is full!",
-            ephemeral: true,
-          });
-        }
-
-        // Defer immediately to prevent timeout (canvas generation can take >3s)
-        await interaction.deferUpdate().catch(() => {});
-
-        team.members.push(userInfo);
-
-        try {
-          const isFull = getTotalMembers(team) >= 5;
-          const updatedEmbed = await createTeamEmbed(team);
-          const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
-
-          await interaction.editReply({
-            embeds: [updatedEmbed.embed],
-            files: updatedEmbed.files,
-            components: updatedComponents,
-          });
-
-          // Team complete celebration
-          if (isFull) {
-            if (team.resendTimer) clearTimeout(team.resendTimer);
-            if (team.warningTimer) clearTimeout(team.warningTimer);
-
-            const rankInfoMap = await batchGetUserRankInfo(
-              team.guildId,
-              [team.leader, ...team.members].map((m) => m.id)
-            );
-
-            let roster = "";
-            let totalTier = 0;
-            let rankedCount = 0;
-
-            for (const member of [team.leader, ...team.members]) {
-              const rank = rankInfoMap.get(member.id);
-              const isLeader = member.id === team.leader.id;
-              const badge = isLeader ? " 👑" : "";
-
-              if (rank) {
-                roster += `• **${member.displayName}**${badge} - ${rank.name} (${rank.rr} RR)\n`;
-                totalTier += rank.tier;
-                rankedCount++;
-              } else {
-                roster += `• **${member.displayName}**${badge} - Unranked\n`;
-              }
-            }
-
-            const avgRank =
-              rankedCount > 0
-                ? apiHandler.RANK_MAPPING[Math.round(totalTier / rankedCount)]
-                    ?.name || "Unknown"
-                : "N/A";
-
-            const celebrationEmbed = new EmbedBuilder()
-              .setColor("#00ff88")
-              .setTitle("🎉 RaW Team Complete!")
-              .setDescription(
-                `Queue up and dominate!\n\n**Average Rank:** ${avgRank}`
-              )
-              .addFields({
-                name: "👥 Roster",
-                value: roster || "No players",
-                inline: false,
-              })
-              .setFooter({ text: "GLHF!" })
-              .setTimestamp();
-
-            try {
-              const channel = await client.channels.fetch(team.channelId);
-              await channel.send({ embeds: [celebrationEmbed] });
-            } catch {}
-
-            // Save to history
-            saveTeamToHistory({
-              ...team,
-              guildId: interaction.guildId,
-              createdAt: new Date(Date.now() - RESEND_INTERVAL * 0.1), // Approximate creation time
-              status: "completed",
-            }).catch(console.error);
-          }
-        } catch (error) {
-          console.error("[RaW Team] Join error:", error);
-        }
-      }
-
-      // LEAVE
-      else if (action === "leave") {
-        if (userId === team.leader.id) {
-          return safeInteractionResponse(interaction, "reply", {
-            content:
-              "❌ Leaders cannot leave. Use Disband or Transfer leadership first.",
-            ephemeral: true,
-          });
-        }
-
-        const memberIndex = team.members.findIndex((m) => m.id === userId);
-        if (memberIndex === -1) {
-          return safeInteractionResponse(interaction, "reply", {
-            content: "❌ You're not in this team!",
+            content: "❌ Availability pool is full (7/7)!",
             ephemeral: true,
           });
         }
@@ -983,163 +1402,410 @@ module.exports = (client) => {
         // Defer immediately to prevent timeout
         await interaction.deferUpdate().catch(() => {});
 
-        team.members.splice(memberIndex, 1);
+        // Get user's rank info
+        const rankInfoMap = await batchGetUserRankInfo(team.guildId, [userId]);
+        const userRankInfo = rankInfoMap.get(userId);
 
-        try {
-          const isFull = getTotalMembers(team) >= 5;
-          const updatedEmbed = await createTeamEmbed(team);
-          const updatedComponents = createTeamButtons(fullTeamId, isFull, team);
+        // Add to available pool
+        team.availablePlayers.push({
+          id: userId,
+          username: interaction.user.username,
+          displayName: interaction.user.displayName || interaction.user.username,
+          avatarURL: interaction.user.displayAvatarURL({
+            extension: "png",
+            size: 128,
+          }),
+          joinedAt: new Date(),
+          preferredAgents: userRankInfo?.preferredAgents || [],
+          rank: userRankInfo ? { tier: userRankInfo.tier, rr: userRankInfo.rr, name: userRankInfo.name } : null,
+        });
 
-          await interaction.editReply({
-            embeds: [updatedEmbed.embed],
-            files: updatedEmbed.files,
-            components: updatedComponents,
-          });
+        const updatedEmbed = await createTeamEmbed(team);
+        const updatedComponents = createTeamButtons(teamId, team);
 
-          // Restart refresh timer if needed
-          if (!isFull && !team.resendTimer) {
-            team.resendTimer = setTimeout(
-              () => updateTeamMessage(fullTeamId),
-              RESEND_INTERVAL
-            );
-          }
-        } catch (error) {
-          console.error("[RaW Team] Leave error:", error);
-        }
+        await interaction.editReply({
+          embeds: [updatedEmbed.embed],
+          files: updatedEmbed.files,
+          components: updatedComponents,
+        });
       }
 
-      // REASSIGN LEADER
-      else if (action === "reassign") {
-        if (userId !== team.leader.id) {
+      // UNAVAILABLE - Leave availability pool
+      else if (action === "unavailable") {
+        const playerIndex = team.availablePlayers.findIndex(p => p.id === userId);
+
+        if (playerIndex === -1) {
           return safeInteractionResponse(interaction, "reply", {
-            content: "❌ Only the leader can transfer leadership!",
+            content: "❌ You're not in the availability pool!",
             ephemeral: true,
           });
         }
 
-        if (team.members.length === 0) {
+        // Host cannot leave in availability phase (would disband)
+        if (userId === team.host.id) {
           return safeInteractionResponse(interaction, "reply", {
-            content: "❌ No members to transfer to!",
+            content: "❌ As the host, use 'Disband' to cancel the team.",
             ephemeral: true,
           });
         }
 
-        const selectMenu = new StringSelectMenuBuilder()
-          .setCustomId(`raw_valorant_selectleader_${teamId}`)
-          .setPlaceholder("Select new leader")
-          .addOptions(
-            team.members.map((m) => ({
-              label: m.displayName || m.username,
-              value: m.id,
-            }))
-          );
+        // Defer immediately
+        await interaction.deferUpdate().catch(() => {});
+
+        team.availablePlayers.splice(playerIndex, 1);
+
+        const updatedEmbed = await createTeamEmbed(team);
+        const updatedComponents = createTeamButtons(teamId, team);
+
+        await interaction.editReply({
+          embeds: [updatedEmbed.embed],
+          files: updatedEmbed.files,
+          components: updatedComponents,
+        });
+      }
+
+      // BUILD TEAM - Transition to team building phase
+      else if (action === "buildteam") {
+        if (!isHost) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Only the host can build the team!",
+            ephemeral: true,
+          });
+        }
+
+        if (getTotalAvailable(team) < 5) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Need at least 5 available players to build a team!",
+            ephemeral: true,
+          });
+        }
+
+        // Defer immediately
+        await interaction.deferUpdate().catch(() => {});
+
+        // Transition to team building phase
+        team.phase = PHASES.TEAM_BUILDING;
+
+        // Auto-populate roster with first 5 players, rest go to bench
+        team.activeRoster = team.availablePlayers.slice(0, 5);
+        team.bench = team.availablePlayers.slice(5, 7);
+
+        // Clear availability array (data is now in roster/bench)
+        team.availablePlayers = [];
+
+        // Stop periodic updates
+        if (team.resendTimer) {
+          clearTimeout(team.resendTimer);
+          team.resendTimer = null;
+        }
+
+        const updatedEmbed = await createTeamEmbed(team);
+        const updatedComponents = createTeamButtons(teamId, team);
+
+        await interaction.editReply({
+          embeds: [updatedEmbed.embed],
+          files: updatedEmbed.files,
+          components: updatedComponents,
+        });
+      }
+
+      // ADD TO ROSTER - Show select menu to add player from bench
+      else if (action === "addtoroster") {
+        if (!isHost) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Only the host can manage the roster!",
+            ephemeral: true,
+          });
+        }
+
+        if (team.bench.length === 0) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Bench is empty!",
+            ephemeral: true,
+          });
+        }
+
+        if (team.activeRoster.length >= 5) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Roster is full. Move someone to bench first.",
+            ephemeral: true,
+          });
+        }
+
+        const selectMenu = createPlayerSelectMenu(
+          teamId,
+          team.bench,
+          "Select player to add to roster",
+          "raw_premiere_rosterselect"
+        );
 
         return safeInteractionResponse(interaction, "reply", {
-          content: "👑 Select the new team leader:",
+          content: "➕ Select a player to add to the active roster:",
           components: [new ActionRowBuilder().addComponents(selectMenu)],
           ephemeral: true,
         });
       }
 
-      // INVITE
-      else if (action === "invite") {
-        if (userId !== team.leader.id) {
+      // MOVE TO BENCH - Show select menu to move player to bench
+      else if (action === "movetobench") {
+        if (!isHost) {
           return safeInteractionResponse(interaction, "reply", {
-            content: "❌ Only the leader can invite players!",
+            content: "❌ Only the host can manage the roster!",
             ephemeral: true,
           });
         }
 
+        if (team.activeRoster.length === 0) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Roster is empty!",
+            ephemeral: true,
+          });
+        }
+
+        if (team.bench.length >= 2) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Bench is full (max 2).",
+            ephemeral: true,
+          });
+        }
+
+        const selectMenu = createPlayerSelectMenu(
+          teamId,
+          team.activeRoster,
+          "Select player to move to bench",
+          "raw_premiere_benchselect"
+        );
+
         return safeInteractionResponse(interaction, "reply", {
-          content: `📨 **Invite Players:**\nShare this command: \`!rawteam\` or tell them to click the **Join** button above!`,
+          content: "📥 Select a player to move to the bench:",
+          components: [new ActionRowBuilder().addComponents(selectMenu)],
           ephemeral: true,
         });
       }
 
-      // CLOSE TEAM
-      else if (action === "close") {
-        if (userId !== team.leader.id) {
+      // ASSIGN AGENT - Show player select then agent select
+      else if (action === "assignagent") {
+        if (!isHost) {
           return safeInteractionResponse(interaction, "reply", {
-            content: "❌ Only the leader can close the team!",
+            content: "❌ Only the host can assign agents!",
             ephemeral: true,
           });
         }
 
-        if (getTotalMembers(team) < 2) {
+        if (team.activeRoster.length === 0) {
           return safeInteractionResponse(interaction, "reply", {
-            content: "❌ Need at least 2 players to close the team!",
+            content: "❌ No players on roster to assign agents to!",
             ephemeral: true,
           });
         }
 
-        // Defer update
+        const selectMenu = createPlayerSelectMenu(
+          teamId,
+          team.activeRoster,
+          "Select player to assign agent",
+          "raw_premiere_playerforagent"
+        );
+
+        return safeInteractionResponse(interaction, "reply", {
+          content: "🎮 Select a player to assign an agent to:",
+          components: [new ActionRowBuilder().addComponents(selectMenu)],
+          ephemeral: true,
+        });
+      }
+
+      // CONFIRM ROSTER - Transition to ready phase
+      else if (action === "confirmroster") {
+        if (!isHost) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Only the host can confirm the roster!",
+            ephemeral: true,
+          });
+        }
+
+        if (team.activeRoster.length < 5) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Need 5 players on roster to confirm!",
+            ephemeral: true,
+          });
+        }
+
+        // Defer immediately
         await interaction.deferUpdate().catch(() => {});
 
-        // Mark as closed/full effectively
-        if (team.resendTimer) clearTimeout(team.resendTimer);
-        if (team.warningTimer) clearTimeout(team.warningTimer);
+        team.phase = PHASES.READY;
 
-        const closedEmbed = new EmbedBuilder()
-          .setColor("#ffaa00")
-          .setTitle(`🔒 ${team.name} (Closed)`)
+        const updatedEmbed = await createTeamEmbed(team);
+        const updatedComponents = createTeamButtons(teamId, team);
+
+        await interaction.editReply({
+          embeds: [updatedEmbed.embed],
+          files: updatedEmbed.files,
+          components: updatedComponents,
+        });
+
+        // Send celebration message
+        const rankInfoMap = await batchGetUserRankInfo(
+          team.guildId,
+          team.activeRoster.map(p => p.id)
+        );
+
+        let roster = "";
+        let totalTier = 0;
+        let rankedCount = 0;
+
+        for (const player of team.activeRoster) {
+          const rank = rankInfoMap.get(player.id);
+          const isHostPlayer = player.id === team.host.id;
+          const badge = isHostPlayer ? " 👑" : "";
+          const assignedAgent = team.agentAssignments.get(player.id);
+          const agentText = assignedAgent
+            ? getAgentById(assignedAgent)?.name || assignedAgent
+            : player.preferredAgents?.[0] ? getAgentById(player.preferredAgents[0])?.name || "?" : "?";
+
+          if (rank) {
+            roster += `• **${player.displayName}**${badge} - ${rank.name} (${rank.rr} RR) - ${agentText}\n`;
+            totalTier += rank.tier;
+            rankedCount++;
+          } else {
+            roster += `• **${player.displayName}**${badge} - Unranked - ${agentText}\n`;
+          }
+        }
+
+        const avgRank = rankedCount > 0
+          ? apiHandler.RANK_MAPPING[Math.round(totalTier / rankedCount)]?.name || "Unknown"
+          : "N/A";
+
+        const roleComp = calculateRoleComposition(team.activeRoster, team.agentAssignments);
+        const roleText = Object.entries(roleComp)
+          .map(([role, count]) => `${ROLE_EMOJIS[role]} ${role.substring(0, 4)}: ${count}`)
+          .join(" | ");
+
+        const celebrationEmbed = new EmbedBuilder()
+          .setColor("#00ff88")
+          .setTitle("🎉 RaW Premiere Team Ready!")
           .setDescription(
-            `Team closed by leader with ${getTotalMembers(team)} players.`
+            `Queue up and dominate!\n\n**Average Rank:** ${avgRank}\n**Composition:** ${roleText}`
           )
+          .addFields({
+            name: "👥 Roster",
+            value: roster || "No players",
+            inline: false,
+          });
+
+        if (team.bench.length > 0) {
+          const benchText = team.bench
+            .map(p => `• ${p.displayName}`)
+            .join("\n");
+          celebrationEmbed.addFields({
+            name: "📥 Bench",
+            value: benchText,
+            inline: false,
+          });
+        }
+
+        celebrationEmbed
+          .setFooter({ text: "GLHF!" })
           .setTimestamp();
 
         try {
-          // Update original message to show closed state
           const channel = await client.channels.fetch(team.channelId);
-          const message = await channel.messages.fetch(team.messageId);
+          await channel.send({ embeds: [celebrationEmbed] });
+        } catch {}
 
-          // Disable all buttons
-          const disabledRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId("disabled_1")
-              .setLabel("Team Closed")
-              .setStyle(ButtonStyle.Secondary)
-              .setDisabled(true)
-          );
+        // Save to history
+        saveTeamToHistory({
+          id: team.id,
+          guildId: team.guildId,
+          leader: team.host,
+          members: team.activeRoster.filter(p => p.id !== team.host.id),
+          createdAt: team.createdAt,
+          status: "completed",
+        }).catch(console.error);
+      }
 
-          await message.edit({
-            embeds: [closedEmbed],
-            components: [disabledRow],
-            files: [], // Remove image to save space/indicate closure
+      // BACK TO AVAILABILITY - Return to availability phase
+      else if (action === "backtoavail") {
+        if (!isHost) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Only the host can change phases!",
+            ephemeral: true,
           });
-
-          // Save to history
-          saveTeamToHistory({
-            ...team,
-            guildId: interaction.guildId,
-            createdAt: new Date(Date.now() - RESEND_INTERVAL * 0.1), // Approximate
-            status: "completed", // Closed teams count as completed for history
-          }).catch(console.error);
-        } catch (error) {
-          console.error("[RaW Team] Close error:", error);
         }
+
+        // Defer immediately
+        await interaction.deferUpdate().catch(() => {});
+
+        // Merge roster and bench back to available players
+        team.availablePlayers = [...team.activeRoster, ...team.bench];
+        team.activeRoster = [];
+        team.bench = [];
+        team.agentAssignments.clear();
+        team.phase = PHASES.AVAILABILITY;
+
+        // Restart periodic updates
+        team.resendTimer = setTimeout(
+          () => updateTeamMessage(teamId),
+          RESEND_INTERVAL
+        );
+
+        const updatedEmbed = await createTeamEmbed(team);
+        const updatedComponents = createTeamButtons(teamId, team);
+
+        await interaction.editReply({
+          embeds: [updatedEmbed.embed],
+          files: updatedEmbed.files,
+          components: updatedComponents,
+        });
+      }
+
+      // EDIT ROSTER - Return to team building from ready
+      else if (action === "editroster") {
+        if (!isHost) {
+          return safeInteractionResponse(interaction, "reply", {
+            content: "❌ Only the host can edit the roster!",
+            ephemeral: true,
+          });
+        }
+
+        // Defer immediately
+        await interaction.deferUpdate().catch(() => {});
+
+        team.phase = PHASES.TEAM_BUILDING;
+
+        const updatedEmbed = await createTeamEmbed(team);
+        const updatedComponents = createTeamButtons(teamId, team);
+
+        await interaction.editReply({
+          embeds: [updatedEmbed.embed],
+          files: updatedEmbed.files,
+          components: updatedComponents,
+        });
       }
 
       // DISBAND
       else if (action === "disband") {
-        if (userId !== team.leader.id) {
+        if (!isHost) {
           return safeInteractionResponse(interaction, "reply", {
-            content: "❌ Only the leader can disband the team!",
+            content: "❌ Only the host can disband the team!",
             ephemeral: true,
           });
         }
 
         // Clear all timers
         if (team.resendTimer) clearTimeout(team.resendTimer);
-        if (team.warningTimer) clearTimeout(team.warningTimer);
         if (team.deleteTimer) clearTimeout(team.deleteTimer);
 
-        activeTeams.delete(fullTeamId);
+        activeTeams.delete(teamId);
 
-        // Just delete the message
-        await interaction.message?.delete().catch(() => {});
+        // Update message to show disbanded
+        await interaction.update({
+          embeds: [createDisbandedEmbed()],
+          components: [],
+          files: [],
+        });
       }
     } catch (error) {
-      console.error("[RaW Team] Handler error:", error);
+      console.error("[RaW Premiere] Handler error:", error);
     }
   });
 
