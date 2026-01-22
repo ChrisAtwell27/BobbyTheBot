@@ -86,6 +86,7 @@ module.exports = (client) => {
       await handler(interaction);
     } else {
       console.log(`No handler registered for button: ${customId}`);
+      console.log(`[DEBUG] Registered button prefixes: ${Array.from(buttonHandlers.keys()).join(", ")}`);
     }
   }
 
@@ -185,6 +186,7 @@ module.exports = (client) => {
   // Return registration functions for handlers to use
   return {
     registerButton: (customId, handler) => {
+      console.log(`[InteractionRouter] Registering button prefix: "${customId}"`);
       buttonHandlers.set(customId, handler);
     },
     registerSelectMenu: (customId, handler) => {

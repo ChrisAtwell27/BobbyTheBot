@@ -988,6 +988,7 @@ module.exports = (client) => {
   });
 
   // Interaction handler
+  console.log("[RaW Premiere] Registering interactionCreate handler...");
   client.on("interactionCreate", async (interaction) => {
     try {
       // Handle confirmation buttons

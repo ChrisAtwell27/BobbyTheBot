@@ -244,12 +244,17 @@ module.exports = (client, commandRouter, interactionRouter) => {
     client,
     () => rawValorantTeamHandler
   );
+  console.log("[DEBUG] RaW Premiere wrapper:", {
+    hasMessageHandler: !!rawValorantTeamWrapper.messageHandler,
+    hasInteractionHandler: !!rawValorantTeamWrapper.interactionHandler
+  });
   if (rawValorantTeamWrapper.messageHandler) {
     commandRouter.registerMessageProcessor(
       rawValorantTeamWrapper.messageHandler
     );
   }
   if (rawValorantTeamWrapper.interactionHandler) {
+    console.log("[DEBUG] Registering raw_premiere_ button handler");
     interactionRouter.registerButton(
       "raw_premiere_",
       rawValorantTeamWrapper.interactionHandler
@@ -258,6 +263,8 @@ module.exports = (client, commandRouter, interactionRouter) => {
       "raw_premiere_",
       rawValorantTeamWrapper.interactionHandler
     );
+  } else {
+    console.log("[DEBUG] ⚠️ rawValorantTeamWrapper has NO interactionHandler!");
   }
 
   // Russian roulette handler - !roulette, !spin
@@ -494,6 +501,7 @@ function createHandlerWrapper(client, handlerGetter) {
 
   const mockClient = {
     on: (event, listener) => {
+      console.log(`[DEBUG] mockClient.on called with event: ${event}`);
       if (event === "messageCreate") {
         messageListener = listener;
       } else if (event === "interactionCreate") {
@@ -511,18 +519,20 @@ function createHandlerWrapper(client, handlerGetter) {
 
   try {
     const handler = handlerGetter();
+    console.log(`[DEBUG] Handler type: ${typeof handler}`);
     if (typeof handler === "function") {
       handler(mockClient);
     } else if (handler.init) {
       handler.init(mockClient);
     }
 
+    console.log(`[DEBUG] After handler init - messageListener: ${!!messageListener}, interactionListener: ${!!interactionListener}`);
     return {
       messageHandler: messageListener,
       interactionHandler: interactionListener,
     };
   } catch (error) {
-    console.error(`Failed to create handler wrapper:`, error);
+    console.error(`[DEBUG] Failed to create handler wrapper:`, error);
     return {};
   }
 }
