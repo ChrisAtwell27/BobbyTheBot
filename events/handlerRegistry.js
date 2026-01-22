@@ -238,7 +238,7 @@ module.exports = (client, commandRouter, interactionRouter) => {
     );
   }
 
-  // RaW Valorant team handler - !rawteam
+  // RaW Valorant Premiere team handler - !rawteam
   const rawValorantTeamHandler = require("./rawValorantTeamHandler");
   const rawValorantTeamWrapper = createHandlerWrapper(
     client,
@@ -251,11 +251,11 @@ module.exports = (client, commandRouter, interactionRouter) => {
   }
   if (rawValorantTeamWrapper.interactionHandler) {
     interactionRouter.registerButton(
-      "raw_valorant_",
+      "raw_premiere_",
       rawValorantTeamWrapper.interactionHandler
     );
     interactionRouter.registerSelectMenu(
-      "raw_valorant_",
+      "raw_premiere_",
       rawValorantTeamWrapper.interactionHandler
     );
   }
